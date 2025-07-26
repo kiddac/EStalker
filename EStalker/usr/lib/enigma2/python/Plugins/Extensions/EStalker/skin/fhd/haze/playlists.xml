@@ -14,21 +14,6 @@
 		
 		
 			{"template": [
-			<!-- name -->
-			<!-- MultiContentEntryText(pos = (30, 24), size = (570, 60), font=0, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT, text = 1), -->
-
-			<!-- Authorised LED -->
-			<!-- MultiContentEntryPixmapAlphaBlend(pos = (405, 39), size = (23, 24), png = 5), -->
-			
-			<!-- Authorised -->
-			<!-- MultiContentEntryText(pos = (30, 69), size = (258, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT, text = 4), -->
-			
-			<!-- Active Conn Num -->
-			<!-- MultiContentEntryText(pos = (288, 69), size = (60, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 7), -->
-
-			<!-- Max Conn Num --> 
-			<!-- MultiContentEntryText(pos = (365, 69), size = (60, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 9), -->
-			
 				<!-- name -->
 				MultiContentEntryText(pos = (21, 9), size = (390, 42), font=0, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT, text = 1),
 
@@ -73,7 +58,6 @@
 			
 		</convert>
 	</widget>
-
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,134" size="816,4" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,254" size="816,4" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,374" size="816,4" alphatest="blend" zPosition="1"/>
@@ -82,19 +66,14 @@
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,734" size="816,4" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,854" size="816,4" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,974" size="816,4" alphatest="blend" zPosition="1"/>
-	
 	<eLabel position="0,1025" size="1920,1" backgroundColor="#ffffff" zPosition="-1"/>
 	<eLabel position="0,1026" size="1920,54" backgroundColor="#1a000000" zPosition="-1"/>
-	
 	<widget source="key_red" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_red.png" position="30,1032" size="38,38" alphatest="blend" zPosition="2"/>
 	<widget source="key_red" render="Label" position="90,1026" size="375,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_green" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_green.png" position="495,1032" size="38,38" alphatest="blend" zPosition="2"/>
 	<widget source="key_green" render="Label" position="555,1026" size="375,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_yellow" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_yellow.png" position="960,1032" size="38,38" alphatest="blend" zPosition="2"/>
 	<widget source="key_yellow" render="Label" position="1020,1026" size="375,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_blue" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_blue.png" position="1425,1032" size="38,38" alphatest="blend" zPosition="2"/>
 	<widget source="key_blue" render="Label" position="1485,1026" size="375,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
 </screen>

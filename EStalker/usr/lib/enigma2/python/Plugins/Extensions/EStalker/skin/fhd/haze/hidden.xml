@@ -33,19 +33,14 @@
 			}
 		</convert>
 	</widget>
-
 	<eLabel position="0,1025" size="1920,1" backgroundColor="#ffffff" zPosition="-1"/>
 	<eLabel position="0,1026" size="1920,54" backgroundColor="#1a000000" zPosition="-1"/>
-	
 	<widget source="key_red" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_red.png" position="504,1032" size="38,38" alphatest="blend" zPosition="2"/>
 	<widget source="key_red" render="Label" position="552,1026" size="225,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_green" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_green.png" position="777,1032" size="38,38" alphatest="blend" zPosition="2"/>
 	<widget source="key_green" render="Label" position="825,1026" size="225,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_yellow" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_yellow.png" position="1049,1032" size="38,38" alphatest="blend" zPosition="2"/>
 	<widget source="key_yellow" render="Label" position="1097,1026" size="225,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_blue" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_blue.png" position="1322,1032" size="38,38" alphatest="blend" zPosition="2"/>
 	<widget source="key_blue" render="Label" position="1370,1026" size="225,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
 </screen>
