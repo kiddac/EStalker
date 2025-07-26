@@ -1,0 +1,552 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: EStalker 0.14-20250618\n"
+"POT-Creation-Date: 2025-07-26 23:17+0100\n"
+"PO-Revision-Date: 2025-07-26 23:17+0100\n"
+"Last-Translator: paps\n"
+"Language-Team: PaPs\n"
+"Language: pl_PL\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 "
+"|| n%100>14) ? 1 : 2);\n"
+"X-Generator: Poedit 3.6\n"
+"X-Poedit-Basepath: ../../..\n"
+"X-Poedit-SourceCharset: UTF-8\n"
+"X-Poedit-SearchPath-0: .\n"
+
+#: hidden.py:31 settings.py:32
+msgid "Please enter the correct pin code"
+msgstr "Proszę wprowadzić poprawny kod PIN"
+
+#: hidden.py:31 live.py:1253 series.py:2517 settings.py:32 vod.py:1448
+msgid "Enter pin code"
+msgstr "Wprowadź kod PIN"
+
+#: hidden.py:40 settings.py:41
+msgid "The pin code you entered is wrong."
+msgstr "Wpisany kod PIN jest nieprawidłowy."
+
+#: hidden.py:69
+msgid "Hidden Categories"
+msgstr "Ukryte Kategorie"
+
+#: hidden.py:76
+msgid "Cancel"
+msgstr "Anuluj"
+
+#: hidden.py:77 playsettings.py:50 server.py:59 settings.py:74
+msgid "Save"
+msgstr "Zapisz"
+
+#: hidden.py:78
+msgid "Invert"
+msgstr "Odwróć"
+
+#: hidden.py:79
+msgid "Reset"
+msgstr "Reset"
+
+#: hidden.py:192
+msgid "Error: All categories hidden. Please amend your selection."
+msgstr "Błąd: wszystkie kategorie są ukryte. Zmień swój wybór."
+
+#: live.py:142
+msgid "Live Categories"
+msgstr "Kategorie TV NA ŻYWO"
+
+#: live.py:143
+msgid "Live TV"
+msgstr "TV NA ŻYWO"
+
+#: live.py:189 live.py:844 live.py:846 live.py:1078 live.py:1090 live.py:1109
+#: live.py:1121 live.py:1285 live.py:1286 live.py:1439 series.py:170
+#: series.py:1858 series.py:1860 series.py:2277 series.py:2289 series.py:2308
+#: series.py:2315 series.py:2549 series.py:2550 series.py:2583 series.py:2584
+#: series.py:2603 vod.py:168 vod.py:723 vod.py:725 vod.py:1223 vod.py:1235
+#: vod.py:1254 vod.py:1261 vod.py:1479 vod.py:1480 vod.py:1598
+msgid "Sort: A-Z"
+msgstr "Sortuj: a-z"
+
+#: live.py:261 mainmenu.py:47 menu.py:55 playlists.py:66 playsettings.py:49
+#: series.py:222 server.py:58 settings.py:73 vod.py:219
+msgid "Back"
+msgstr "Wstecz"
+
+#: live.py:262 mainmenu.py:48 menu.py:56 playlists.py:67 series.py:223
+#: vod.py:220
+msgid "OK"
+msgstr "OK"
+
+#: live.py:264 live.py:840 live.py:1184 series.py:225 series.py:1866
+#: series.py:2425 vod.py:222 vod.py:731 vod.py:1364
+msgid "Search"
+msgstr "Szukaj"
+
+#: live.py:772 live.py:837 live.py:1147 live.py:1175 series.py:1057
+#: series.py:1154 series.py:1173 series.py:1853 series.py:2355 series.py:2384
+#: series.py:2409 vod.py:669 vod.py:718 vod.py:770 vod.py:790 vod.py:1300
+#: vod.py:1329 vod.py:1354
+msgid "Reset Search"
+msgstr "Wyczyść wyszukiwanie"
+
+#: live.py:872 live.py:907 series.py:1158 series.py:1200 vod.py:774 vod.py:803
+msgid "Page: "
+msgstr "Strona: "
+
+#: live.py:1078 live.py:1094 live.py:1109 live.py:1125 series.py:2277
+#: series.py:2293 vod.py:1223 vod.py:1239
+msgid "Sort: Original"
+msgstr "Sortuj: oryginalnie"
+
+#: live.py:1078 live.py:1092 live.py:1109 live.py:1123 series.py:2277
+#: series.py:2291 vod.py:1223 vod.py:1237
+msgid "Sort: Z-A"
+msgstr "Sortuj: z-a"
+
+#: live.py:1150 series.py:2358 vod.py:1303
+msgid "Filter this category..."
+msgstr "Filtruj tę kategorię ..."
+
+#: live.py:1168 series.py:2379 series.py:2406 vod.py:1324 vod.py:1351
+msgid "No results found."
+msgstr "Nic nie znaleziono."
+
+#: live.py:1205 series.py:2469 vod.py:1400
+msgid "Incorrect pin code."
+msgstr "Nieprawidłowy kod PIN."
+
+#: live.py:1233 series.py:2497 vod.py:1428
+msgid "ALL"
+msgstr "WSZYSTKO"
+
+#: live.py:1233 series.py:2497 vod.py:1428
+msgid "All"
+msgstr "Wszystko"
+
+#: live.py:1252 series.py:2516 vod.py:1447
+msgid "Please enter the parental control pin code"
+msgstr "Wprowadź kod PIN kontroli rodzicielskiej"
+
+#: live.py:1565 live.py:1607 live.py:1616
+msgid "Next Info"
+msgstr "Następne"
+
+#: live.py:1611
+msgid "Now Info"
+msgstr "Teraz"
+
+#: liveplayer.py:406
+msgid "TV"
+msgstr "TV"
+
+#: liveplayer.py:959 vodplayer.py:801
+msgid "Resolution Change Failed"
+msgstr "Zmiana rozdzielczości nieudana"
+
+#: mainmenu.py:46
+msgid "Main Menu"
+msgstr "Menu Główne"
+
+#: mainmenu.py:49
+msgid "Reset JSON"
+msgstr "Zresetuj JSON"
+
+#: mainmenu.py:94
+msgid "Playlists.txt location is invalid and has been reset."
+msgstr "Ścieżka pliku Playlists.txt jest nieprawidłowa i została zresetowana."
+
+#: mainmenu.py:120
+msgid ""
+"Dependencies not installed.\n"
+"\n"
+"Trying installing older version from feeds first..."
+msgstr ""
+"Dodatki nie zostały zainstalowane.\n"
+"\n"
+"Próbuję najpierw zainstalować starszą wersję z feed.."
+
+#: mainmenu.py:132
+msgid "Playlists"
+msgstr "Lista odtwarzania"
+
+#: mainmenu.py:132 mainmenu.py:134 server.py:51
+msgid "Add Playlist"
+msgstr "Dodaj listę odtwarzania"
+
+#: mainmenu.py:132 mainmenu.py:134 settings.py:66
+msgid "Main Settings"
+msgstr "Ustawienia Główne"
+
+#: mainmenu.py:174
+msgid ""
+"Warning: delete stored json data for all playlists... Settings, favourites "
+"etc. \n"
+"Playlists will not be deleted.\n"
+"Do you wish to continue?"
+msgstr ""
+"Uwaga: usuwanie zachowanych danych json dla wszystkich list odtwarzania... "
+"tzn. Ustawienia, Ulubione, itp.\n"
+"Listy odtwarzania nie będą usunięte.\n"
+"Chcesz kontynuować?"
+
+#: menu.py:53
+msgid "Playlist Menu"
+msgstr "Menu Listy odtwarzania"
+
+#: menu.py:234
+msgid "Access Denied."
+msgstr "Brak dostępu."
+
+#: menu.py:300 playsettings.py:42
+msgid "Playlist Settings"
+msgstr "Ustawienia Listy odtwarzania"
+
+#: menu.py:307
+msgid "No data, blocked or playlist not compatible with EStalker plugin."
+msgstr ""
+"Brak danych, zablokowane lub lista odtwarzania niezgodna z wtyczką EStalker."
+
+#: playlists.py:64
+msgid "Manage Playlists"
+msgstr "Zarządzanie Listami Odtwarzania"
+
+#: playlists.py:68
+msgid "Delete"
+msgstr "Usuń"
+
+#: playlists.py:69
+msgid "Auto Delete"
+msgstr "Auto usuwanie"
+
+#: playlists.py:119
+msgid "No internet."
+msgstr "Brak internetu."
+
+#: playlists.py:706 playlists.py:749
+msgid "Active"
+msgstr "Aktywny"
+
+#: playlists.py:721
+msgid "Active Conn:"
+msgstr "Aktywne połączenia:"
+
+#: playlists.py:723
+msgid "Max Conn:"
+msgstr "Maks. połączeń:"
+
+#: playlists.py:727
+msgid "Not active"
+msgstr "Nie aktywny"
+
+#: playlists.py:730
+msgid "Blocked"
+msgstr "Zablokowany"
+
+#: playlists.py:734 playlists.py:764
+msgid "Unknown"
+msgstr "Nieznany"
+
+#: playlists.py:761
+msgid "No Play Token"
+msgstr "Brak Tokenu"
+
+#: playlists.py:783
+msgid "Delete selected server (MAC) entry?"
+msgstr "Usunąć wybrany wpis serwera (MAC)?"
+
+#: playlists.py:863
+msgid ""
+"Delete ALL invalid playlists?\n"
+"(Those marked as Not Active/Blocked/Expired)"
+msgstr ""
+"Usunąć WSZYSTKIE nieprawidłowe listy odtwarzania?\n"
+"(Te oznaczone jako nieaktywne/zablokowane/wygasłe)"
+
+#: playlists.py:916
+msgid "Removed all invalid playlists"
+msgstr "Usunięto wszystkie nieprawidłowe listy odtwarzania"
+
+#: playsettings.py:79 server.py:183 settings.py:105
+msgid "Really close without saving settings?"
+msgstr "Zamknąć bez zapisywania ustawień?"
+
+#: playsettings.py:127
+msgid "Show LIVE category:"
+msgstr "Pokaż kategorię TV NA ŻYWO:"
+
+#: playsettings.py:128
+msgid "Show VOD category:"
+msgstr "Pokaż kategorię Filmy:"
+
+#: playsettings.py:129
+msgid "Show SERIES category:"
+msgstr "Pokaż kategorię Seriale:"
+
+#: playsettings.py:130
+msgid "Show CATCHUP category:"
+msgstr "Pokaż kategorię CATCHUP:"
+
+#: playsettings.py:134
+msgid "Stream Type LIVE:"
+msgstr "Typ strumienia TV NA ŻYWO:"
+
+#: playsettings.py:137
+msgid "Stream Type VOD/SERIES:"
+msgstr "Typ strumienia Filmy/Seriale:"
+
+#: playsettings.py:139
+msgid "Show Adult channels:"
+msgstr "Pokaż kanały dla dorosłych:"
+
+#: plugin.py:200 plugin.py:217
+msgid "EStalker"
+msgstr "EStalker"
+
+#: plugin.py:216
+msgid "IPTV Ministra stalker player by KiddaC"
+msgstr "Odtwarzacz IPTV Ministra stalker od KiddaC"
+
+#: series.py:101
+msgid "Series Categories"
+msgstr ""
+
+#: series.py:102
+msgid "Series"
+msgstr ""
+
+#: series.py:831 series.py:882 series.py:933 series.py:982 vod.py:544
+#: vod.py:592
+msgid "Server error or invalid link."
+msgstr "Błąd serwera lub nieprawidłowy link."
+
+#: series.py:1774 vod.py:2281
+msgid "Rating: "
+msgstr "Kat. wiekowa:"
+
+#: series.py:1823 vod.py:2272
+msgid "Cast:"
+msgstr "Obsada:"
+
+#: series.py:1828 vod.py:2254
+msgid "Director:"
+msgstr "Reżyser:"
+
+#: series.py:1833 vod.py:2262
+msgid "Country:"
+msgstr "Kraj:"
+
+#: series.py:1838 vod.py:2229
+msgid "Overview"
+msgstr "Opis"
+
+#: series.py:1870 series.py:2432 vod.py:735 vod.py:1371
+msgid "Search All"
+msgstr "Wyszukaj wszystko"
+
+#: series.py:2308 series.py:2317 vod.py:1254 vod.py:1263
+msgid "Sort: Added"
+msgstr "Sortuj: dodane"
+
+#: server.py:97
+msgid "Protocol:"
+msgstr "Protokół:"
+
+#: server.py:98
+msgid "Server URL: i.e. domain.xyz"
+msgstr "Adres serwera - URL:"
+
+#: server.py:99
+msgid "Port:"
+msgstr "Port:"
+
+#: server.py:100
+msgid "MAC Address (12 hex chars, no colons):"
+msgstr "Adres MAC (12 znaków szesnastkowych, bez dwukropków):"
+
+#: server.py:104
+#, python-format
+msgid "Added MAC #%d:"
+msgstr "Dodany MAC #%d:"
+
+#: server.py:124
+msgid "MAC address added"
+msgstr "Dodany adres MAC"
+
+#: server.py:126
+msgid "Invalid MAC format (use XXXXXXXXXXXX)"
+msgstr "Nieprawidłowy format MAC (użyj XXXXXXXXXXXX)"
+
+#: server.py:149
+msgid "At least one MAC address is required"
+msgstr "Wymagany jest co najmniej jeden adres MAC"
+
+#: server.py:168
+msgid "Playlist added successfully!"
+msgstr "Lista odtwarzania dodana pomyślnie."
+
+#: server.py:173
+msgid "Error saving playlist"
+msgstr "Błąd zapisu listy odtwarzania."
+
+#: settings.py:117
+msgid ""
+"Please change default parental pin.\n"
+"\n"
+"Pin cannot be 0000, 111, or 1234"
+msgstr ""
+"Zmień domyślny PIN kod rodzicielski.\n"
+"\n"
+"Kod PIN nie może mieć wartości 0000, 1111 lub 1234"
+
+#: settings.py:133
+msgid "You need to restart the GUI"
+msgstr "Musisz ponownie zrestartować interfejs"
+
+#: settings.py:133
+msgid "Do you want to restart now?"
+msgstr "Czy chcesz teraz ponownie uruchomić?"
+
+#: settings.py:143
+msgid "Select skin"
+msgstr "Wybierz skórkę"
+
+#: settings.py:144
+msgid "playlists.txt location"
+msgstr "Ścieżka pliku playlists.txt"
+
+#: settings.py:144 settings.py:151
+msgid " *Restart GUI Required"
+msgstr " *Wymagany Restart interfejsu"
+
+#: settings.py:145
+msgid "Default LIVE stream type"
+msgstr "Domyślny typ transmisji TV NA ŻYWO"
+
+#: settings.py:146
+msgid "Default VOD/SERIES stream type"
+msgstr "Domyślny typ strumienia Filmy/Seriale"
+
+#: settings.py:147
+msgid "Preview LIVE streams in mini tv"
+msgstr "Podgląd transmisji w MiniTV"
+
+#: settings.py:148
+msgid "Stop stream on back button"
+msgstr "Zatrzymaj strumień przyciskiem wstecz"
+
+#: settings.py:149
+msgid "EStalker parental control"
+msgstr "EStalker Kontrola Rodzicielska"
+
+#: settings.py:150
+msgid "EStalker parental pin"
+msgstr "EStalker PIN kontroli radzicielskiej"
+
+#: settings.py:151
+msgid "Show in main menu"
+msgstr "Pokaż wtyczkę w Menu Głównym"
+
+#: settings.py:152
+msgid "Movie Database language"
+msgstr "Język bazy danych filmów"
+
+#: settings.py:155
+msgid "Allow SubsSupport plugin in Movies. Restart GUI required"
+msgstr "Zezwalaj na wtyczkę SubsSupport w Filmach. Wymagany Restart interfejsu"
+
+#: settings.py:156
+msgid "Skip playlist selection screen if only 1 playlist"
+msgstr ""
+"Pomiń ekran wyboru listy odtwarzania jeśli jest tylko jedna lista odtwarzania"
+
+#: settings.py:157
+msgid "Show channel picons"
+msgstr "Pokaż pikony kanałów"
+
+#: settings.py:158
+msgid "Show Vod/Series posters"
+msgstr "Pokaż plakaty dla Filmy/Seriale"
+
+#: settings.py:159
+msgid "Show infobar picons"
+msgstr "Pokaż pikony na pasku informacyjnym"
+
+#: settings.py:160
+msgid "Show infobar posters"
+msgstr "Pokaż plakaty na pasku informacyjnym"
+
+#: settings.py:265
+msgid "Choose Directory:"
+msgstr "Wybierz Katalog:"
+
+#: settings.py:266
+msgid "Choose directory"
+msgstr "Wybierz katalog"
+
+#: vod.py:122
+msgid "Vod Categories"
+msgstr "Kategorie Filmy"
+
+#: vod.py:123
+msgid "Movies"
+msgstr "Filmy"
+
+#: vod.py:2348
+msgid ""
+"The TMDB plugin is not installed!\n"
+"Please install it."
+msgstr ""
+"Wtyczka TMDb nie zainstalowana!\n"
+"Proszę ją zainstalować ."
+
+#: vod.py:2359
+msgid ""
+"The IMDb plugin is not installed!\n"
+"Please install it."
+msgstr ""
+"Wtyczka IMDb nie zainstalowana!\n"
+"Proszę ją zainstalować ."
+
+#: vod.py:2446
+msgid "No trailer found."
+msgstr "Nic nie znaleziono zwiastuna."
+
+#: vod.py:2476
+msgid "Trailer is age restricted, and can't be accessed without logging in."
+msgstr ""
+"Zwiastun ma ograniczenia wiekowe i nie można uzyskać do niego dostępu bez "
+"zalogowania się."
+
+#: vodplayer.py:410
+msgid "Do you want to resume this playback?"
+msgstr "Czy chcesz wznowić odtwarzanie?"
+
+#: vodplayer.py:410
+#, python-format
+msgid "Resume position at %s"
+msgstr "Wznów pozycję od %s"
+
+#: vodplayer.py:500
+msgid "VOD"
+msgstr "FILMY"
+
+#, python-format
+#~ msgid "%d Min"
+#~ msgid_plural "%d Mins"
+#~ msgstr[0] "%d min"
+#~ msgstr[1] "%d min"
+#~ msgstr[2] "%d min"
+
+#~ msgid "Expires: "
+#~ msgstr "Wygasa: "
+
+#~ msgid "Automatic EPG download time"
+#~ msgstr "Godzina automatycznego pobierania EPG"
+
+#~ msgid "EPGs downloading."
+#~ msgstr "Pobieranie EPG."
+
+#~ msgid "Recordings in progress. EPG not downloaded."
+#~ msgstr "Nagrywanie w toku. EPG nie pobrane."
