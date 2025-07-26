@@ -1,0 +1,49 @@
+<screen name="EStalkerHiddenCategories" position="0,0" size="2560,1440" backgroundColor="#000000" flags="wfNoBorder">
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/black/images/background.png" alphatest="off" position="0,0" size="2560,1440" zPosition="1"/>
+	<widget source="global.CurrentTime" render="Label" position="1987,0" size="534,72" font="estalkerregular;36" foregroundColor="#ffffff" backgroundColor="#000000" valign="center" halign="right" transparent="1" zPosition="2">
+		<convert type="ClockToText">Format:%H:%M | %A %-d %b</convert>
+	</widget>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/left-panel.png" position="0,0" size="640,1440" alphatest="blend" zPosition="1"/>
+	<widget source="session.VideoPicture" render="Pig" position="0,0" size="640,360" backgroundColor="#000000" zPosition="2"/>
+
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,427" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,499" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,571" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,643" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,715" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,787" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,859" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,931" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,1003" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,1075" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,1147" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,1219" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,1291" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,1363" size="627,6" alphatest="blend" zPosition="1"/>
+
+	<widget source="hidden_list" render="Listbox" position="0,360" size="640,1008" foregroundColor="#ffffff" backgroundColor="#000000" foregroundColorSelected="#ffffff" backgroundColorSelected="#003d68" scrollbarMode="showOnDemand" itemHeight="72" enableWrapAround="1" transparent="1" zPosition="2">
+		<convert type="TemplatedMultiContent">{"template": [
+			MultiContentEntryPixmapAlphaBlend(pos = (24, 11), size = (51, 48), png = 0),
+			MultiContentEntryText(pos = (92,0), size = (508, 72), font=0, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT|RT_VALIGN_CENTER, text = 1),
+			],
+			"fonts": [gFont("estalkerregular", 36)],
+			"itemHeight": 72,
+			"scrollbarMode": "showOnDemand"
+			}
+		</convert>
+	</widget>
+	
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/button-bg.png" position="640,1368" size="1960,80" alphatest="blend" zPosition="1"/>
+
+	<widget source="key_red" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_red.png" position="672,1376" size="51,51" alphatest="blend" zPosition="2"/>
+	<widget source="key_red" render="Label" position="736,1368" size="300,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#0a3162" valign="center" transparent="1" noWrap="1" zPosition="2"/>
+	
+	<widget source="key_green" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_green.png" position="1036,1376" size="51,51" alphatest="blend" zPosition="2"/>
+	<widget source="key_green" render="Label" position="1100,1368" size="300,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#0a3162" valign="center" transparent="1" noWrap="1" zPosition="2"/>
+	
+	<widget source="key_yellow" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_yellow.png" position="1399,1376" size="51,51" alphatest="blend" zPosition="2"/>
+	<widget source="key_yellow" render="Label" position="1463,1368" size="300,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#0a3162" valign="center" transparent="1" noWrap="1" zPosition="2"/>
+	
+	<widget source="key_blue" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_blue.png" position="1763,1376" size="51,51" alphatest="blend" zPosition="2"/>
+	<widget source="key_blue" render="Label" position="1827,1368" size="300,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#0a3162" valign="center" transparent="1" noWrap="1" zPosition="2"/>
+</screen>

@@ -1,0 +1,100 @@
+<screen name="EStalkerPlaylists" position="0,0" size="1920,1080" flags="wfNoBorder" backgroundColor="#ff000000">
+	<widget name="splash" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/haze/images/splash.png" alphatest="off" position="0,0" size="1920,1080" zPosition="1000"/>
+	<eLabel position="0,0" size="1920,90" backgroundColor="#34000000" zPosition="-1"/>
+	<eLabel position="0,91" size="1920,1" backgroundColor="#ffffff" zPosition="-1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/logo_hz.png" position="0,0" size="300,90" alphatest="blend" zPosition="2"/>
+	<widget source="Title" render="Label" position="303,0" size="1920,90" foregroundColor="#ffffff" backgroundColor="#000000" valign="center" halign="left" font="estalkerregular;36" transparent="1"/>
+	<widget source="global.CurrentTime" render="Label" position="1290,0" size="600,90" font="estalkerregular;36" foregroundColor="#ffffff" backgroundColor="#ff000000" valign="center" halign="right" transparent="1" zPosition="1">
+		<convert type="ClockToText">Format:%H:%M | %A %-d %b</convert>
+	</widget>
+	<eLabel position="0,92" size="816,934" backgroundColor="#1a242b34" zPosition="-1"/>
+	<widget source="playlists" render="Listbox" position="0,136" size="816,840" foregroundColor="#ffffff" backgroundColor="#1a242b34" foregroundColorSelected="#ffffff" backgroundColorSelected="#1a000000" selectionPixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/haze/images/menu-select.png" itemHeight="120" scrollbarMode="showOnDemand" enableWrapAround="1" transparent="1" zPosition="2">
+		<convert type="TemplatedMultiContent">
+		
+		
+		
+			{"template": [
+			<!-- name -->
+			<!-- MultiContentEntryText(pos = (30, 24), size = (570, 60), font=0, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT, text = 1), -->
+
+			<!-- Authorised LED -->
+			<!-- MultiContentEntryPixmapAlphaBlend(pos = (405, 39), size = (23, 24), png = 5), -->
+			
+			<!-- Authorised -->
+			<!-- MultiContentEntryText(pos = (30, 69), size = (258, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT, text = 4), -->
+			
+			<!-- Active Conn Num -->
+			<!-- MultiContentEntryText(pos = (288, 69), size = (60, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 7), -->
+
+			<!-- Max Conn Num --> 
+			<!-- MultiContentEntryText(pos = (365, 69), size = (60, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 9), -->
+			
+				<!-- name -->
+				MultiContentEntryText(pos = (21, 9), size = (390, 42), font=0, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT, text = 1),
+
+				<!-- Authorised LED -->
+				MultiContentEntryPixmapAlphaBlend(pos = (759, 24), size = (23, 24), png = 5),
+				
+				<!-- Authorised -->
+				MultiContentEntryText(pos = (540, 21), size = (150, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 4),
+				
+				<!-- Active Conn -->
+				MultiContentEntryText(pos = (540, 48), size = (150, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 8),
+				
+				<!-- Active Conn Num -->
+				MultiContentEntryText(pos = (699, 48), size = (78, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 9),
+				
+				<!-- Max Conn -->
+				MultiContentEntryText(pos = (540, 75), size = (150, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 10),
+				
+				<!-- Max Conn Num --> 
+				MultiContentEntryText(pos = (699, 75), size = (78, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 11),
+				
+				<!-- Mac Address -->
+				MultiContentEntryText(pos = (21, 48), size = (390, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT, text = 6),
+			
+				<!-- Status -->
+				MultiContentEntryText(pos = (240, 21), size = (288, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 12),
+				
+				<!-- Version -->
+				MultiContentEntryText(pos = (240, 48), size = (288, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 7),
+
+				<!-- Portal -->
+				MultiContentEntryText(pos = (240, 75), size = (288, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_RIGHT, text = 13),
+				
+				<!-- Expires -->
+				MultiContentEntryText(pos = (21, 75), size = (390, 30), font=1, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT, text = 3)
+
+			],
+			"fonts": [gFont("estalkerregular", 27), gFont("estalkerregular", 21)],
+			"itemHeight": 120,
+			"scrollbarMode": "showOnDemand"
+			}
+			
+		</convert>
+	</widget>
+
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,134" size="816,4" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,254" size="816,4" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,374" size="816,4" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,494" size="816,4" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,614" size="816,4" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,734" size="816,4" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,854" size="816,4" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,974" size="816,4" alphatest="blend" zPosition="1"/>
+	
+	<eLabel position="0,1025" size="1920,1" backgroundColor="#ffffff" zPosition="-1"/>
+	<eLabel position="0,1026" size="1920,54" backgroundColor="#1a000000" zPosition="-1"/>
+	
+	<widget source="key_red" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_red.png" position="30,1032" size="38,38" alphatest="blend" zPosition="2"/>
+	<widget source="key_red" render="Label" position="90,1026" size="375,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
+	
+	<widget source="key_green" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_green.png" position="495,1032" size="38,38" alphatest="blend" zPosition="2"/>
+	<widget source="key_green" render="Label" position="555,1026" size="375,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
+	
+	<widget source="key_yellow" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_yellow.png" position="960,1032" size="38,38" alphatest="blend" zPosition="2"/>
+	<widget source="key_yellow" render="Label" position="1020,1026" size="375,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
+	
+	<widget source="key_blue" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_blue.png" position="1425,1032" size="38,38" alphatest="blend" zPosition="2"/>
+	<widget source="key_blue" render="Label" position="1485,1026" size="375,54" font="estalkerregular;24" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
+</screen>
