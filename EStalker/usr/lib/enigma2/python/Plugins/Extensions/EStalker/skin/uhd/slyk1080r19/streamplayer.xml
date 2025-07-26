@@ -49,21 +49,4 @@
 	<widget name="speed" position="1474,1272" size="72,76" font="slykregular;52" foregroundColor="#ffffff" backgroundColor="#133171" halign="right" valign="center" transparent="1" zPosition="3"/>
 	<widget name="progress" position="844,1306" size="264,12" foregroundColor="#7eaeef" backgroundColor="#1a000000" zPosition="3"/>
 	<widget source="streamtype" render="Label" position="1835,1272" size="480,76" font="slykregular;52" halign="right" valign="center" transparent="1" noWrap="1" foregroundColor="#7eaeef" backgroundColor="#1c4475" zPosition="2"/>
-	<!--
-		<widget source="session.CurrentService" render="Label" position="2208,1252" size="120,48" font="slykbold;36" foregroundColor="#ffffff" backgroundColor="#40000000" valign="center" halign="center" transparent="1" zPosition="3">
-		<convert type="EStalkerServiceInfo">VideoWidth</convert>
-	</widget>
-	<widget source="session.CurrentService" render="Label" position="2208,1308" size="120,48" font="slykbold;36" foregroundColor="#ffffff" backgroundColor="#40000000" valign="center" halign="center" transparent="1" zPosition="3">
-		<convert type="EStalkerServiceInfo">VideoHeight</convert>
-	</widget>
-	
-		<widget source="session.CurrentService" render="Label" position="2208,1364" size="120,48" font="slykbold;32" foregroundColor="#ffffff" backgroundColor="#40000000" valign="center" halign="center" transparent="1" zPosition="3">
-		<convert type="EStalkerServiceInfo">Framerate</convert>
-	</widget>
-	
-	<widget source="session.CurrentService" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_audio.png" position="2464,1252" size="51,51" alphatest="blend" zPosition="2">
-		<convert type="EStalkerServiceInfo">AudioTracksAvailable</convert>
-		<convert type="ConditionalShowHide" />
-	</widget>
-	-->
 </screen>

@@ -8,7 +8,6 @@
 		<convert type="ClockToText">Format:%H:%M | %A %-d %b</convert>
 	</widget>
 	<eLabel position="0,123" size="2560,1246" backgroundColor="#26242b34" zPosition="-1"/>
-	
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="24,482" size="592,6" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="24,550" size="592,6" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="24,618" size="592,6" alphatest="blend" zPosition="1"/>
@@ -22,9 +21,7 @@
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="24,1162" size="592,6" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="24,1230" size="592,6" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="24,1298" size="592,6" alphatest="blend" zPosition="1"/>
-	
 	<eLabel position="642,0" size="2,1368" backgroundColor="#ffffff" zPosition="4"/>
-	
 	<widget source="main_list" render="Listbox" position="0,416" size="640,952" foregroundColor="#ffffff" backgroundColor="#1a242b34" foregroundColorSelected="#ffffff" backgroundColorSelected="#1a000000" selectionPixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/haze/images/menu-select.png" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="1" scrollbarWidth="6" itemHeight="68" enableWrapAround="1" transparent="1" zPosition="3">
 		<convert type="TemplatedMultiContent">{"template": [
 			MultiContentEntryText(pos=(24, 0), size = (536, 68), font=0, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT|RT_VALIGN_CENTER, text = 0),
@@ -61,36 +58,28 @@
 	<widget source="vod_director" render="Label" position="1120,1276" size="640,80" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#40000000" halign="left" noWrap="1" transparent="1" zPosition="3"/>
 	<widget source="vod_country_label" render="Label" position="1800,1228" size="320,80" font="estalkerbold;32" foregroundColor="#ffffff" backgroundColor="#40000000" halign="left" noWrap="1" transparent="1" zPosition="3"/>
 	<widget source="vod_country" render="Label" position="1800,1276" size="640,80" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#40000000" halign="left" noWrap="1" transparent="1" zPosition="3"/>
-	
 	<eLabel position="0,1367" size="2560,2" backgroundColor="#ffffff" zPosition="-1"/>
 	<eLabel position="0,1368" size="2560,72" backgroundColor="#1a000000" zPosition="-1"/>
-	
 	<widget source="key_red" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_red.png" position="672,1376" size="51,51" alphatest="blend" zPosition="2"/>
 	<widget source="key_red" render="Label" position="736,1368" size="300,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_green" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_green.png" position="1036,1376" size="51,51" alphatest="blend" zPosition="2"/>
 	<widget source="key_green" render="Label" position="1100,1368" size="300,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_yellow" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_yellow.png" position="1399,1376" size="51,51" alphatest="blend" zPosition="2">
 		<convert type="ConditionalShowHide"/>
 	</widget>
 	<widget source="key_yellow" render="Label" position="1463,1368" size="300,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_blue" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_blue.png" position="1763,1376" size="51,51" alphatest="blend" zPosition="2">
 		<convert type="ConditionalShowHide"/>
 	</widget>
 	<widget source="key_blue" render="Label" position="1827,1368" size="300,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
-	
 	<widget source="key_epg" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_epg.png" position="2126,1376" size="51,51" alphatest="blend" zPosition="2">
 		<convert type="ConditionalShowHide"/>
 	</widget>
 	<widget source="key_epg" render="Label" position="2190,1368" size="220,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" zPosition="2"/>
-	
 	<widget source="key_menu" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/key_menu.png" position="2399,1376" size="51,51" alphatest="blend" zPosition="2">
 		<convert type="ConditionalShowHide"/>
 	</widget>
 	<widget source="key_menu" render="Label" position="2463,1368" size="300,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" zPosition="2"/>
-	
 	<widget source="page" render="Label" position="24,1368" size="292,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" transparent="1" noWrap="1" zPosition="2"/>
 	<widget source="listposition" render="Label" position="396,1368" size="220,72" font="estalkerregular;32" foregroundColor="#ffffff" backgroundColor="#1a000000" valign="center" halign="right" transparent="1" noWrap="1" zPosition="2"/>
 </screen>
