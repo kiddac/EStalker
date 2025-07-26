@@ -96,5 +96,4 @@
 		<convert type="EStalkerServiceInfo">SubtitlesAvailable</convert>
 		<convert type="ConditionalShowHide"/>
 	</widget>
-
 </screen>
