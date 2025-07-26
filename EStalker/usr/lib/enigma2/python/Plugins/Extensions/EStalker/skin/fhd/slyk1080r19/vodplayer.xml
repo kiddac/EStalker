@@ -54,25 +54,4 @@
 	<widget source="streamtype" render="Label" position="1377,954" size="107,57" font="slykregular;39" halign="right" valign="center" transparent="1" noWrap="1" foregroundColor="#7eaeef" backgroundColor="#1c4475" zPosition="2"/>
 	<!-- picon -->
 	<widget name="cover" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/cover.png" position="1546,780" size="162,233" alphatest="blend" scale="1" zPosition="2"/>
-	<!--
-	<widget source="streamtype" render="Label" position="1560,981" size="90,36" font="slykbold;27" foregroundColor="#ffffff" backgroundColor="#40000000" valign="center" halign="center" transparent="1" zPosition="3" />
-	<widget source="extension" render="Label" position="1560,1023" size="90,36" font="slykbold;27" foregroundColor="#ffffff" backgroundColor="#40000000" valign="center" halign="center" transparent="1" zPosition="3" />
-	<widget source="session.CurrentService" render="Label" position="1656,939" size="90,36" font="slykbold;27" foregroundColor="#ffffff" backgroundColor="#40000000" valign="center" halign="center" transparent="1" zPosition="3">
-		<convert type="EStalkerServiceInfo">VideoWidth</convert>
-	</widget>
-	<widget source="session.CurrentService" render="Label" position="1656,981" size="90,36" font="slykbold;27" foregroundColor="#ffffff" backgroundColor="#40000000" valign="center" halign="center" transparent="1" zPosition="3">
-		<convert type="EStalkerServiceInfo">VideoHeight</convert>
-	</widget>
-	<widget source="session.CurrentService" render="Label" position="1656,1023" size="90,36" font="slykbold;24" foregroundColor="#ffffff" backgroundColor="#40000000" valign="center" halign="center" transparent="1" zPosition="3">
-		<convert type="EStalkerServiceInfo">Framerate</convert>
-	</widget>
-	<widget text="4:3" render="FixedLabel" source="session.CurrentService" position="1752,981" size="90,36" font="slykbold;27" foregroundColor="#ffffff" backgroundColor="#40000000" valign="center" halign="center" transparent="1" zPosition="3">
-		<convert type="EStalkerServiceInfo">IsWidescreen</convert>
-		<convert type="ConditionalShowHide">Invert</convert>
-	</widget>
-	<widget source="session.CurrentService" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/key_audio.png" position="1848,939" size="38,38" alphatest="blend" zPosition="2">
-		<convert type="EStalkerServiceInfo">AudioTracksAvailable</convert>
-		<convert type="ConditionalShowHide" />
-	</widget>
-	-->
 </screen>
