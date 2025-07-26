@@ -1,0 +1,9 @@
+Package: enigma2-plugin-extensions-estalker
+Version: 1.00-20250726
+Section: misc
+Priority: optional
+Architecture: all
+Maintainer: kiddac
+Description: IPTV Ministra stalker player by KiddaC
+Depends:
+Source: https://www.linuxsat-support.com
