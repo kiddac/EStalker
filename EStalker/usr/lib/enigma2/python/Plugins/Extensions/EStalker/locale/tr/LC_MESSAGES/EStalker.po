@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: EStalker v0.14\n"
-"POT-Creation-Date: 2025-07-26 23:24+0100\n"
-"PO-Revision-Date: 2025-07-26 23:24+0100\n"
+"Project-Id-Version: EStalker V1.01 - 27/07/2025\n"
+"POT-Creation-Date: 2025-07-27 22:24+0300\n"
+"PO-Revision-Date: 2025-07-27 22:25+0300\n"
 "Last-Translator: audi06_19 <info@dreamosat-forum.com>\n"
 "Language-Team: \n"
 "Language: tr_TR\n"
@@ -307,11 +307,11 @@ msgstr "KiddaC tarafından IPTV Ministra stalker oynatıcı"
 
 #: series.py:101
 msgid "Series Categories"
-msgstr ""
+msgstr "Dizi Kategorileri"
 
 #: series.py:102
 msgid "Series"
-msgstr ""
+msgstr "Diziler"
 
 #: series.py:831 series.py:882 series.py:933 series.py:982 vod.py:544
 #: vod.py:592
@@ -452,6 +452,8 @@ msgstr "Film Veritabanı dili"
 #: settings.py:155
 msgid "Allow SubsSupport plugin in Movies. Restart GUI required"
 msgstr ""
+"Filmlerde SubsSupport eklentisine izin verin. GUI'yi yeniden başlatmanız "
+"gerekiyor"
 
 #: settings.py:156
 msgid "Skip playlist selection screen if only 1 playlist"
