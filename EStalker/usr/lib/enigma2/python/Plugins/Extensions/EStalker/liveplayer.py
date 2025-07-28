@@ -335,9 +335,6 @@ class IPTVInfoBarPVRState:
                 cb(state_summary, speed_summary, statusicon_summary)
 
 
-skin_path = os.path.join(skin_directory, cfg.skin.value)
-
-
 class EStalker_StreamPlayer(
     InfoBarBase,
     IPTVInfoBarShowHide,
@@ -375,6 +372,7 @@ class EStalker_StreamPlayer(
         self.servicetype = servicetype
         self.originalservicetype = self.servicetype
 
+        skin_path = os.path.join(skin_directory, cfg.skin.value)
         skin = os.path.join(skin_path, "streamplayer.xml")
         with open(skin, "r") as f:
             self.skin = f.read()

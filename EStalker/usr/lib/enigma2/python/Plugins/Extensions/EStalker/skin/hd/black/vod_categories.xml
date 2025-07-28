@@ -2,7 +2,7 @@
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/black/images/background.png" alphatest="off" position="0,0" size="1280,720" zPosition="-1"/>
 	<widget name="vod_backdrop" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/black/images/backdrop.png" position="426,0" size="853,480" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/common/left-panel.png" position="0,0" size="320,720" alphatest="blend" zPosition="1"/>
-	<widget source="session.VideoPicture" render="Pig" position="0,0" size="320,180" backgroundColor="#000000" zPosition="2"/>
+	<widget source="session.VideoPicture" render="Pig" position="0,0" size="320,180" backgroundColor="#ff000000" zPosition="2"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/common/divider.png" position="0,213" size="313,2" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/common/divider.png" position="0,249" size="313,2" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/common/divider.png" position="0,285" size="313,2" alphatest="blend" zPosition="1"/>

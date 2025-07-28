@@ -10,9 +10,6 @@
 	<eLabel position="0,92" size="816,934" backgroundColor="#1a242b34" zPosition="-1"/>
 	<widget source="playlists" render="Listbox" position="0,136" size="816,840" foregroundColor="#ffffff" backgroundColor="#1a242b34" foregroundColorSelected="#ffffff" backgroundColorSelected="#1a000000" selectionPixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/haze/images/menu-select.png" itemHeight="120" scrollbarMode="showOnDemand" enableWrapAround="1" transparent="1" zPosition="2">
 		<convert type="TemplatedMultiContent">
-		
-		
-		
 			{"template": [
 				<!-- name -->
 				MultiContentEntryText(pos = (21, 9), size = (390, 42), font=0, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT, text = 1),
@@ -55,7 +52,6 @@
 			"itemHeight": 120,
 			"scrollbarMode": "showOnDemand"
 			}
-			
 		</convert>
 	</widget>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/divider.png" position="0,134" size="816,4" alphatest="blend" zPosition="1"/>

@@ -2,11 +2,11 @@
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/black/images/background.png" alphatest="off" position="0,0" size="2560,1440" zPosition="-1"/>
 	<widget name="vod_backdrop" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/black/images/backdrop.png" position="854,0" size="1707,960" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/left-panel.png" position="0,0" size="640,1440" alphatest="blend" zPosition="1"/>
-	<widget source="session.VideoPicture" render="Pig" position="0,0" size="640,360" backgroundColor="#000000" zPosition="2"/>
+	<widget source="session.VideoPicture" render="Pig" position="0,0" size="640,360" backgroundColor="#ff000000" zPosition="2"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,427" size="627,6" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,499" size="627,6" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,571" size="627,6" alphatest="blend" zPosition="1"/>
-	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,643" size="627,6" alphatest="blend" zPosition="1"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,643" size="627,6" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,715" size="627,6" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,787" size="627,6" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/divider.png" position="0,859" size="627,6" alphatest="blend" zPosition="1"/>

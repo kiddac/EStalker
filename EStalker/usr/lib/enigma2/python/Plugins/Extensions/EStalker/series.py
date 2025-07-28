@@ -334,7 +334,7 @@ class EStalker_Series_Categories(Screen):
             self.sortby = "number"
             self.getCategories()
 
-        if self.level == 2:
+        elif self.level == 2:
             self.all_series_data = []
             self.series_pages_downloaded = set()
             self.series_current_page = 1
@@ -348,7 +348,7 @@ class EStalker_Series_Categories(Screen):
             self.seriesfirstlist = True
             self.getSeries(response)
 
-        if self.level == 3:
+        elif self.level == 3:
             self.all_seasons_data = []
             self.seasons_pages_downloaded = set()
             self.seasons_current_page = 1
@@ -357,7 +357,7 @@ class EStalker_Series_Categories(Screen):
             self.seasonsfirstlist = True
             self.getSeasons(response)
 
-        if self.level == 4:
+        elif self.level == 4:
             self.all_episodes_data = []
             self.episodes_pages_downloaded = set()
             self.episodes_current_page = 1
@@ -882,7 +882,7 @@ class EStalker_Series_Categories(Screen):
             self.session.openWithCallback(self.back, MessageBox, _("Server error or invalid link."), MessageBox.TYPE_ERROR, timeout=3)
             return self.all_seasons_data
 
-        if self.level == 4:
+        elif self.level == 4:
             self.all_episodes_data = []
 
             paged_url = self._updateUrlPage(url, self.episodes_current_page)
@@ -1203,54 +1203,44 @@ class EStalker_Series_Categories(Screen):
             self["key_blue"].setText("")
             self.hideVod()
 
-    def stripjunk(self, text):
-        """
-        if debugs:
-            print("*** stripjunk ***")
-            """
+    def stripjunk(self, text, database=None):
+        searchtitle = text
 
-        searchtitle = text.lower()
+        # Move "the" from the end to the beginning (case-insensitive)
+        if searchtitle.strip().lower().endswith("the"):
+            searchtitle = "The " + searchtitle[:-3].strip()
 
-        # if title ends in "the", move "the" to the beginning
-        if searchtitle.endswith("the"):
-            searchtitle = "the " + searchtitle[:-4]
+        # remove xx: at start (case-insensitive)
+        searchtitle = re.sub(r'^\w{2}:', '', searchtitle, flags=re.IGNORECASE)
 
-        # remove xx: at start
-        searchtitle = re.sub(r'^\w{2}:', '', searchtitle)
+        # remove xx|xx at start (case-insensitive)
+        searchtitle = re.sub(r'^\w{2}\|\w{2}\s', '', searchtitle, flags=re.IGNORECASE)
 
-        # remove xx|xx at start
-        searchtitle = re.sub(r'^\w{2}\|\w{2}\s', '', searchtitle)
+        # remove xx - at start (case-insensitive)
+        searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle, flags=re.IGNORECASE)
 
-        # remove xx - at start
-        searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle)
-
-        # remove all leading content between and including ||
+        # remove all leading content between and including || or |
         searchtitle = re.sub(r'^\|\|.*?\|\|', '', searchtitle)
         searchtitle = re.sub(r'^\|.*?\|', '', searchtitle)
-
-        # remove everything left between pipes.
         searchtitle = re.sub(r'\|.*?\|', '', searchtitle)
 
-        # remove all leading content between and including ┃┃
+        # remove all leading content between and including ┃┃ or ┃
         searchtitle = re.sub(r'^┃┃.*?┃┃', '', searchtitle)
         searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
-
-        # remove everything left between heavy vertical pipes.
         searchtitle = re.sub(r'┃.*?┃', '', searchtitle)
 
-        # remove all content between and including () multiple times unless it contains only numbers.
+        # remove all content between and including () unless it's all digits
         searchtitle = re.sub(r'\((?!\d+\))[^()]*\)', '', searchtitle)
 
-        # remove all content between and including [] multiple times
+        # remove all content between and including []
         searchtitle = re.sub(r'\[\[.*?\]\]|\[.*?\]', '', searchtitle)
 
-        # Remove year patterns at the end, unless the entire title is a year.
-        if not re.match(r'^\d{4}$', searchtitle):
+        # remove trailing year (but not if the whole title *is* a year)
+        if not re.match(r'^\d{4}$', searchtitle.strip()):
             searchtitle = re.sub(r'[\s\-]*(?:[\(\[\"]?\d{4}[\)\]\"]?)$', '', searchtitle)
 
-        # List of bad strings to remove
+        # Bad substrings to strip (case-insensitive)
         bad_strings = [
-
             "ae|", "al|", "ar|", "at|", "ba|", "be|", "bg|", "br|", "cg|", "ch|", "cz|", "da|", "de|", "dk|",
             "ee|", "en|", "es|", "eu|", "ex-yu|", "fi|", "fr|", "gr|", "hr|", "hu|", "in|", "ir|", "it|", "lt|",
             "mk|", "mx|", "nl|", "no|", "pl|", "pt|", "ro|", "rs|", "ru|", "se|", "si|", "sk|", "sp|", "tr|",
@@ -1262,31 +1252,24 @@ class EStalker_Series_Categories(Screen):
             "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264"
         ]
 
-        # Construct a regex pattern to match any of the bad strings
-        bad_strings_pattern = re.compile('|'.join(map(re.escape, bad_strings)))
-
-        # Remove bad strings using regex pattern
+        bad_strings_pattern = re.compile('|'.join(map(re.escape, bad_strings)), flags=re.IGNORECASE)
         searchtitle = bad_strings_pattern.sub('', searchtitle)
 
-        # List of bad suffixes to remove
+        # Bad suffixes to remove (case-insensitive, only if at end)
         bad_suffix = [
             " al", " ar", " ba", " da", " de", " en", " es", " eu", " ex-yu", " fi", " fr", " gr", " hr", " mk",
             " nl", " no", " pl", " pt", " ro", " rs", " ru", " si", " swe", " sw", " tr", " uk", " yu"
         ]
 
-        # Construct a regex pattern to match any of the bad suffixes at the end of the string
-        bad_suffix_pattern = re.compile(r'(' + '|'.join(map(re.escape, bad_suffix)) + r')$')
-
-        # Remove bad suffixes using regex pattern
+        bad_suffix_pattern = re.compile(r'(' + '|'.join(map(re.escape, bad_suffix)) + r')$', flags=re.IGNORECASE)
         searchtitle = bad_suffix_pattern.sub('', searchtitle)
 
-        # Replace ".", "_", "'" with " "
+        # Replace '.', '_', "'", '*' with space
         searchtitle = re.sub(r'[._\'\*]', ' ', searchtitle)
 
-        # Replace "-" with space and strip trailing spaces
-        searchtitle = searchtitle.strip(' -')
+        # Trim leading/trailing hyphens and whitespace
+        searchtitle = searchtitle.strip(' -').strip()
 
-        searchtitle = searchtitle.strip()
         return str(searchtitle)
 
     def getTMDB(self):
@@ -1865,9 +1848,13 @@ class EStalker_Series_Categories(Screen):
             if self.level == 1:
                 self["key_blue"].setText(_("Search"))
                 self["key_menu"].setText("+/-")
-            else:
+            elif self.level == 2:
                 self["key_menu"].setText("")
                 self["key_blue"].setText(_("Search All"))
+            else:
+                self["key_menu"].setText("")
+                self["key_yellow"].setText("")
+                self["key_blue"].setText("")
 
             if self.chosen_category == "favourites":
                 self["key_blue"].setText("")
@@ -1900,6 +1887,16 @@ class EStalker_Series_Categories(Screen):
             if self.tmdbresults:
                 desc_image = (str(self.tmdbresults.get("cover_big") or "").strip() or str(self.tmdbresults.get("movie_image") or "").strip() or self.storedcover or "")
 
+            """
+            # add new image into list.
+            current_index = self["main_list"].getSelectedIndex()
+            if current_index != -1:
+                item = list(self.main_list[current_index])   # Convert tuple to list
+                item[5] = desc_image                         # Update the desired value (e.g., cover image)
+                self.main_list[current_index] = tuple(item)  # Convert back to tuple
+                self["main_list"].setList(self.main_list)    # Refresh the list display
+                """
+
             if "http" in desc_image:
                 self.redirect_count = 0
                 self.cover_download_deferred = self.agent.request(b'GET', desc_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
@@ -1931,12 +1928,10 @@ class EStalker_Series_Categories(Screen):
             if self.tmdbresults:
                 logo_image = str(self.tmdbresults.get("logo") or "").strip() or self.storedlogo or ""
 
-                if "http" in logo_image:
-                    self.logo_download_deferred = self.agent.request(b'GET', logo_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
-                    self.logo_download_deferred.addCallback(self.handleLogoResponse)
-                    self.logo_download_deferred.addErrback(self.handleLogoError)
-                else:
-                    self.loadDefaultLogo()
+            if "http" in logo_image:
+                self.logo_download_deferred = self.agent.request(b'GET', logo_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
+                self.logo_download_deferred.addCallback(self.handleLogoResponse)
+                self.logo_download_deferred.addErrback(self.handleLogoError)
             else:
                 self.loadDefaultLogo()
 
@@ -1957,13 +1952,7 @@ class EStalker_Series_Categories(Screen):
 
             backdrop_image = ""
 
-            if self.level == 2:
-                try:
-                    backdrop_image = self["main_list"].getCurrent()[15]
-                except:
-                    pass
-
-            elif self.level == 3:
+            if self.level == 2 or self.level == 3:
                 try:
                     backdrop_image = self["main_list"].getCurrent()[15]
                 except:
@@ -1979,6 +1968,16 @@ class EStalker_Series_Categories(Screen):
                     backdrop_image = str(backdrop_path[0] if isinstance(backdrop_path, list) else backdrop_path).strip() or self.storedbackdrop or ""
                 else:
                     backdrop_image = self.storedbackdrop or ""
+
+            """
+            # add new image into list.
+            current_index = self["main_list"].getSelectedIndex()
+            if current_index != -1:
+                item = list(self.main_list[current_index])   # Convert tuple to list
+                item[15] = backdrop_image                    # Update the desired value
+                self.main_list[current_index] = tuple(item)  # Convert back to tuple
+                self["main_list"].setList(self.main_list)    # Refresh the list display
+                """
 
             if "http" in backdrop_image:
                 self.backdrop_download_deferred = self.agent.request(b'GET', backdrop_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
@@ -2304,7 +2303,6 @@ class EStalker_Series_Categories(Screen):
             self.buildLists()
 
         if self.level == 2:
-
             sortlist = [_("Sort: A-Z"), _("Sort: Added")]
 
             for index, item in enumerate(sortlist):
@@ -2428,7 +2426,7 @@ class EStalker_Series_Categories(Screen):
             self.filterresult = ""
             glob.nextlist[-1]["filter"] = self.filterresult
             self.buildLists()
-        if self.level == 2:
+        elif self.level == 2:
             self["key_blue"].setText(_("Search All"))
             activelist = glob.originalChannelList2[:]
             self.series_pages_downloaded = set()
@@ -2452,10 +2450,10 @@ class EStalker_Series_Categories(Screen):
                 self.filterresult = ""
                 glob.nextlist[-1]["filter"] = self.filterresult
 
-        if self.level == 3:
+        elif self.level == 3:
             pass
 
-        if self.level == 4:
+        elif self.level == 4:
             pass
 
         # self.buildLists()
@@ -2546,8 +2544,8 @@ class EStalker_Series_Categories(Screen):
                     self["main_list"].setIndex(0)
                     self["category_actions"].setEnabled(False)
                     self["channel_actions"].setEnabled(True)
-                    self["key_yellow"].setText(_("Sort: A-Z"))
-                    self.sortText = _("Sort: A-Z")
+                    # self["key_yellow"].setText(_("Sort: A-Z"))
+                    # self.sortText = _("Sort: A-Z")
 
                     glob.nextlist.append({"next_url": next_url, "index": 0, "level": self.level, "sort": self["key_yellow"].getText(), "filter": ""})
 
@@ -2580,8 +2578,8 @@ class EStalker_Series_Categories(Screen):
                     self["main_list"].setIndex(0)
                     self["category_actions"].setEnabled(False)
                     self["channel_actions"].setEnabled(True)
-                    self["key_yellow"].setText(_("Sort: A-Z"))
-                    self.sortText = _("Sort: A-Z")
+                    # self["key_yellow"].setText(_("Sort: A-Z"))
+                    # self.sortText = _("Sort: A-Z")
 
                     glob.nextlist.append({"next_url": next_url, "index": 0, "level": self.level, "sort": self["key_yellow"].getText(), "filter": ""})
 
@@ -2600,14 +2598,13 @@ class EStalker_Series_Categories(Screen):
                     self["main_list"].setIndex(0)
                     self["category_actions"].setEnabled(False)
                     self["channel_actions"].setEnabled(True)
-                    self["key_yellow"].setText(_("Sort: A-Z"))
                     glob.nextlist.append({"next_url": next_url, "index": 0, "level": self.level, "sort": self["key_yellow"].getText(), "filter": ""})
                     self.createSetup()
                 else:
                     self.createSetup()
 
             elif self.level == 4:
-                if self.list3:
+                if self.list4:
                     from . import vodplayer
 
                     stream_id = self["main_list"].getCurrent()[4]
@@ -2684,8 +2681,6 @@ class EStalker_Series_Categories(Screen):
         if debugs:
             print("*** back ***")
 
-        self.chosen_category = ""
-
         if self.level != 1:
             try:
                 self.timerSeries.stop()
@@ -2720,6 +2715,9 @@ class EStalker_Series_Categories(Screen):
             if self.level == 1:
                 self["category_actions"].setEnabled(True)
                 self["channel_actions"].setEnabled(False)
+                self.showfav = False
+                self.chosen_category = ""
+
             self.buildLists()
 
             self.loadDefaultCover()
@@ -2740,11 +2738,13 @@ class EStalker_Series_Categories(Screen):
         if debugs:
             print("*** clearWatched ***")
 
-        if self.level == 2:
-            current_id = str(self["main_list"].getCurrent()[4])
-            watched_list = glob.active_playlist["player_info"].get("serieswatched", [])
-            if current_id in watched_list:
-                watched_list.remove(current_id)
+        if self.level != 4:
+            return
+
+        current_id = str(self["main_list"].getCurrent()[4])
+        watched_list = glob.active_playlist["player_info"].get("serieswatched", [])
+        if current_id in watched_list:
+            watched_list.remove(current_id)
 
         with open(playlists_json, "r") as f:
             try:
@@ -2769,7 +2769,6 @@ class EStalker_Series_Categories(Screen):
     def showfavourites(self):
         if debugs:
             print("*** show favourites ***")
-        # self.chosen_category = "favourites"
         self.showfav = True
         self.parentalCheck()
 

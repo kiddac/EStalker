@@ -4,7 +4,7 @@
 		<convert type="ClockToText">Format:%H:%M | %A %-d %b</convert>
 	</widget>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/common/left-panel.png" position="0,0" size="320,720" alphatest="blend" zPosition="1"/>
-	<widget source="session.VideoPicture" render="Pig" position="0,0" size="320,180" backgroundColor="#000000" zPosition="2"/>
+	<widget source="session.VideoPicture" render="Pig" position="0,0" size="320,180" backgroundColor="#ff000000" zPosition="2"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/common/divider.png" position="0,213" size="313,2" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/common/divider.png" position="0,249" size="313,2" alphatest="blend" zPosition="1"/>
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/hd/common/divider.png" position="0,285" size="313,2" alphatest="blend" zPosition="1"/>

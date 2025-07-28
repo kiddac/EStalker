@@ -50,6 +50,7 @@ from twisted.web.http_headers import Headers
 from Components.ActionMap import ActionMap
 from Components.Pixmap import Pixmap
 from Components.Sources.List import List
+from Components.Sources.List import List
 from Screens.MessageBox import MessageBox
 from Screens.Screen import Screen
 from Screens.VirtualKeyBoard import VirtualKeyBoard
@@ -822,19 +823,29 @@ class EStalker_Vod_Categories(Screen):
                 pass
 
             desc_image = ""
+            try:
+                desc_image = self["main_list"].getCurrent()[5]
+            except:
+                pass
 
             if self.cover_download_deferred and not self.cover_download_deferred.called:
                 self.cover_download_deferred.cancel()
 
             if self.tmdbresults:
-                desc_image = str(self.tmdbresults.get("cover_big") or "").strip()
+                desc_image = (str(self.tmdbresults.get("cover_big") or "").strip() or str(self.tmdbresults.get("movie_image") or "").strip())
 
-                if "http" in desc_image:
-                    self.cover_download_deferred = self.agent.request(b'GET', desc_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
-                    self.cover_download_deferred.addCallback(self.handleCoverResponse)
-                    self.cover_download_deferred.addErrback(self.handleCoverError)
-                else:
-                    self.loadDefaultCover()
+            # add new image into level 2 list.
+            current_index = self["main_list"].getSelectedIndex()
+            if current_index != -1:
+                item = list(self.main_list[current_index])   # Convert tuple to list
+                item[5] = desc_image                         # Update the desired value (e.g., cover image)
+                self.main_list[current_index] = tuple(item)  # Convert back to tuple
+                self["main_list"].setList(self.main_list)    # Refresh the list display
+
+            if "http" in desc_image:
+                self.cover_download_deferred = self.agent.request(b'GET', desc_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
+                self.cover_download_deferred.addCallback(self.handleCoverResponse)
+                self.cover_download_deferred.addErrback(self.handleCoverError)
             else:
                 self.loadDefaultCover()
 
@@ -861,12 +872,10 @@ class EStalker_Vod_Categories(Screen):
             if self.tmdbresults:
                 logo_image = str(self.tmdbresults.get("logo") or "").strip()
 
-                if "http" in logo_image:
-                    self.logo_download_deferred = self.agent.request(b'GET', logo_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
-                    self.logo_download_deferred.addCallback(self.handleLogoResponse)
-                    self.logo_download_deferred.addErrback(self.handleLogoError)
-                else:
-                    self.loadDefaultLogo()
+            if "http" in logo_image:
+                self.logo_download_deferred = self.agent.request(b'GET', logo_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
+                self.logo_download_deferred.addCallback(self.handleLogoResponse)
+                self.logo_download_deferred.addErrback(self.handleLogoError)
             else:
                 self.loadDefaultLogo()
 
@@ -1755,54 +1764,44 @@ class EStalker_Vod_Categories(Screen):
             self.tmdbresults = {}
             self.getTMDB()
 
-    def stripjunk(self, text):
-        """
-        if debugs:
-            print("*** stripjunk ***")
-            """
+    def stripjunk(self, text, database=None):
+        searchtitle = text
 
-        searchtitle = text.lower()
+        # Move "the" from the end to the beginning (case-insensitive)
+        if searchtitle.strip().lower().endswith("the"):
+            searchtitle = "The " + searchtitle[:-3].strip()
 
-        # if title ends in "the", move "the" to the beginning
-        if searchtitle.endswith("the"):
-            searchtitle = "the " + searchtitle[:-4]
+        # remove xx: at start (case-insensitive)
+        searchtitle = re.sub(r'^\w{2}:', '', searchtitle, flags=re.IGNORECASE)
 
-        # remove xx: at start
-        searchtitle = re.sub(r'^\w{2}:', '', searchtitle)
+        # remove xx|xx at start (case-insensitive)
+        searchtitle = re.sub(r'^\w{2}\|\w{2}\s', '', searchtitle, flags=re.IGNORECASE)
 
-        # remove xx|xx at start
-        searchtitle = re.sub(r'^\w{2}\|\w{2}\s', '', searchtitle)
+        # remove xx - at start (case-insensitive)
+        searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle, flags=re.IGNORECASE)
 
-        # remove xx - at start
-        searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle)
-
-        # remove all leading content between and including ||
+        # remove all leading content between and including || or |
         searchtitle = re.sub(r'^\|\|.*?\|\|', '', searchtitle)
         searchtitle = re.sub(r'^\|.*?\|', '', searchtitle)
-
-        # remove everything left between pipes.
         searchtitle = re.sub(r'\|.*?\|', '', searchtitle)
 
-        # remove all leading content between and including ┃┃
+        # remove all leading content between and including ┃┃ or ┃
         searchtitle = re.sub(r'^┃┃.*?┃┃', '', searchtitle)
         searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
-
-        # remove everything left between heavy vertical pipes.
         searchtitle = re.sub(r'┃.*?┃', '', searchtitle)
 
-        # remove all content between and including () multiple times unless it contains only numbers.
+        # remove all content between and including () unless it's all digits
         searchtitle = re.sub(r'\((?!\d+\))[^()]*\)', '', searchtitle)
 
-        # remove all content between and including [] multiple times
+        # remove all content between and including []
         searchtitle = re.sub(r'\[\[.*?\]\]|\[.*?\]', '', searchtitle)
 
-        # Remove year patterns at the end, unless the entire title is a year.
-        if not re.match(r'^\d{4}$', searchtitle):
+        # remove trailing year (but not if the whole title *is* a year)
+        if not re.match(r'^\d{4}$', searchtitle.strip()):
             searchtitle = re.sub(r'[\s\-]*(?:[\(\[\"]?\d{4}[\)\]\"]?)$', '', searchtitle)
 
-        # List of bad strings to remove
+        # Bad substrings to strip (case-insensitive)
         bad_strings = [
-
             "ae|", "al|", "ar|", "at|", "ba|", "be|", "bg|", "br|", "cg|", "ch|", "cz|", "da|", "de|", "dk|",
             "ee|", "en|", "es|", "eu|", "ex-yu|", "fi|", "fr|", "gr|", "hr|", "hu|", "in|", "ir|", "it|", "lt|",
             "mk|", "mx|", "nl|", "no|", "pl|", "pt|", "ro|", "rs|", "ru|", "se|", "si|", "sk|", "sp|", "tr|",
@@ -1814,31 +1813,24 @@ class EStalker_Vod_Categories(Screen):
             "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264"
         ]
 
-        # Construct a regex pattern to match any of the bad strings
-        bad_strings_pattern = re.compile('|'.join(map(re.escape, bad_strings)))
-
-        # Remove bad strings using regex pattern
+        bad_strings_pattern = re.compile('|'.join(map(re.escape, bad_strings)), flags=re.IGNORECASE)
         searchtitle = bad_strings_pattern.sub('', searchtitle)
 
-        # List of bad suffixes to remove
+        # Bad suffixes to remove (case-insensitive, only if at end)
         bad_suffix = [
             " al", " ar", " ba", " da", " de", " en", " es", " eu", " ex-yu", " fi", " fr", " gr", " hr", " mk",
             " nl", " no", " pl", " pt", " ro", " rs", " ru", " si", " swe", " sw", " tr", " uk", " yu"
         ]
 
-        # Construct a regex pattern to match any of the bad suffixes at the end of the string
-        bad_suffix_pattern = re.compile(r'(' + '|'.join(map(re.escape, bad_suffix)) + r')$')
-
-        # Remove bad suffixes using regex pattern
+        bad_suffix_pattern = re.compile(r'(' + '|'.join(map(re.escape, bad_suffix)) + r')$', flags=re.IGNORECASE)
         searchtitle = bad_suffix_pattern.sub('', searchtitle)
 
-        # Replace ".", "_", "'" with " "
+        # Replace '.', '_', "'", '*' with space
         searchtitle = re.sub(r'[._\'\*]', ' ', searchtitle)
 
-        # Replace "-" with space and strip trailing spaces
-        searchtitle = searchtitle.strip(' -')
+        # Trim leading/trailing hyphens and whitespace
+        searchtitle = searchtitle.strip(' -').strip()
 
-        searchtitle = searchtitle.strip()
         return str(searchtitle)
 
     def getTMDB(self):
@@ -2702,7 +2694,10 @@ def buildVodStreamList(index, title, stream_id, cover, added, rating, next_url, 
     if favourite:
         png = LoadPixmap(os.path.join(common_path, "favourite.png"))
     for channel in glob.active_playlist["player_info"]["vodwatched"]:
-        if int(stream_id) == int(channel):
-            png = LoadPixmap(os.path.join(common_path, "watched.png"))
+        try:
+            if stream_id and channel and (int(stream_id) == int(channel)):
+                png = LoadPixmap(os.path.join(common_path, "watched.png"))
+        except:
+            pass
 
     return (title, png, index, next_url, stream_id, cover, added, rating, container_extension, year, hidden, tmdb, trailer, category_id, cmd)
