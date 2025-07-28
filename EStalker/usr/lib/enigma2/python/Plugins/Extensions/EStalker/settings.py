@@ -114,7 +114,7 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
 
     def save(self):
         if cfg.adult.value and cfg.adultpin.value in (0, 1111, 1234):
-            self.session.open(MessageBox, _("Please change default parental pin.\n\nPin cannot be 0000, 111, or 1234"), MessageBox.TYPE_WARNING)
+            self.session.open(MessageBox, _("Please change default parental pin.\n\nPin cannot be 0000, 1111, or 1234"), MessageBox.TYPE_WARNING)
             return
 
         if self["config"].isChanged():
@@ -141,7 +141,7 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
 
     def initConfig(self):
         self.cfg_skin = getConfigListEntry(_("Select skin"), cfg.skin)
-        self.cfg_location = getConfigListEntry(_("playlists.txt location") + _(" *Restart GUI Required"), cfg.location)
+        self.cfg_location = getConfigListEntry(_("e-portals.txt location") + _(" *Restart GUI Required"), cfg.location)
         self.cfg_livetype = getConfigListEntry(_("Default LIVE stream type"), cfg.livetype)
         self.cfg_vodtype = getConfigListEntry(_("Default VOD/SERIES stream type"), cfg.vodtype)
         self.cfg_livepreview = getConfigListEntry(_("Preview LIVE streams in mini tv"), cfg.livepreview)

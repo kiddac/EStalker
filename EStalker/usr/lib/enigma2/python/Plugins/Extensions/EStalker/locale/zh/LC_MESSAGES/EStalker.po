@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: EStalker\n"
-"POT-Creation-Date: 2025-07-26 23:24+0100\n"
-"PO-Revision-Date: 2025-07-26 23:24+0100\n"
+"POT-Creation-Date: 2025-07-28 19:59+0100\n"
+"PO-Revision-Date: 2025-07-28 19:59+0100\n"
 "Last-Translator: 沙鸥_lexlong2007 <lexlong2007@gmail.com>\n"
 "Language-Team: giorbak\n"
 "Language: zh\n"
@@ -17,19 +17,19 @@ msgstr ""
 
 #: hidden.py:31 settings.py:32
 msgid "Please enter the correct pin code"
-msgstr "请输入正确的 PIN 码"
+msgstr "请输入正确的PIN码"
 
-#: hidden.py:31 live.py:1253 series.py:2517 settings.py:32 vod.py:1448
+#: hidden.py:31 live.py:1253 series.py:2515 settings.py:32 vod.py:1457
 msgid "Enter pin code"
-msgstr "输入 PIN 码"
+msgstr "输入PIN码"
 
 #: hidden.py:40 settings.py:41
 msgid "The pin code you entered is wrong."
-msgstr "PIN 码输入错误."
+msgstr "您输入的PIN码错误"
 
 #: hidden.py:69
 msgid "Hidden Categories"
-msgstr "注意：插件已隐藏！"
+msgstr "隐藏分类"
 
 #: hidden.py:76
 msgid "Cancel"
@@ -41,112 +41,111 @@ msgstr "保存"
 
 #: hidden.py:78
 msgid "Invert"
-msgstr "降序"
+msgstr "反转"
 
 #: hidden.py:79
 msgid "Reset"
-msgstr "复位"
+msgstr "重置"
 
 #: hidden.py:192
 msgid "Error: All categories hidden. Please amend your selection."
-msgstr "错误:所有类别都隐藏.请修改您的选择."
+msgstr "错误：所有分类已隐藏，请修改选择"
 
 #: live.py:142
 msgid "Live Categories"
-msgstr "录制和直播"
+msgstr "直播分类"
 
 #: live.py:143
 msgid "Live TV"
-msgstr "直播"
+msgstr "直播电视"
 
 #: live.py:189 live.py:844 live.py:846 live.py:1078 live.py:1090 live.py:1109
 #: live.py:1121 live.py:1285 live.py:1286 live.py:1439 series.py:170
-#: series.py:1858 series.py:1860 series.py:2277 series.py:2289 series.py:2308
-#: series.py:2315 series.py:2549 series.py:2550 series.py:2583 series.py:2584
-#: series.py:2603 vod.py:168 vod.py:723 vod.py:725 vod.py:1223 vod.py:1235
-#: vod.py:1254 vod.py:1261 vod.py:1479 vod.py:1480 vod.py:1598
+#: series.py:1841 series.py:1843 series.py:2276 series.py:2288 series.py:2306
+#: series.py:2313 vod.py:169 vod.py:724 vod.py:726 vod.py:1232 vod.py:1244
+#: vod.py:1263 vod.py:1270 vod.py:1488 vod.py:1489 vod.py:1607
 msgid "Sort: A-Z"
-msgstr "排序A-Z"
+msgstr "排序：A-Z"
 
 #: live.py:261 mainmenu.py:47 menu.py:55 playlists.py:66 playsettings.py:49
-#: series.py:222 server.py:58 settings.py:73 vod.py:219
+#: series.py:222 server.py:58 settings.py:73 vod.py:220
 msgid "Back"
 msgstr "返回"
 
 #: live.py:262 mainmenu.py:48 menu.py:56 playlists.py:67 series.py:223
-#: vod.py:220
+#: vod.py:221
 msgid "OK"
 msgstr "确定"
 
-#: live.py:264 live.py:840 live.py:1184 series.py:225 series.py:1866
-#: series.py:2425 vod.py:222 vod.py:731 vod.py:1364
+#: live.py:264 live.py:840 live.py:1184 series.py:225 series.py:1849
+#: series.py:2423 vod.py:223 vod.py:732 vod.py:1373
 msgid "Search"
 msgstr "搜索"
 
 #: live.py:772 live.py:837 live.py:1147 live.py:1175 series.py:1057
-#: series.py:1154 series.py:1173 series.py:1853 series.py:2355 series.py:2384
-#: series.py:2409 vod.py:669 vod.py:718 vod.py:770 vod.py:790 vod.py:1300
-#: vod.py:1329 vod.py:1354
+#: series.py:1154 series.py:1173 series.py:1836 series.py:2353 series.py:2382
+#: series.py:2407 vod.py:670 vod.py:719 vod.py:771 vod.py:791 vod.py:1309
+#: vod.py:1338 vod.py:1363
 msgid "Reset Search"
-msgstr "搜索"
+msgstr "重置搜索"
 
-#: live.py:872 live.py:907 series.py:1158 series.py:1200 vod.py:774 vod.py:803
+#: live.py:872 live.py:907 series.py:1158 series.py:1200 vod.py:775 vod.py:804
 msgid "Page: "
-msgstr "页码: "
+msgstr "页码："
 
-#: live.py:1078 live.py:1094 live.py:1109 live.py:1125 series.py:2277
-#: series.py:2293 vod.py:1223 vod.py:1239
+#: live.py:1078 live.py:1094 live.py:1109 live.py:1125 series.py:2276
+#: series.py:2292 vod.py:1232 vod.py:1248
 msgid "Sort: Original"
-msgstr "原始"
+msgstr "排序：原始"
 
-#: live.py:1078 live.py:1092 live.py:1109 live.py:1123 series.py:2277
-#: series.py:2291 vod.py:1223 vod.py:1237
+#: live.py:1078 live.py:1092 live.py:1109 live.py:1123 series.py:2276
+#: series.py:2290 vod.py:1232 vod.py:1246
 msgid "Sort: Z-A"
-msgstr "排序A-Z"
+msgstr "排序：Z-A"
 
-#: live.py:1150 series.py:2358 vod.py:1303
+#: live.py:1150 series.py:2356 vod.py:1312
 msgid "Filter this category..."
-msgstr "类别："
+msgstr "筛选此分类..."
 
-#: live.py:1168 series.py:2379 series.py:2406 vod.py:1324 vod.py:1351
+#: live.py:1168 series.py:2377 series.py:2404 vod.py:1333 vod.py:1360
 msgid "No results found."
-msgstr "搜索结果:"
+msgstr "未找到结果"
 
-#: live.py:1205 series.py:2469 vod.py:1400
+#: live.py:1205 series.py:2467 vod.py:1409
 msgid "Incorrect pin code."
-msgstr "PIN 码输入错误."
+msgstr "PIN码错误"
 
-#: live.py:1233 series.py:2497 vod.py:1428
+#: live.py:1233 series.py:2495 vod.py:1437
 msgid "ALL"
-msgstr "所有"
+msgstr "全部"
 
-#: live.py:1233 series.py:2497 vod.py:1428
+#: live.py:1233 series.py:2495 vod.py:1437
 msgid "All"
 msgstr "全部"
 
-#: live.py:1252 series.py:2516 vod.py:1447
+#: live.py:1252 series.py:2514 vod.py:1456
 msgid "Please enter the parental control pin code"
-msgstr "请输入正确的 PIN 码"
+msgstr "请输入家长控制PIN码"
 
 #: live.py:1565 live.py:1607 live.py:1616
 msgid "Next Info"
-msgstr "稍后:"
+msgstr "下一条信息"
 
 #: live.py:1611
 msgid "Now Info"
-msgstr "皮肤信息:"
+msgstr "当前信息"
 
-#: liveplayer.py:406
+#: liveplayer.py:404
 msgid "TV"
 msgstr "电视"
 
-#: liveplayer.py:959 vodplayer.py:801
+#: liveplayer.py:957 vodplayer.py:787
 msgid "Resolution Change Failed"
-msgstr "解绑失败"
+msgstr "分辨率更改失败"
 
 #: mainmenu.py:46
 msgid "Main Menu"
-msgstr "菜单"
+msgstr "主菜单"
 
 #: mainmenu.py:49
 msgid "Reset JSON"
@@ -154,7 +153,7 @@ msgstr "重置JSON"
 
 #: mainmenu.py:94
 msgid "Playlists.txt location is invalid and has been reset."
-msgstr "Playlists.txt位置无效，已重置。"
+msgstr "播放列表.txt位置无效并已重置"
 
 #: mainmenu.py:120
 msgid ""
@@ -162,23 +161,21 @@ msgid ""
 "\n"
 "Trying installing older version from feeds first..."
 msgstr ""
-"未安装依赖项。\n"
+"依赖未安装\n"
 "\n"
-"正在尝试先从订阅源安装旧版本..."
+"正在尝试从源安装旧版本..."
 
 #: mainmenu.py:132
 msgid "Playlists"
-msgstr "排序方式:"
+msgstr "播放列表"
 
 #: mainmenu.py:132 mainmenu.py:134 server.py:51
 msgid "Add Playlist"
-msgstr "将文件添加到播放列表"
+msgstr "添加播放列表"
 
 #: mainmenu.py:132 mainmenu.py:134 settings.py:66
 msgid "Main Settings"
-msgstr ""
-"选择'是'删除所有主要设置配置数据.选择此选项会将所有Enigma2设置恢复为默认值."
-"这也会导致Enigma2在重启时运行欢迎向导."
+msgstr "主要设置"
 
 #: mainmenu.py:174
 msgid ""
@@ -187,29 +184,29 @@ msgid ""
 "Playlists will not be deleted.\n"
 "Do you wish to continue?"
 msgstr ""
-"警告：删除所有播放列表的存储json数据...设置，收藏夹等。 \n"
-"播放列表不会被删除。\n"
-"您想继续吗？"
+"警告：将删除所有播放列表的json数据...设置、收藏等\n"
+"播放列表不会被删除\n"
+"是否继续？"
 
 #: menu.py:53
 msgid "Playlist Menu"
-msgstr "播放列表"
+msgstr "播放列表菜单"
 
 #: menu.py:234
 msgid "Access Denied."
-msgstr "拒绝访问."
+msgstr "访问被拒绝"
 
 #: menu.py:300 playsettings.py:42
 msgid "Playlist Settings"
-msgstr "播放列表"
+msgstr "播放列表设置"
 
 #: menu.py:307
 msgid "No data, blocked or playlist not compatible with EStalker plugin."
-msgstr "没有数据,被阻止或播放列表与 XStreamity插件不兼容."
+msgstr "无数据、被阻止或播放列表与EStalker插件不兼容"
 
 #: playlists.py:64
 msgid "Manage Playlists"
-msgstr "播放列表排序"
+msgstr "管理播放列表"
 
 #: playlists.py:68
 msgid "Delete"
@@ -217,31 +214,31 @@ msgstr "删除"
 
 #: playlists.py:69
 msgid "Auto Delete"
-msgstr "删除"
+msgstr "自动删除"
 
 #: playlists.py:119
 msgid "No internet."
-msgstr "网络"
+msgstr "无网络"
 
 #: playlists.py:706 playlists.py:749
 msgid "Active"
-msgstr "激活"
+msgstr "活跃"
 
 #: playlists.py:721
 msgid "Active Conn:"
-msgstr "活动"
+msgstr "活跃连接："
 
 #: playlists.py:723
 msgid "Max Conn:"
-msgstr "最高气温: "
+msgstr "最大连接："
 
 #: playlists.py:727
 msgid "Not active"
-msgstr "不活跃"
+msgstr "未激活"
 
 #: playlists.py:730
 msgid "Blocked"
-msgstr "封锁"
+msgstr "已阻止"
 
 #: playlists.py:734 playlists.py:764
 msgid "Unknown"
@@ -249,135 +246,133 @@ msgstr "未知"
 
 #: playlists.py:761
 msgid "No Play Token"
-msgstr "播放"
+msgstr "无播放令牌"
 
 #: playlists.py:783
 msgid "Delete selected server (MAC) entry?"
-msgstr "删除所选服务器（ MAC ）条目？"
+msgstr "删除选定的服务器(MAC)条目？"
 
 #: playlists.py:863
 msgid ""
 "Delete ALL invalid playlists?\n"
 "(Those marked as Not Active/Blocked/Expired)"
 msgstr ""
-"删除所有无效的播放列表？\n"
-"（标记为“未激活/已屏蔽/已过期” ）"
+"删除所有无效播放列表？\n"
+"(标记为未激活/已阻止/已过期)"
 
 #: playlists.py:916
 msgid "Removed all invalid playlists"
-msgstr "删除所有海报！"
+msgstr "已移除所有无效播放列表"
 
 #: playsettings.py:79 server.py:183 settings.py:105
 msgid "Really close without saving settings?"
-msgstr "关闭而不保存设置?"
+msgstr "确定不保存设置就关闭？"
 
 #: playsettings.py:127
 msgid "Show LIVE category:"
-msgstr "节目列表显示电视预览"
+msgstr "显示直播分类："
 
 #: playsettings.py:128
 msgid "Show VOD category:"
-msgstr "类别："
+msgstr "显示点播分类："
 
 #: playsettings.py:129
 msgid "Show SERIES category:"
-msgstr "类别："
+msgstr "显示剧集分类："
 
 #: playsettings.py:130
 msgid "Show CATCHUP category:"
-msgstr "类别："
+msgstr "显示回看分类："
 
 #: playsettings.py:134
 msgid "Stream Type LIVE:"
-msgstr "传输流类型"
+msgstr "直播流类型："
 
 #: playsettings.py:137
 msgid "Stream Type VOD/SERIES:"
-msgstr "传输流类型"
+msgstr "点播/剧集流类型："
 
 #: playsettings.py:139
 msgid "Show Adult channels:"
-msgstr "成人内容节目"
+msgstr "显示成人频道："
 
-#: plugin.py:200 plugin.py:217
+#: plugin.py:221 plugin.py:238
 msgid "EStalker"
 msgstr "EStalker"
 
-#: plugin.py:216
+#: plugin.py:237
 msgid "IPTV Ministra stalker player by KiddaC"
-msgstr "KiddaC的IPTV Ministra跟踪者玩家"
+msgstr "KiddaC的IPTV Ministra播放器"
 
 #: series.py:101
 msgid "Series Categories"
-msgstr ""
+msgstr "剧集分类"
 
 #: series.py:102
 msgid "Series"
-msgstr ""
+msgstr "剧集"
 
-#: series.py:831 series.py:882 series.py:933 series.py:982 vod.py:544
-#: vod.py:592
+#: series.py:831 series.py:882 series.py:933 series.py:982 vod.py:545
+#: vod.py:593
 msgid "Server error or invalid link."
-msgstr "无效"
+msgstr "服务器错误或链接无效"
 
-#: series.py:1774 vod.py:2281
+#: series.py:1757 vod.py:2273
 msgid "Rating: "
-msgstr "按评分"
+msgstr "评分："
 
-#: series.py:1823 vod.py:2272
+#: series.py:1806 vod.py:2264
 msgid "Cast:"
-msgstr ""
-"在信息小部件中启用扩展事件信息的显示，包括完整演员阵容、剧组、剧情详细信息和"
-"其他元数据。"
+msgstr "演员表："
 
-#: series.py:1828 vod.py:2254
+#: series.py:1811 vod.py:2246
 msgid "Director:"
-msgstr "导演"
+msgstr "导演："
 
-#: series.py:1833 vod.py:2262
+#: series.py:1816 vod.py:2254
 msgid "Country:"
-msgstr "地区"
+msgstr "国家："
 
-#: series.py:1838 vod.py:2229
+#: series.py:1821 vod.py:2221
 msgid "Overview"
-msgstr "天气插件概述"
+msgstr "概述"
 
-#: series.py:1870 series.py:2432 vod.py:735 vod.py:1371
+#: series.py:1853 series.py:2430 vod.py:736 vod.py:1380
 msgid "Search All"
-msgstr "搜索："
+msgstr "搜索全部"
 
-#: series.py:2308 series.py:2317 vod.py:1254 vod.py:1263
+#: series.py:2306 series.py:2315 vod.py:1263 vod.py:1272
 msgid "Sort: Added"
-msgstr "排序"
+msgstr "排序：添加时间"
 
 #: server.py:97
 msgid "Protocol:"
-msgstr "协议:"
+msgstr "协议："
 
 #: server.py:98
 msgid "Server URL: i.e. domain.xyz"
-msgstr "服务器URL :%s"
+msgstr "服务器URL：例如domain.xyz"
 
 #: server.py:99
 msgid "Port:"
-msgstr "端口:"
+msgstr "端口："
 
 #: server.py:100
 msgid "MAC Address (12 hex chars, no colons):"
-msgstr "MAC地址(12个十六进制字符，无冒号):"
+msgstr "MAC地址(12位十六进制，无冒号)："
 
 #: server.py:104
 #, python-format
 msgid "Added MAC #%d:"
-msgstr "已添加MAC # %d ："
+msgstr "已添加MAC #%d："
 
 #: server.py:124
 msgid "MAC address added"
-msgstr "MAC地址:"
+msgstr "MAC地址已添加"
 
 #: server.py:126
 msgid "Invalid MAC format (use XXXXXXXXXXXX)"
-msgstr "MAC格式无效（使用XXXXXXXXXXXX ）"
+msgstr "MAC格式无效(使用XXXXXXXXXXXX)"
 
 #: server.py:149
 msgid "At least one MAC address is required"
@@ -385,49 +380,49 @@ msgstr "至少需要一个MAC地址"
 
 #: server.py:168
 msgid "Playlist added successfully!"
-msgstr "播放列表"
+msgstr "播放列表添加成功！"
 
 #: server.py:173
 msgid "Error saving playlist"
-msgstr "保存数据"
+msgstr "保存播放列表错误"
 
 #: settings.py:117
 msgid ""
 "Please change default parental pin.\n"
 "\n"
-"Pin cannot be 0000, 111, or 1234"
+"Pin cannot be 0000, 1111, or 1234"
 msgstr ""
-"请更改默认家长PIN。\n"
+"请更改默认家长PIN\n"
 "\n"
-"PIN不能为0000、111或1234"
+"PIN不能是0000、1111或1234"
 
 #: settings.py:133
 msgid "You need to restart the GUI"
-msgstr "键盘映射已更改，您需要重新启动机顶盒界面"
+msgstr "您需要重启图形界面"
 
 #: settings.py:133
 msgid "Do you want to restart now?"
-msgstr "是否要马上重启?"
+msgstr "是否立即重启？"
 
 #: settings.py:143
 msgid "Select skin"
-msgstr "选择皮肤："
+msgstr "选择皮肤"
 
 #: settings.py:144
-msgid "playlists.txt location"
-msgstr "位置:"
+msgid "e-portals.txt location"
+msgstr "e-portals.txt位置"
 
 #: settings.py:144 settings.py:151
 msgid " *Restart GUI Required"
-msgstr "* =需要重新启动"
+msgstr "*需要重启图形界面"
 
 #: settings.py:145
 msgid "Default LIVE stream type"
-msgstr "传输流类型"
+msgstr "默认直播流类型"
 
 #: settings.py:146
 msgid "Default VOD/SERIES stream type"
-msgstr "默认点播/串联流类型"
+msgstr "默认点播/剧集流类型"
 
 #: settings.py:147
 msgid "Preview LIVE streams in mini tv"
@@ -435,100 +430,100 @@ msgstr "在迷你电视中预览直播流"
 
 #: settings.py:148
 msgid "Stop stream on back button"
-msgstr "效果同停止按钮"
+msgstr "返回按钮停止流"
 
 #: settings.py:149
 msgid "EStalker parental control"
-msgstr "家长控制"
+msgstr "EStalker家长控制"
 
 #: settings.py:150
 msgid "EStalker parental pin"
-msgstr "此频道组受家长控制 PIN 保护"
+msgstr "EStalker家长PIN"
 
 #: settings.py:151
 msgid "Show in main menu"
-msgstr "显示主菜单为"
+msgstr "在主菜单显示"
 
 #: settings.py:152
 msgid "Movie Database language"
-msgstr "EPG的电影数据库"
+msgstr "电影数据库语言"
 
 #: settings.py:155
 msgid "Allow SubsSupport plugin in Movies. Restart GUI required"
-msgstr ""
+msgstr "允许在电影中使用SubsSupport插件，需重启图形界面"
 
 #: settings.py:156
 msgid "Skip playlist selection screen if only 1 playlist"
-msgstr "如果只有1个播放列表,则跳过播放列表选择屏幕"
+msgstr "如果只有1个播放列表则跳过选择界面"
 
 #: settings.py:157
 msgid "Show channel picons"
-msgstr "在频道选择列表中显示picon"
+msgstr "显示频道图标"
 
 #: settings.py:158
 msgid "Show Vod/Series posters"
-msgstr "在信息栏中显示 VOD 海报"
+msgstr "显示点播/剧集海报"
 
 #: settings.py:159
 msgid "Show infobar picons"
-msgstr "显示信息栏 Picon"
+msgstr "显示信息栏图标"
 
 #: settings.py:160
 msgid "Show infobar posters"
-msgstr "第一信息栏无海报"
+msgstr "显示信息栏海报"
 
 #: settings.py:265
 msgid "Choose Directory:"
-msgstr "选择保存海报的目录"
+msgstr "选择目录："
 
 #: settings.py:266
 msgid "Choose directory"
-msgstr "选择保存海报的目录"
-
-#: vod.py:122
-msgid "Vod Categories"
-msgstr "视频点播"
+msgstr "选择目录"
 
 #: vod.py:123
+msgid "Vod Categories"
+msgstr "点播分类"
+
+#: vod.py:124
 msgid "Movies"
 msgstr "电影"
 
-#: vod.py:2348
+#: vod.py:2340
 msgid ""
 "The TMDB plugin is not installed!\n"
 "Please install it."
 msgstr ""
-"DreamPlex插件未安装!\n"
-"请先安装."
+"TMDB插件未安装！\n"
+"请安装"
 
-#: vod.py:2359
+#: vod.py:2351
 msgid ""
 "The IMDb plugin is not installed!\n"
 "Please install it."
 msgstr ""
-"IMDb 插件没有安装！\n"
-"请先安装."
+"IMDb插件未安装！\n"
+"请安装"
 
-#: vod.py:2446
+#: vod.py:2438
 msgid "No trailer found."
-msgstr "搜索预告片"
+msgstr "未找到预告片"
 
-#: vod.py:2476
+#: vod.py:2468
 msgid "Trailer is age restricted, and can't be accessed without logging in."
-msgstr "预告片受年龄限制，未登录即无法访问。"
+msgstr "预告片有年龄限制，需登录才能访问"
 
-#: vodplayer.py:410
+#: vodplayer.py:407
 msgid "Do you want to resume this playback?"
-msgstr "是否继续上次播放?"
+msgstr "是否继续播放？"
 
-#: vodplayer.py:410
+#: vodplayer.py:407
 #, python-format
 msgid "Resume position at %s"
-msgstr "恢复位置到 %s"
+msgstr "从%s处继续"
 
-#: vodplayer.py:500
+#: vodplayer.py:498
 msgid "VOD"
-msgstr "视频点播"
+msgstr "点播"
 
 #~ msgid "Expires: "
 #~ msgstr "过期时间: "

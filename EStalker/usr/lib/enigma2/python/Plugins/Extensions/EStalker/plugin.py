@@ -131,9 +131,30 @@ cfg.infobarpicons = ConfigYesNo(default=True)
 cfg.channelcovers = ConfigYesNo(default=True)
 cfg.infobarcovers = ConfigYesNo(default=True)
 
+
+# Rename old files if they exist
+old_playlist_file = os.path.join(dir_etc, "playlists.txt")
+new_playlist_file = os.path.join(dir_etc, "e-portals.txt")
+
+if os.path.exists(old_playlist_file) and not os.path.exists(new_playlist_file):
+    try:
+        os.rename(old_playlist_file, new_playlist_file)
+    except Exception as e:
+        print("Failed to rename playlists.txt:", e)
+
+old_playlists_json = os.path.join(dir_etc, "playlists-data-2.json")
+new_playlists_json = os.path.join(dir_etc, "e-portals-data.json")
+
+if os.path.exists(old_playlists_json) and not os.path.exists(new_playlists_json):
+    try:
+        os.rename(old_playlists_json, new_playlists_json)
+    except Exception as e:
+        print("Failed to rename playlists-data-2.json:", e)
+
+
 # Set default file paths
-playlist_file = os.path.join(dir_etc, "playlists.txt")
-playlists_json = os.path.join(dir_etc, "playlists-data-2.json")
+playlist_file = os.path.join(dir_etc, "e-portals.txt")
+playlists_json = os.path.join(dir_etc, "e-portals-data.json")
 
 # Set skin and font paths
 skin_path = os.path.join(skin_directory, cfg.skin.value)
@@ -144,11 +165,11 @@ location = cfg.location.value
 if location:
     try:
         if os.path.exists(location):
-            playlist_file = os.path.join(cfg.location.value, "playlists.txt")
+            playlist_file = os.path.join(cfg.location.value, "e-portals.txt")
             cfg.location_valid.setValue(True)
         else:
             os.makedirs(location)  # Create directory if it doesn't exist
-            playlist_file = os.path.join(location, "playlists.txt")
+            playlist_file = os.path.join(location, "e-portals.txt")
 
             cfg.location_valid.setValue(True)
     except:
@@ -178,7 +199,7 @@ if os.path.exists(dir_tmp):
 if not os.path.exists(dir_tmp):
     os.makedirs(dir_tmp)
 
-# check if playlists.txt file exists in specified location
+# check if e-portals.txt file exists in specified location
 if not os.path.isfile(cfg.playlist_file.value):
     with open(cfg.playlist_file.value, "a") as f:
         f.close()

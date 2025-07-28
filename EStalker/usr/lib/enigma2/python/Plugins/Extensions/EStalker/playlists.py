@@ -866,7 +866,7 @@ class EStalker_Playlists(Screen):
         if not answer:
             return
 
-        # Step 1: Process the playlists.txt file
+        # Step 1: Process the e-portals.txt file
         with open(playlist_file, "r") as f:
             lines = [line.strip() for line in f]
 

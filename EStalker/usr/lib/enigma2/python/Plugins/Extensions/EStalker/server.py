@@ -156,7 +156,7 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         host = "{}{}:{}".format(protocol, domain, port) if port else "{}{}".format(protocol, domain)
         urlline = "{}".format(host)
 
-        # Write to playlists.txt
+        # Write to e-portals.txt
 
         try:
             with open(playlist_file, 'a') as f:
@@ -169,7 +169,7 @@ class EStalker_AddServer(ConfigListScreen, Screen):
             self.close()
 
         except IOError as e:
-            print("Error writing to playlists.txt:", e)
+            print("Error writing to e-portals.txt:", e)
             self.session.open(MessageBox, _("Error saving playlist"), MessageBox.TYPE_ERROR, timeout=5)
 
         loadfiles.process_files()
