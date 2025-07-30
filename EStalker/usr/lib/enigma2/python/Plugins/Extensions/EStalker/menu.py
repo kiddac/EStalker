@@ -262,7 +262,7 @@ class EStalker_Menu(Screen):
 
                 if isinstance(data, list) and data and "id" in data[0]:
                     self.index += 1
-                    self.list.append([self.index, _(title), index, ""])
+                    self.list.append([self.index, title, index, ""])
 
         show_live = glob.active_playlist["player_info"].get("showlive", False)
         show_vod = glob.active_playlist["player_info"].get("showvod", False)
@@ -277,13 +277,13 @@ class EStalker_Menu(Screen):
             """
 
         if show_live:
-            add_category_to_list("Live TV", "live_categories", 0)
+            add_category_to_list(_("Live TV"), "live_categories", 0)
 
         if show_vod:
-            add_category_to_list("Movies", "vod_categories", 1)
+            add_category_to_list(_("Movies"), "vod_categories", 1)
 
         if show_series:
-            add_category_to_list("TV Series", "series_categories", 2)
+            add_category_to_list(_("TV Series"), "series_categories", 2)
 
         """
         if show_catchup and glob.active_playlist["data"]["catchup"]:

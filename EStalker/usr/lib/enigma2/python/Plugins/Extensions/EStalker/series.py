@@ -99,7 +99,7 @@ class EStalker_Series_Categories(Screen):
             self.skin = f.read()
 
         self.setup_title = _("Series Categories")
-        self.main_title = _("Series")
+        self.main_title = _("TV Series")
 
         self["main_title"] = StaticText(self.main_title)
         self.main_list = []

@@ -355,9 +355,12 @@ class EStalker_Live_Categories(Screen):
                     if key in item:
                         filtered_item[key] = item[key]
 
-                all_filtered_data.append(filtered_item)
+                # Only add to list if name exists and is not None
+                if "name" in filtered_item and filtered_item["name"] is not None:
+                    all_filtered_data.append(filtered_item)
 
-        all_filtered_data = sorted(all_filtered_data, key=lambda x: x.get("name", "").lower())
+        # Now sort (no need to handle None since they're excluded)
+        all_filtered_data = sorted(all_filtered_data, key=lambda x: x["name"].lower())
 
         # Step 2: Get all adult category IDs
         if glob.active_playlist["player_info"].get("showadult", False):

@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
-"POT-Creation-Date: 2025-07-28 20:01+0100\n"
-"PO-Revision-Date: 2025-07-28 20:01+0100\n"
+"POT-Creation-Date: 2025-07-30 23:04+0100\n"
+"PO-Revision-Date: 2025-07-30 23:05+0100\n"
 "Last-Translator: Jakarta\n"
 "Language-Team: \n"
 "Language: fr\n"
@@ -17,7 +17,7 @@ msgstr ""
 msgid "Please enter the correct pin code"
 msgstr "Entrer un code Pin correct SVP"
 
-#: hidden.py:31 live.py:1253 series.py:2515 settings.py:32 vod.py:1457
+#: hidden.py:31 live.py:1256 series.py:2515 settings.py:32 vod.py:1457
 msgid "Enter pin code"
 msgstr "Entrer code Pin"
 
@@ -55,12 +55,12 @@ msgstr ""
 msgid "Live Categories"
 msgstr "Catégories Chaînes TV"
 
-#: live.py:143
+#: live.py:143 menu.py:280
 msgid "Live TV"
 msgstr "Chaînes TV"
 
-#: live.py:189 live.py:844 live.py:846 live.py:1078 live.py:1090 live.py:1109
-#: live.py:1121 live.py:1285 live.py:1286 live.py:1439 series.py:170
+#: live.py:189 live.py:847 live.py:849 live.py:1081 live.py:1093 live.py:1112
+#: live.py:1124 live.py:1288 live.py:1289 live.py:1442 series.py:170
 #: series.py:1841 series.py:1843 series.py:2276 series.py:2288 series.py:2306
 #: series.py:2313 vod.py:169 vod.py:724 vod.py:726 vod.py:1232 vod.py:1244
 #: vod.py:1263 vod.py:1270 vod.py:1488 vod.py:1489 vod.py:1607
@@ -77,61 +77,61 @@ msgstr "Retour"
 msgid "OK"
 msgstr "OK"
 
-#: live.py:264 live.py:840 live.py:1184 series.py:225 series.py:1849
+#: live.py:264 live.py:843 live.py:1187 series.py:225 series.py:1849
 #: series.py:2423 vod.py:223 vod.py:732 vod.py:1373
 msgid "Search"
 msgstr "Rechercher"
 
-#: live.py:772 live.py:837 live.py:1147 live.py:1175 series.py:1057
+#: live.py:775 live.py:840 live.py:1150 live.py:1178 series.py:1057
 #: series.py:1154 series.py:1173 series.py:1836 series.py:2353 series.py:2382
 #: series.py:2407 vod.py:670 vod.py:719 vod.py:771 vod.py:791 vod.py:1309
 #: vod.py:1338 vod.py:1363
 msgid "Reset Search"
 msgstr "Réinitialiser la recherche"
 
-#: live.py:872 live.py:907 series.py:1158 series.py:1200 vod.py:775 vod.py:804
+#: live.py:875 live.py:910 series.py:1158 series.py:1200 vod.py:775 vod.py:804
 msgid "Page: "
 msgstr "Page: "
 
-#: live.py:1078 live.py:1094 live.py:1109 live.py:1125 series.py:2276
+#: live.py:1081 live.py:1097 live.py:1112 live.py:1128 series.py:2276
 #: series.py:2292 vod.py:1232 vod.py:1248
 msgid "Sort: Original"
 msgstr "Trier: Original"
 
-#: live.py:1078 live.py:1092 live.py:1109 live.py:1123 series.py:2276
+#: live.py:1081 live.py:1095 live.py:1112 live.py:1126 series.py:2276
 #: series.py:2290 vod.py:1232 vod.py:1246
 msgid "Sort: Z-A"
 msgstr "Trier: Z-A"
 
-#: live.py:1150 series.py:2356 vod.py:1312
+#: live.py:1153 series.py:2356 vod.py:1312
 msgid "Filter this category..."
 msgstr "Filtrer cette catégorie..."
 
-#: live.py:1168 series.py:2377 series.py:2404 vod.py:1333 vod.py:1360
+#: live.py:1171 series.py:2377 series.py:2404 vod.py:1333 vod.py:1360
 msgid "No results found."
 msgstr "Aucun résultat trouvé."
 
-#: live.py:1205 series.py:2467 vod.py:1409
+#: live.py:1208 series.py:2467 vod.py:1409
 msgid "Incorrect pin code."
 msgstr "Code PIN incorrect."
 
-#: live.py:1233 series.py:2495 vod.py:1437
+#: live.py:1236 series.py:2495 vod.py:1437
 msgid "ALL"
 msgstr "TOUT"
 
-#: live.py:1233 series.py:2495 vod.py:1437
+#: live.py:1236 series.py:2495 vod.py:1437
 msgid "All"
 msgstr "Tout"
 
-#: live.py:1252 series.py:2514 vod.py:1456
+#: live.py:1255 series.py:2514 vod.py:1456
 msgid "Please enter the parental control pin code"
 msgstr "Veuillez saisir le code PIN du contrôle parental"
 
-#: live.py:1565 live.py:1607 live.py:1616
+#: live.py:1568 live.py:1610 live.py:1619
 msgid "Next Info"
 msgstr "Infos suivantes"
 
-#: live.py:1611
+#: live.py:1614
 msgid "Now Info"
 msgstr "Infos Actuelles"
 
@@ -198,6 +198,14 @@ msgstr "Menu de la liste de lecture"
 #: menu.py:234
 msgid "Access Denied."
 msgstr "Accès refusé."
+
+#: menu.py:283 vod.py:124
+msgid "Movies"
+msgstr "Films"
+
+#: menu.py:286 series.py:102
+msgid "TV Series"
+msgstr "Séries TV"
 
 #: menu.py:300 playsettings.py:42
 msgid "Playlist Settings"
@@ -311,10 +319,6 @@ msgstr "IPTV Ministra stalker player by KiddaC"
 #: series.py:101
 msgid "Series Categories"
 msgstr "Catégories de séries"
-
-#: series.py:102
-msgid "Series"
-msgstr "Séries"
 
 #: series.py:831 series.py:882 series.py:933 series.py:982 vod.py:545
 #: vod.py:593
@@ -491,10 +495,6 @@ msgstr "Choisir le répertoire"
 #: vod.py:123
 msgid "Vod Categories"
 msgstr "Catégories Films"
-
-#: vod.py:124
-msgid "Movies"
-msgstr "Films"
 
 #: vod.py:2340
 msgid ""
