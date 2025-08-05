@@ -186,6 +186,11 @@ cfg.save()
 configfile.save()
 
 font_folder = os.path.join(dir_plugins, "fonts/")
+addFont(os.path.join(font_folder, "m-plus-rounded-1c-regular.ttf"), "estalkerregular", 100, 0)
+addFont(os.path.join(font_folder, "m-plus-rounded-1c-medium.ttf"), "estalkerbold", 100, 0)
+addFont(os.path.join(font_folder, "slyk-medium.ttf"), "slykregular", 100, 0)
+addFont(os.path.join(font_folder, "slyk-bold.ttf"), "slykbold", 100, 0)
+addFont(os.path.join(font_folder, "classfont2.ttf"), "iconfont", 100, 0)
 
 # create folder for working files
 if not os.path.exists(dir_etc):
@@ -224,12 +229,6 @@ def mainmenu(menu_id, **kwargs):
 
 
 def Plugins(**kwargs):
-    addFont(os.path.join(font_folder, "m-plus-rounded-1c-regular.ttf"), "estalkerregular", 100, 0)
-    addFont(os.path.join(font_folder, "m-plus-rounded-1c-medium.ttf"), "estalkerbold", 100, 0)
-    addFont(os.path.join(font_folder, "slyk-medium.ttf"), "slykregular", 100, 0)
-    addFont(os.path.join(font_folder, "slyk-bold.ttf"), "slykbold", 100, 0)
-    addFont(os.path.join(font_folder, "classfont2.ttf"), "iconfont", 100, 0)
-
     iconFile = "icons/plugin-icon_sd.png"
     if screenwidth.width() > 1280:
         iconFile = "icons/plugin-icon.png"
