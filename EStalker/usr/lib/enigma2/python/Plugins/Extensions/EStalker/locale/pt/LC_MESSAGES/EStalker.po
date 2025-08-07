@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
-"POT-Creation-Date: 2025-07-30 23:06+0100\n"
-"PO-Revision-Date: 2025-07-30 23:06+0100\n"
+"POT-Creation-Date: 2025-08-07 20:06+0100\n"
+"PO-Revision-Date: 2025-08-07 20:09+0100\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: pt\n"
@@ -17,7 +17,7 @@ msgstr ""
 msgid "Please enter the correct pin code"
 msgstr "Digite o código PIN correto"
 
-#: hidden.py:31 live.py:1256 series.py:2515 settings.py:32 vod.py:1457
+#: hidden.py:31 live.py:1256 series.py:2515 settings.py:32 vod.py:1456
 msgid "Enter pin code"
 msgstr "Introduza o código PIN"
 
@@ -61,68 +61,68 @@ msgstr "TV ao vivo"
 #: live.py:189 live.py:847 live.py:849 live.py:1081 live.py:1093 live.py:1112
 #: live.py:1124 live.py:1288 live.py:1289 live.py:1442 series.py:170
 #: series.py:1841 series.py:1843 series.py:2276 series.py:2288 series.py:2306
-#: series.py:2313 vod.py:169 vod.py:724 vod.py:726 vod.py:1232 vod.py:1244
-#: vod.py:1263 vod.py:1270 vod.py:1488 vod.py:1489 vod.py:1607
+#: series.py:2313 vod.py:168 vod.py:723 vod.py:725 vod.py:1231 vod.py:1243
+#: vod.py:1262 vod.py:1269 vod.py:1487 vod.py:1488 vod.py:1606
 msgid "Sort: A-Z"
 msgstr "Ordenar: A-Z"
 
 #: live.py:261 mainmenu.py:47 menu.py:55 playlists.py:66 playsettings.py:49
-#: series.py:222 server.py:58 settings.py:73 vod.py:220
+#: series.py:222 server.py:58 settings.py:73 vod.py:219
 msgid "Back"
 msgstr "Voltar"
 
 #: live.py:262 mainmenu.py:48 menu.py:56 playlists.py:67 series.py:223
-#: vod.py:221
+#: vod.py:220
 msgid "OK"
 msgstr "OK"
 
 #: live.py:264 live.py:843 live.py:1187 series.py:225 series.py:1849
-#: series.py:2423 vod.py:223 vod.py:732 vod.py:1373
+#: series.py:2423 vod.py:222 vod.py:731 vod.py:1372
 msgid "Search"
 msgstr "Procurar"
 
 #: live.py:775 live.py:840 live.py:1150 live.py:1178 series.py:1057
 #: series.py:1154 series.py:1173 series.py:1836 series.py:2353 series.py:2382
-#: series.py:2407 vod.py:670 vod.py:719 vod.py:771 vod.py:791 vod.py:1309
-#: vod.py:1338 vod.py:1363
+#: series.py:2407 vod.py:669 vod.py:718 vod.py:770 vod.py:790 vod.py:1308
+#: vod.py:1337 vod.py:1362
 msgid "Reset Search"
 msgstr "Reiniciar Pesquisa"
 
-#: live.py:875 live.py:910 series.py:1158 series.py:1200 vod.py:775 vod.py:804
+#: live.py:875 live.py:910 series.py:1158 series.py:1200 vod.py:774 vod.py:803
 msgid "Page: "
 msgstr "Página: "
 
 #: live.py:1081 live.py:1097 live.py:1112 live.py:1128 series.py:2276
-#: series.py:2292 vod.py:1232 vod.py:1248
+#: series.py:2292 vod.py:1231 vod.py:1247
 msgid "Sort: Original"
 msgstr "Seleção: Origenal"
 
 #: live.py:1081 live.py:1095 live.py:1112 live.py:1126 series.py:2276
-#: series.py:2290 vod.py:1232 vod.py:1246
+#: series.py:2290 vod.py:1231 vod.py:1245
 msgid "Sort: Z-A"
 msgstr "Ordenar: Z-A"
 
-#: live.py:1153 series.py:2356 vod.py:1312
+#: live.py:1153 series.py:2356 vod.py:1311
 msgid "Filter this category..."
 msgstr "Filtrar esta categoria..."
 
-#: live.py:1171 series.py:2377 series.py:2404 vod.py:1333 vod.py:1360
+#: live.py:1171 series.py:2377 series.py:2404 vod.py:1332 vod.py:1359
 msgid "No results found."
 msgstr "Nenhum resultado encontrado."
 
-#: live.py:1208 series.py:2467 vod.py:1409
+#: live.py:1208 series.py:2467 vod.py:1408
 msgid "Incorrect pin code."
 msgstr "Código de pin incorreto."
 
-#: live.py:1236 series.py:2495 vod.py:1437
+#: live.py:1236 series.py:2495 vod.py:1436
 msgid "ALL"
 msgstr "TODOS"
 
-#: live.py:1236 series.py:2495 vod.py:1437
+#: live.py:1236 series.py:2495 vod.py:1436
 msgid "All"
 msgstr "TODOS"
 
-#: live.py:1255 series.py:2514 vod.py:1456
+#: live.py:1255 series.py:2514 vod.py:1455
 msgid "Please enter the parental control pin code"
 msgstr "Por favor, digite o código do pin de controle parental"
 
@@ -194,7 +194,7 @@ msgstr "Menu da lista de reprodução"
 msgid "Access Denied."
 msgstr "Acesso negado."
 
-#: menu.py:283 vod.py:124
+#: menu.py:283 vod.py:123
 msgid "Movies"
 msgstr "Filmes"
 
@@ -304,11 +304,11 @@ msgstr "Tipo de transmissão VOD/SÉRIE:"
 msgid "Show Adult channels:"
 msgstr "Mostrar canais para adultos:"
 
-#: plugin.py:221 plugin.py:238
+#: plugin.py:226 plugin.py:237
 msgid "EStalker"
 msgstr "EStalker"
 
-#: plugin.py:237
+#: plugin.py:236
 msgid "IPTV Ministra stalker player by KiddaC"
 msgstr "Leitor de perseguição IPTV Ministra por KiddaC"
 
@@ -316,36 +316,36 @@ msgstr "Leitor de perseguição IPTV Ministra por KiddaC"
 msgid "Series Categories"
 msgstr "Categorias de Séries"
 
-#: series.py:831 series.py:882 series.py:933 series.py:982 vod.py:545
-#: vod.py:593
+#: series.py:831 series.py:882 series.py:933 series.py:982 vod.py:544
+#: vod.py:592
 msgid "Server error or invalid link."
 msgstr "Erro do servidor ou link inválido."
 
-#: series.py:1757 vod.py:2273
+#: series.py:1757 vod.py:2272
 msgid "Rating: "
 msgstr "Avaliação: "
 
-#: series.py:1806 vod.py:2264
+#: series.py:1806 vod.py:2263
 msgid "Cast:"
 msgstr "Elenco:"
 
-#: series.py:1811 vod.py:2246
+#: series.py:1811 vod.py:2245
 msgid "Director:"
 msgstr "Diretor:"
 
-#: series.py:1816 vod.py:2254
+#: series.py:1816 vod.py:2253
 msgid "Country:"
 msgstr "País:"
 
-#: series.py:1821 vod.py:2221
+#: series.py:1821 vod.py:2220
 msgid "Overview"
 msgstr "Visão geral"
 
-#: series.py:1853 series.py:2430 vod.py:736 vod.py:1380
+#: series.py:1853 series.py:2430 vod.py:735 vod.py:1379
 msgid "Search All"
 msgstr "Pesquisar tudo"
 
-#: series.py:2306 series.py:2315 vod.py:1263 vod.py:1272
+#: series.py:2306 series.py:2315 vod.py:1262 vod.py:1271
 msgid "Sort: Added"
 msgstr "Ordenar: Adicionado"
 
@@ -455,8 +455,8 @@ msgstr "Idioma do banco de dados de filmes"
 #: settings.py:155
 msgid "Allow SubsSupport plugin in Movies. Restart GUI required"
 msgstr ""
-"Allow SubsSupport plugin in Movies. Restart GUI required — Permitir plugin "
-"SubsSupport em Filmes. Reinicie a interface gráfica (GUI) para aplicar."
+"Permitir plugin SubsSupport em Filmes. Reinicie a interface gráfica (GUI) "
+"para aplicar."
 
 #: settings.py:156
 msgid "Skip playlist selection screen if only 1 playlist"
@@ -486,11 +486,11 @@ msgstr "Escolha Diretório:"
 msgid "Choose directory"
 msgstr "Escolha o diretório"
 
-#: vod.py:123
+#: vod.py:122
 msgid "Vod Categories"
 msgstr "Categorias de Filmes"
 
-#: vod.py:2340
+#: vod.py:2339
 msgid ""
 "The TMDB plugin is not installed!\n"
 "Please install it."
@@ -498,7 +498,7 @@ msgstr ""
 "O plugin TMDB não está instalado!\n"
 "Por favor, instale-o."
 
-#: vod.py:2351
+#: vod.py:2350
 msgid ""
 "The IMDb plugin is not installed!\n"
 "Please install it."
@@ -506,11 +506,11 @@ msgstr ""
 "O plugin do IMDb não está instalado!\n"
 "Por favor, instale-o."
 
-#: vod.py:2438
+#: vod.py:2437
 msgid "No trailer found."
 msgstr "Nenhum trailer encontrado."
 
-#: vod.py:2468
+#: vod.py:2467
 msgid "Trailer is age restricted, and can't be accessed without logging in."
 msgstr ""
 "O trailer tem restrição de idade e não pode ser acessado sem fazer login."
