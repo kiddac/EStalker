@@ -290,11 +290,6 @@ class EStalker_Menu(Screen):
             self.index += 1
             self.list.append([self.index, _("Catch Up TV"), 3, ""])
             """
-        """
-        if show_catchup:
-            self.index += 1
-            self.list.append([self.index, _("Catch Up TV"), 3, ""])
-            """
 
         self.index += 1
         self.list.append([self.index, _("Playlist Settings"), 4, ""])

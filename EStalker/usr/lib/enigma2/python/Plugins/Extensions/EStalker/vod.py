@@ -471,20 +471,21 @@ class EStalker_Vod_Categories(Screen):
                 """
 
                 self.list2.append([
-                    index, str(name),
+                    index,
+                    str(name),
                     str(stream_id),
                     str(cover),
                     str(added),
                     str(rating),
                     str(next_url),
                     favourite,
-                    container_extension,
+                    str(container_extension),
                     year,
                     hidden,
                     tmdb,
                     str(trailer),
-                    category_id,
-                    cmd
+                    str(category_id),
+                    str(cmd)
                 ])
 
         if self.firstlist:
@@ -693,8 +694,6 @@ class EStalker_Vod_Categories(Screen):
 
         if self["main_list"].getCurrent():
             self.showVod()
-
-        if self["main_list"].getCurrent():
             self["main_list"].setIndex(glob.nextlist[-1]["index"])
 
     def updateList2(self):
@@ -807,10 +806,8 @@ class EStalker_Vod_Categories(Screen):
             self.hideVod()
 
     def downloadCover(self):
-        """
         if debugs:
             print("*** downloadCover ***")
-            """
 
         if cfg.channelcovers.value is False:
             return
@@ -834,12 +831,13 @@ class EStalker_Vod_Categories(Screen):
                 desc_image = (str(self.tmdbresults.get("cover_big") or "").strip() or str(self.tmdbresults.get("movie_image") or "").strip())
 
             # add new image into level 2 list.
-            current_index = self["main_list"].getSelectedIndex()
+            current_index = self["main_list"].getIndex()
             if current_index != -1:
                 item = list(self.main_list[current_index])   # Convert tuple to list
                 item[5] = desc_image                         # Update the desired value (e.g., cover image)
                 self.main_list[current_index] = tuple(item)  # Convert back to tuple
                 self["main_list"].setList(self.main_list)    # Refresh the list display
+                self["main_list"].setIndex(current_index)
 
             if "http" in desc_image:
                 self.cover_download_deferred = self.agent.request(b'GET', desc_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
@@ -1532,23 +1530,25 @@ class EStalker_Vod_Categories(Screen):
                             next_url = ""
 
                             if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                                next_url = response["js"]["cmd"]
+                                next_url = str(response["js"]["cmd"])
 
                         else:
                             next_url = command
 
+                    if isinstance(next_url, str):
                         parts = next_url.split(None, 1)
                         if len(parts) == 2:
                             next_url = parts[1].lstrip()
 
-                    if isinstance(next_url, str):
                         parsed = urlparse(next_url)
                         if parsed.scheme in ["http", "https"]:
                             next_url = parsed.geturl()
 
-                    if str(os.path.splitext(next_url)[-1]) == ".m3u8":
-                        if streamtype == "1":
-                            streamtype = "4097"
+                        if str(os.path.splitext(next_url)[-1]) == ".m3u8":
+                            if streamtype == "1":
+                                streamtype = "4097"
+                    else:
+                        next_url = ""
 
                     self.reference = eServiceReference(int(streamtype), 0, str(next_url))
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
@@ -1934,6 +1934,7 @@ class EStalker_Vod_Categories(Screen):
             detailsurl = detailsurl.encode()
 
         filepath = os.path.join(dir_tmp, "search.txt")
+
         try:
             downloadPage(detailsurl, filepath, timeout=10).addCallback(self.processTMDBDetails).addErrback(self.failed)
         except Exception as e:

@@ -489,7 +489,7 @@ class EStalker_Playlists(Screen):
                             link_data = make_request(create_link_url, method="GET", headers=headers, params=None, response_type="json")
 
                             if link_data and link_data.get("js", {}).get("cmd"):
-                                stream_url = link_data["js"]["cmd"]
+                                stream_url = str(link_data["js"]["cmd"])
 
                                 if isinstance(stream_url, str):
                                     parsed = urlparse(stream_url)

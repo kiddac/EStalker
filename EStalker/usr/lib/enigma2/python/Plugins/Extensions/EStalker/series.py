@@ -1887,16 +1887,6 @@ class EStalker_Series_Categories(Screen):
             if self.tmdbresults:
                 desc_image = (str(self.tmdbresults.get("cover_big") or "").strip() or str(self.tmdbresults.get("movie_image") or "").strip() or self.storedcover or "")
 
-            """
-            # add new image into list.
-            current_index = self["main_list"].getSelectedIndex()
-            if current_index != -1:
-                item = list(self.main_list[current_index])   # Convert tuple to list
-                item[5] = desc_image                         # Update the desired value (e.g., cover image)
-                self.main_list[current_index] = tuple(item)  # Convert back to tuple
-                self["main_list"].setList(self.main_list)    # Refresh the list display
-                """
-
             if "http" in desc_image:
                 self.redirect_count = 0
                 self.cover_download_deferred = self.agent.request(b'GET', desc_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
@@ -1968,16 +1958,6 @@ class EStalker_Series_Categories(Screen):
                     backdrop_image = str(backdrop_path[0] if isinstance(backdrop_path, list) else backdrop_path).strip() or self.storedbackdrop or ""
                 else:
                     backdrop_image = self.storedbackdrop or ""
-
-            """
-            # add new image into list.
-            current_index = self["main_list"].getSelectedIndex()
-            if current_index != -1:
-                item = list(self.main_list[current_index])   # Convert tuple to list
-                item[15] = backdrop_image                    # Update the desired value
-                self.main_list[current_index] = tuple(item)  # Convert back to tuple
-                self["main_list"].setList(self.main_list)    # Refresh the list display
-                """
 
             if "http" in backdrop_image:
                 self.backdrop_download_deferred = self.agent.request(b'GET', backdrop_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
@@ -2643,23 +2623,25 @@ class EStalker_Series_Categories(Screen):
                             next_url = ""
 
                             if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                                next_url = response["js"]["cmd"]
+                                next_url = str(response["js"]["cmd"])
 
                         else:
                             next_url = command
 
-                        parts = next_url.split(None, 1)
-                        if len(parts) == 2:
-                            next_url = parts[1].lstrip()
+                        if isinstance(next_url, str):
+                            parts = next_url.split(None, 1)
+                            if len(parts) == 2:
+                                next_url = parts[1].lstrip()
 
-                    if isinstance(next_url, str):
-                        parsed = urlparse(next_url)
-                        if parsed.scheme in ["http", "https"]:
-                            next_url = parsed.geturl()
+                            parsed = urlparse(next_url)
+                            if parsed.scheme in ["http", "https"]:
+                                next_url = parsed.geturl()
 
-                    if str(os.path.splitext(next_url)[-1]) == ".m3u8":
-                        if streamtype == "1":
-                            streamtype = "4097"
+                            if str(os.path.splitext(next_url)[-1]) == ".m3u8":
+                                if streamtype == "1":
+                                    streamtype = "4097"
+                        else:
+                            next_url = ""
 
                     self.reference = eServiceReference(int(streamtype), 0, str(next_url))
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])

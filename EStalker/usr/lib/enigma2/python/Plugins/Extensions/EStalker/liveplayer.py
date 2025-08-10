@@ -874,7 +874,7 @@ class EStalker_StreamPlayer(
             if glob.currentchannellistindex >= list_length:
                 glob.currentchannellistindex = 0
 
-            command = glob.currentchannellist[glob.currentchannellistindex][7]
+            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
 
             if isinstance(command, str):
                 if "localhost" in command or "http" not in command or "///" in command:
@@ -884,18 +884,21 @@ class EStalker_StreamPlayer(
                     self.streamurl = ""
 
                     if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                        self.streamurl = response["js"]["cmd"]
+                        self.streamurl = str(response["js"]["cmd"])
                 else:
                     self.streamurl = command
 
+            if isinstance(self.streamurl, str):
                 parts = self.streamurl.split(None, 1)
                 if len(parts) == 2:
                     self.streamurl = parts[1].lstrip()
 
-            if isinstance(self.streamurl, str):
                 parsed = urlparse(self.streamurl)
                 if parsed.scheme in ["http", "https"]:
                     self.streamurl = parsed.geturl()
+
+            else:
+                self.streamurl = ""
 
             str_servicetype = str(self.servicetype)
             str_streamurl = str(self.streamurl) if self.streamurl else ""
@@ -914,7 +917,7 @@ class EStalker_StreamPlayer(
             if glob.currentchannellistindex < 0:
                 glob.currentchannellistindex = list_length - 1
 
-            command = glob.currentchannellist[glob.currentchannellistindex][7]
+            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
 
             if isinstance(command, str):
                 if "localhost" in command or "http" not in command or "///" in command:
@@ -924,18 +927,20 @@ class EStalker_StreamPlayer(
                     self.streamurl = ""
 
                     if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                        self.streamurl = response["js"]["cmd"]
+                        self.streamurl = str(response["js"]["cmd"])
                 else:
                     self.streamurl = command
 
+            if isinstance(self.streamurl, str):
                 parts = self.streamurl.split(None, 1)
                 if len(parts) == 2:
                     self.streamurl = parts[1].lstrip()
 
-            if isinstance(self.streamurl, str):
                 parsed = urlparse(self.streamurl)
                 if parsed.scheme in ["http", "https"]:
                     self.streamurl = parsed.geturl()
+            else:
+                self.streamurl = ""
 
             str_servicetype = str(self.servicetype)
             str_streamurl = str(self.streamurl) if self.streamurl else ""

@@ -1318,23 +1318,25 @@ class EStalker_Live_Categories(Screen):
                             next_url = ""
 
                             if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                                next_url = response["js"]["cmd"]
+                                next_url = str(response["js"]["cmd"])
 
                         else:
                             next_url = command
 
+                    if isinstance(next_url, str):
                         parts = next_url.split(None, 1)
                         if len(parts) == 2:
                             next_url = parts[1].lstrip()
 
-                    if isinstance(next_url, str):
                         parsed = urlparse(next_url)
                         if parsed.scheme in ["http", "https"]:
                             next_url = parsed.geturl()
 
-                    if str(os.path.splitext(next_url)[-1]) == ".m3u8":
-                        if streamtype == "1":
-                            streamtype = "4097"
+                        if str(os.path.splitext(next_url)[-1]) == ".m3u8":
+                            if streamtype == "1":
+                                streamtype = "4097"
+                    else:
+                        next_url = ""
 
                     self.reference = eServiceReference(int(streamtype), 0, str(next_url))
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
