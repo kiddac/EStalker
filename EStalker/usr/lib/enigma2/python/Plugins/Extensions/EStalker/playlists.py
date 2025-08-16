@@ -824,7 +824,8 @@ class EStalker_Playlists(Screen):
                     break
 
             self.writeJsonFile()
-            self.start()
+            # self.start()
+            self.createSetup()
 
     def getCurrentEntry(self):
         if self.list:
@@ -911,6 +912,7 @@ class EStalker_Playlists(Screen):
         self.writeJsonFile()
 
         # Refresh UI
-        self.start()
+        # self.start()
+        self.createSetup()
 
         self.session.open(MessageBox, _("Removed all invalid playlists"), MessageBox.TYPE_INFO, timeout=3)
