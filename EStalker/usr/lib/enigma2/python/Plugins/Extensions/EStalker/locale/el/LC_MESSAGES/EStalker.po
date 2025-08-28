@@ -2,8 +2,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: EStalker\n"
-"POT-Creation-Date: 2025-07-30 22:56+0100\n"
-"PO-Revision-Date: 2025-07-30 23:01+0100\n"
+"POT-Creation-Date: 2025-07-30 23:02+0100\n"
+"PO-Revision-Date: 2025-08-28 19:02+0300\n"
 "Last-Translator: \n"
 "Language-Team: giorbak\n"
 "Language: el\n"
@@ -11,7 +11,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Poedit 3.6\n"
+"X-Generator: Poedit 3.7\n"
 "X-Poedit-Basepath: ../../..\n"
 "X-Poedit-SourceCharset: UTF-8\n"
 "X-Poedit-SearchPath-0: .\n"
@@ -50,9 +50,7 @@ msgstr "Επαναφορά"
 
 #: hidden.py:192
 msgid "Error: All categories hidden. Please amend your selection."
-msgstr ""
-"Σφάλμα: Όλες οι κατηγορίες είναι κρυφές. Παρακαλώ τροποποιήστε την επιλογή "
-"σας."
+msgstr "Σφάλμα: Όλες οι κατηγορίες είναι κρυφές. Παρακαλώ τροποποιήστε την επιλογή σας."
 
 #: live.py:142
 msgid "Live Categories"
@@ -62,33 +60,25 @@ msgstr "Κατηγορίες TV Ζωντανά"
 msgid "Live TV"
 msgstr "TV-Ζωντανά"
 
-#: live.py:189 live.py:847 live.py:849 live.py:1081 live.py:1093 live.py:1112
-#: live.py:1124 live.py:1288 live.py:1289 live.py:1442 series.py:170
-#: series.py:1841 series.py:1843 series.py:2276 series.py:2288 series.py:2306
-#: series.py:2313 vod.py:169 vod.py:724 vod.py:726 vod.py:1232 vod.py:1244
-#: vod.py:1263 vod.py:1270 vod.py:1488 vod.py:1489 vod.py:1607
+#: live.py:189 live.py:847 live.py:849 live.py:1081 live.py:1093 live.py:1112 live.py:1124 live.py:1288 live.py:1289 live.py:1442 series.py:170 series.py:1841 series.py:1843 series.py:2276
+#: series.py:2288 series.py:2306 series.py:2313 vod.py:169 vod.py:724 vod.py:726 vod.py:1232 vod.py:1244 vod.py:1263 vod.py:1270 vod.py:1488 vod.py:1489 vod.py:1607
 msgid "Sort: A-Z"
 msgstr "Ταξινόμηση: A-Z"
 
-#: live.py:261 mainmenu.py:47 menu.py:55 playlists.py:66 playsettings.py:49
-#: series.py:222 server.py:58 settings.py:73 vod.py:220
+#: live.py:261 mainmenu.py:47 menu.py:55 playlists.py:66 playsettings.py:49 series.py:222 server.py:58 settings.py:73 vod.py:220
 msgid "Back"
 msgstr "Πίσω"
 
-#: live.py:262 mainmenu.py:48 menu.py:56 playlists.py:67 series.py:223
-#: vod.py:221
+#: live.py:262 mainmenu.py:48 menu.py:56 playlists.py:67 series.py:223 vod.py:221
 msgid "OK"
 msgstr "Εντάξει"
 
-#: live.py:264 live.py:843 live.py:1187 series.py:225 series.py:1849
-#: series.py:2423 vod.py:223 vod.py:732 vod.py:1373
+#: live.py:264 live.py:843 live.py:1187 series.py:225 series.py:1849 series.py:2423 vod.py:223 vod.py:732 vod.py:1373
 msgid "Search"
 msgstr "Αναζήτηση"
 
-#: live.py:775 live.py:840 live.py:1150 live.py:1178 series.py:1057
-#: series.py:1154 series.py:1173 series.py:1836 series.py:2353 series.py:2382
-#: series.py:2407 vod.py:670 vod.py:719 vod.py:771 vod.py:791 vod.py:1309
-#: vod.py:1338 vod.py:1363
+#: live.py:775 live.py:840 live.py:1150 live.py:1178 series.py:1057 series.py:1154 series.py:1173 series.py:1836 series.py:2353 series.py:2382 series.py:2407 vod.py:670 vod.py:719
+#: vod.py:771 vod.py:791 vod.py:1309 vod.py:1338 vod.py:1363
 msgid "Reset Search"
 msgstr "Επαναφορά αναζήτησης"
 
@@ -96,13 +86,11 @@ msgstr "Επαναφορά αναζήτησης"
 msgid "Page: "
 msgstr "Σελίδα: "
 
-#: live.py:1081 live.py:1097 live.py:1112 live.py:1128 series.py:2276
-#: series.py:2292 vod.py:1232 vod.py:1248
+#: live.py:1081 live.py:1097 live.py:1112 live.py:1128 series.py:2276 series.py:2292 vod.py:1232 vod.py:1248
 msgid "Sort: Original"
 msgstr "Ταξιν: Πρωτότυπο"
 
-#: live.py:1081 live.py:1095 live.py:1112 live.py:1126 series.py:2276
-#: series.py:2290 vod.py:1232 vod.py:1246
+#: live.py:1081 live.py:1095 live.py:1112 live.py:1126 series.py:2276 series.py:2290 vod.py:1232 vod.py:1246
 msgid "Sort: Z-A"
 msgstr "Ταξινόμηση: Z-A"
 
@@ -132,11 +120,11 @@ msgstr "Παρακαλώ εισάγετε τον κωδικό PIN γονικού
 
 #: live.py:1568 live.py:1610 live.py:1619
 msgid "Next Info"
-msgstr "Πληροφορίες επόμενου"
+msgstr "Επόμενο EPG"
 
 #: live.py:1614
 msgid "Now Info"
-msgstr "Πληροφορίες τρέχοντος"
+msgstr "Τρέχον EPG"
 
 #: liveplayer.py:404
 msgid "TV"
@@ -182,14 +170,12 @@ msgstr "Βασικές ρυθμίσεις"
 
 #: mainmenu.py:174
 msgid ""
-"Warning: delete stored json data for all playlists... Settings, favourites "
-"etc. \n"
+"Warning: delete stored json data for all playlists... Settings, favourites etc. \n"
 "Playlists will not be deleted.\n"
 "Do you wish to continue?"
 msgstr ""
 "Προειδοποίηση:\n"
-"Θα γίνει διαγραφή των αποθηκευμένων δεδομένων json σε όλες τις λίστες "
-"(ρυθμίσεις, αγαπημένα κτλ.).\n"
+"Θα γίνει διαγραφή των αποθηκευμένων δεδομένων json σε όλες τις λίστες (ρυθμίσεις, αγαπημένα κτλ.).\n"
 "Οι λίστες αναπαραγωγής δεν θα διαγραφούν.\n"
 "Θέλετε να συνεχίσετε;"
 
@@ -215,9 +201,7 @@ msgstr "Ρυθμίσεις λίστας αναπαραγωγής"
 
 #: menu.py:307
 msgid "No data, blocked or playlist not compatible with EStalker plugin."
-msgstr ""
-"Δεν υπάρχουν δεδομένα, είναι μπλοκαρισμένα ή η λίστα αναπαραγωγής δεν είναι "
-"συμβατή με το πρόσθετο EStalker."
+msgstr "Δεν υπάρχουν δεδομένα, είναι μπλοκαρισμένα ή η λίστα αναπαραγωγής δεν είναι συμβατή με το πρόσθετο EStalker."
 
 #: playlists.py:64
 msgid "Manage Playlists"
@@ -323,8 +307,7 @@ msgstr "IPTV Ministra stalker player από τον KiddaC"
 msgid "Series Categories"
 msgstr "Κατηγορίες σειρών"
 
-#: series.py:831 series.py:882 series.py:933 series.py:982 vod.py:545
-#: vod.py:593
+#: series.py:831 series.py:882 series.py:933 series.py:982 vod.py:545 vod.py:593
 msgid "Server error or invalid link."
 msgstr "Σφάλμα διακομιστή ή μη έγκυρος σύνδεσμος."
 
@@ -461,14 +444,11 @@ msgstr "Γλώσσα για τη βάση δεδομένων Ταινιών"
 
 #: settings.py:155
 msgid "Allow SubsSupport plugin in Movies. Restart GUI required"
-msgstr ""
-"Ενεργοποίηση πρόσθετου SubsSupport στις Ταινίες Απαιτείται επανεκκίνηση της "
-"διεπαφής χρήστη"
+msgstr "Ενεργοποίηση πρόσθετου SubsSupport στις Ταινίες Απαιτείται επανεκκίνηση της διεπαφής χρήστη"
 
 #: settings.py:156
 msgid "Skip playlist selection screen if only 1 playlist"
-msgstr ""
-"Παράλειψη οθόνης για επιλογή λίστας αναπαραγωγής αν υπάρχει μόνο 1 λίστα"
+msgstr "Παράλειψη οθόνης για επιλογή λίστας αναπαραγωγής αν υπάρχει μόνο 1 λίστα"
 
 #: settings.py:157
 msgid "Show channel picons"
@@ -520,8 +500,7 @@ msgstr "Δεν βρέθηκε τρέιλερ."
 
 #: vod.py:2468
 msgid "Trailer is age restricted, and can't be accessed without logging in."
-msgstr ""
-"Το τρέιλερ έχει περιορισμό ηλικίας και δεν είναι προσβάσιμο χωρίς σύνδεση."
+msgstr "Το τρέιλερ έχει περιορισμό ηλικίας και δεν είναι προσβάσιμο χωρίς σύνδεση."
 
 #: vodplayer.py:407
 msgid "Do you want to resume this playback?"

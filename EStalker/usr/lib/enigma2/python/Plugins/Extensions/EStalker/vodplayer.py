@@ -6,6 +6,7 @@ from __future__ import absolute_import, print_function
 from __future__ import division
 
 import json
+import hashlib
 import os
 import re
 from itertools import cycle, islice
@@ -52,8 +53,9 @@ except ImportError as e:
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import cfg, dir_tmp, pythonVer, screenwidth, skin_directory
+from .plugin import cfg, dir_tmp, pythonVer, screenwidth, skin_directory, debugs
 from .eStaticText import StaticText
+from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data
 
 if cfg.subs.value is True:
     try:
@@ -470,6 +472,7 @@ class EStalker_VodPlayer(
         self.streamurl = streamurl
         self.servicetype = servicetype
         self.stream_id = stream_id
+        self.originalservicetype = self.servicetype
 
         skin_path = os.path.join(skin_directory, cfg.skin.value)
         skin = os.path.join(skin_path, "vodplayer.xml")
@@ -497,7 +500,45 @@ class EStalker_VodPlayer(
 
         self.setup_title = _("VOD")
 
-        self.host = glob.active_playlist["playlist_info"]["host"].rstrip("/")
+        self.retry = False
+
+        self.timezone = get_local_timezone()
+        self.token = glob.active_playlist["playlist_info"]["token"]
+        self.token_random = glob.active_playlist["playlist_info"]["token_random"]
+        self.domain = str(glob.active_playlist["playlist_info"].get("domain", ""))
+        self.host = str(glob.active_playlist["playlist_info"].get("host", "")).rstrip("/")
+        self.mac = glob.active_playlist["playlist_info"].get("mac", "").upper()
+        self.portal = glob.active_playlist["playlist_info"].get("portal", None)
+        self.portal_version = glob.active_playlist["playlist_info"].get("version", "5.3.1")
+
+        self.sn = hashlib.md5(self.mac.encode()).hexdigest().upper()[:13]
+        self.device_id = hashlib.sha256(self.mac.encode()).hexdigest().upper()
+        self.adid = hashlib.md5((self.sn + self.mac).encode()).hexdigest()
+
+        self.headers = {
+            "Host": self.domain,
+            "Accept": "*/*",
+            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG250 stbapp ver: 2 rev: 369 Safari/533.3",
+            "Accept-Encoding": "gzip, deflate",
+            "X-User-Agent": "Model: MAG250; Link: WiFi",
+            "Connection": "close",
+            "Pragma": "no-cache",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+        }
+
+        if "/stalker_portal/" in self.portal:
+            host_headers = {
+                "Cookie": ("mac={}; stb_lang=en; timezone={}; adid={}").format(self.mac, self.timezone, self.adid)
+            }
+        else:
+            host_headers = {
+
+                "Cookie": ("mac={}; stb_lang=en; timezone={}").format(self.mac, self.timezone)
+            }
+
+        self.headers.update(host_headers)
+
+        self.headers["Authorization"] = "Bearer " + self.token
 
         self["actions"] = ActionMap(["EStalkerActions"], {
             "cancel": self.back,
@@ -507,6 +548,10 @@ class EStalker_VodPlayer(
             "info": self.toggleStreamType,
             "green": self.nextAR,
             "ok": self.refreshInfobar,
+            "channelUp": self.__next__,
+            "down": self.__next__,
+            "channelDown": self.prev,
+            "up": self.prev,
         }, -2)
 
         self.onFirstExecBegin.append(boundFunction(self.playStream, self.servicetype, self.streamurl))
@@ -789,3 +834,183 @@ class EStalker_VodPlayer(
     def nextAR(self):
         message = self.nextARfunction()
         self.session.open(MessageBox, message, type=MessageBox.TYPE_INFO, timeout=1)
+
+    def createLink(self, url):
+        response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
+
+        if not response and self.retry is False:
+            self.retry = True
+            self.reauthorize()
+            response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
+
+        return response
+
+    def reauthorize(self):
+        self.portal, self.token, self.token_random, self.headers = perform_handshake(portal=self.portal, host=self.host, mac=self.mac, headers=self.headers)
+
+        if not self.token:
+            return
+
+        play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+            portal=self.portal,
+            mac=self.mac,
+            token=self.token,
+            token_random=self.token_random,
+            headers=self.headers,
+            param_mode="full"
+        )
+
+        account_info_url = str(self.portal) + "?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
+        account_info = make_request(account_info_url, method="POST", headers=self.headers, params=None, response_type="json")
+
+        if not account_info and isinstance(account_info, dict):
+            if not returned_mac or not returned_id:
+                play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+                    portal=self.portal,
+                    mac=self.mac,
+                    token=self.token,
+                    token_random=self.token_random,
+                    headers=self.headers,
+                    param_mode="basic"
+                )
+
+        glob.active_playlist["playlist_info"]["token"] = self.token
+        glob.active_playlist["playlist_info"]["token_random"] = self.token_random
+        glob.active_playlist["playlist_info"]["play_token"] = play_token
+        glob.active_playlist["playlist_info"]["status"] = status
+        glob.active_playlist["playlist_info"]["blocked"] = blocked
+
+    def __next__(self):
+        if glob.categoryname == "series":
+            self.servicetype = self.originalservicetype
+
+            if glob.currentchannellist:
+                list_length = len(glob.currentchannellist)
+                glob.currentchannellistindex += 1
+                if glob.currentchannellistindex >= list_length:
+                    glob.currentchannellistindex = 0
+
+                episode_id = str(glob.currentchannellist[glob.currentchannellistindex][20])
+                command = str(glob.currentchannellist[glob.currentchannellistindex][21])
+                next_url = command
+
+                if str(command).startswith("/media/"):
+                    pre_vod_url = (str(self.portal) + "?type=vod&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&fav=0&sortby=&hd=0&not_ended=0&p=1&JsHttpRequest=1-xml").format(self.stream_id)
+
+                    pre_response = make_request(pre_vod_url, method="POST", headers=self.headers, params=None, response_type="json")
+
+                    movie_id = None
+
+                    js_data = pre_response.get("js", {}).get("data", [])
+
+                    if isinstance(js_data, list) and len(js_data) > 0:
+                        movie_id = js_data[0].get("id")
+                    if movie_id:
+                        # Extract the file extension from the original command
+                        ext = ""
+                        if "." in command:
+                            ext = command[command.rfind("."):]
+
+                        command = "/media/file_{}{}".format(movie_id, ext)
+
+                if isinstance(command, str):
+                    if "localhost" in command or "http" not in command or "///" in command:
+                        url = "{0}?type=vod&action=create_link&cmd={1}&series={2}&forced_storage=&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command, episode_id)
+                        self.retry = False
+                        response = self.createLink(url)
+                        next_url = ""
+
+                        if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
+                            next_url = str(response["js"]["cmd"])
+
+                    else:
+                        next_url = command
+
+                    if isinstance(next_url, str):
+                        parts = next_url.split(None, 1)
+                        if len(parts) == 2:
+                            next_url = parts[1].lstrip()
+
+                        parsed = urlparse(next_url)
+                        if parsed.scheme in ["http", "https"]:
+                            next_url = parsed.geturl()
+
+                        if str(os.path.splitext(next_url)[-1]) == ".m3u8":
+                            if self.streamtype == "1":
+                                self.streamtype = "4097"
+                    else:
+                        next_url = ""
+
+                str_servicetype = str(self.servicetype)
+
+                next_url = str(next_url) if next_url else ""
+
+                self.playStream(str_servicetype, next_url)
+
+    def prev(self):
+
+        if glob.categoryname == "series":
+            self.servicetype = self.originalservicetype
+
+            if glob.currentchannellist:
+                list_length = len(glob.currentchannellist)
+                glob.currentchannellistindex -= 1
+                if glob.currentchannellistindex < 0:
+                    glob.currentchannellistindex = list_length - 1
+
+                episode_id = str(glob.currentchannellist[glob.currentchannellistindex][20])
+                command = str(glob.currentchannellist[glob.currentchannellistindex][21])
+                next_url = command
+
+                if str(command).startswith("/media/"):
+                    pre_vod_url = (str(self.portal) + "?type=vod&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&fav=0&sortby=&hd=0&not_ended=0&p=1&JsHttpRequest=1-xml").format(self.stream_id)
+
+                    pre_response = make_request(pre_vod_url, method="POST", headers=self.headers, params=None, response_type="json")
+
+                    movie_id = None
+
+                    js_data = pre_response.get("js", {}).get("data", [])
+
+                    if isinstance(js_data, list) and len(js_data) > 0:
+                        movie_id = js_data[0].get("id")
+                    if movie_id:
+                        # Extract the file extension from the original command
+                        ext = ""
+                        if "." in command:
+                            ext = command[command.rfind("."):]
+
+                        command = "/media/file_{}{}".format(movie_id, ext)
+
+                if isinstance(command, str):
+                    if "localhost" in command or "http" not in command or "///" in command:
+                        url = "{0}?type=vod&action=create_link&cmd={1}&series={2}&forced_storage=&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command, episode_id)
+                        self.retry = False
+                        response = self.createLink(url)
+                        next_url = ""
+
+                        if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
+                            next_url = str(response["js"]["cmd"])
+
+                    else:
+                        next_url = command
+
+                    if isinstance(next_url, str):
+                        parts = next_url.split(None, 1)
+                        if len(parts) == 2:
+                            next_url = parts[1].lstrip()
+
+                        parsed = urlparse(next_url)
+                        if parsed.scheme in ["http", "https"]:
+                            next_url = parsed.geturl()
+
+                        if str(os.path.splitext(next_url)[-1]) == ".m3u8":
+                            if self.streamtype == "1":
+                                self.streamtype = "4097"
+                    else:
+                        next_url = ""
+
+                str_servicetype = str(self.servicetype)
+
+                next_url = str(next_url) if next_url else ""
+
+                self.playStream(str_servicetype, next_url)
