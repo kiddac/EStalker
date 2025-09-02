@@ -120,6 +120,32 @@ def _mypreinit():
 Image.preinit = _mypreinit
 
 
+if pythonVer == 3:
+    superscript_to_normal = str.maketrans(
+        '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ'
+        'ᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂ⁺⁻⁼⁽⁾',
+        '0123456789abcdefghijklmnoprstuvwxyz'
+        'ABDEGHIJKLMNOPRTUVW+-=()'
+    )
+
+
+def normalize_superscripts(text):
+    return text.translate(superscript_to_normal)
+
+
+def clean_names(response):
+    """Clean only 'name' fields inside response['js']."""
+    if "js" in response and "data" in response["js"]:
+        data_block = response["js"]["data"]
+
+        if isinstance(data_block, list):
+            for item in data_block:
+                if isinstance(item, dict):
+                    if "name" in item and isinstance(item["name"], str):
+                        item["name"] = normalize_superscripts(item["name"])
+    return response
+
+
 class EStalker_Live_Categories(Screen):
     ALLOW_SUSPEND = True
 
@@ -330,6 +356,9 @@ class EStalker_Live_Categories(Screen):
         # Step 1: Get all channels
         getallchannelsurl = self.portal + "?type=itv&action=get_all_channels"
         response = make_request(getallchannelsurl, method="POST", headers=self.headers, params=None, response_type="json")
+
+        if pythonVer == 3 and glob.hassuperscript:
+            response = clean_names(response)
 
         filtered_keys = [
             "id",

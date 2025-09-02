@@ -16,3 +16,4 @@ catchupdata = []
 pintime = 0
 adultChannel = False
 categoryname = None
+hassuperscript = False

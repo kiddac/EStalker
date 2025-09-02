@@ -588,6 +588,16 @@ class EStalker_VodPlayer(
         with open(playlists_json, "w") as f:
             json.dump(self.playlists_all, f, indent=4)
 
+    def strip_foreign_mixed(self, text):
+        has_ascii = bool(re.search(r'[\x00-\x7F]', text))
+        has_non_ascii = bool(re.search(r'[^\x00-\x7F]', text))
+
+        if has_ascii and has_non_ascii:
+            # Remove only non-ASCII characters
+            text = re.sub(r'[^\x00-\x7F]+', '', text)
+
+        return text
+
     def stripjunk(self, text, database=None):
         searchtitle = text
 
@@ -602,7 +612,7 @@ class EStalker_VodPlayer(
         searchtitle = re.sub(r'^\w{2}\|\w{2}\s', '', searchtitle, flags=re.IGNORECASE)
 
         # remove xx - at start (case-insensitive)
-        searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle, flags=re.IGNORECASE)
+        # searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle, flags=re.IGNORECASE)
 
         # remove all leading content between and including || or |
         searchtitle = re.sub(r'^\|\|.*?\|\|', '', searchtitle)
@@ -612,10 +622,12 @@ class EStalker_VodPlayer(
         # remove all leading content between and including ┃┃ or ┃
         searchtitle = re.sub(r'^┃┃.*?┃┃', '', searchtitle)
         searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
+        searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
         searchtitle = re.sub(r'┃.*?┃', '', searchtitle)
 
         # remove all content between and including () unless it's all digits
-        searchtitle = re.sub(r'\((?!\d+\))[^()]*\)', '', searchtitle)
+        # searchtitle = re.sub(r'\((?!\d+\))[^()]*\)', '', searchtitle)
+        searchtitle = re.sub(r'\(\(.*?\)\)|\([^()]*\)', '', searchtitle)
 
         # remove all content between and including []
         searchtitle = re.sub(r'\[\[.*?\]\]|\[.*?\]', '', searchtitle)
@@ -623,6 +635,12 @@ class EStalker_VodPlayer(
         # remove trailing year (but not if the whole title *is* a year)
         if not re.match(r'^\d{4}$', searchtitle.strip()):
             searchtitle = re.sub(r'[\s\-]*(?:[\(\[\"]?\d{4}[\)\]\"]?)$', '', searchtitle)
+
+        # remove up to 6 characters followed by space and dash at start (e.g. "EN -", "BE-NL -")
+        searchtitle = re.sub(r'^[A-Za-z0-9\-]{1,7}\s*-\s*', '', searchtitle, flags=re.IGNORECASE)
+
+        # Strip foreign / non-ASCII characters
+        searchtitle = self.strip_foreign_mixed(searchtitle)
 
         # Bad substrings to strip (case-insensitive)
         bad_strings = [
@@ -634,7 +652,8 @@ class EStalker_VodPlayer(
             "1080p-dual-lat-cinecalidad.mx", "1080p-lat-cine-calidad.com", "1080p-lat-cine-calidad.com-1",
             "1080p-lat-cinecalidad.mx", "1080p.dual.lat.cine-calidad.com", "3d", "'", "#", "(", ")", "-", "[]", "/",
             "4k", "720p", "aac", "blueray", "ex-yu:", "fhd", "hd", "hdrip", "hindi", "imdb", "multi:", "multi-audio",
-            "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264"
+            "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264",
+            "amz", "dolby", "audio", "8k", "3840p", "50fps", "60fps", "hevc", "raw ", "vip ", "NF", "d+", "a+", "vp", "prmt", "mrvl"
         ]
 
         bad_strings_pattern = re.compile('|'.join(map(re.escape, bad_strings)), flags=re.IGNORECASE)

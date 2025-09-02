@@ -26,12 +26,42 @@ from Tools.LoadPixmap import LoadPixmap
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import skin_directory, common_path, version, hasConcurrent, hasMultiprocessing, cfg, debugs
+from .plugin import skin_directory, common_path, version, hasConcurrent, hasMultiprocessing, cfg, debugs, pythonVer
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data
 
 
 playlists_json = cfg.playlists_json.value
+
+
+if pythonVer == 3:
+    superscript_to_normal = str.maketrans(
+        '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ'
+        'ᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂ⁺⁻⁼⁽⁾',
+        '0123456789abcdefghijklmnoprstuvwxyz'
+        'ABDEGHIJKLMNOPRTUVW+-=()'
+    )
+
+
+def normalize_superscripts(text):
+    return text.translate(superscript_to_normal)
+
+
+def clean_names(response):
+    """Clean only 'title' fields inside response['js'] and set glob.hassuperscript."""
+    found_superscript = False
+
+    if "js" in response and isinstance(response["js"], list):
+        for item in response["js"]:
+            if "title" in item and isinstance(item["title"], str):
+                original = item["title"]
+                converted = normalize_superscripts(original)
+                if converted != original:
+                    found_superscript = True
+                item["title"] = converted
+
+    glob.hassuperscript = found_superscript
+    return response
 
 
 class EStalker_Menu(Screen):
@@ -152,6 +182,10 @@ class EStalker_Menu(Screen):
 
         category = url[1]
         response = make_request(url[0], method="POST", headers=self.headers, params=None, response_type="json")
+
+        if pythonVer == 3:
+            response = clean_names(response)
+
         return category, response
 
     def process_downloads(self):

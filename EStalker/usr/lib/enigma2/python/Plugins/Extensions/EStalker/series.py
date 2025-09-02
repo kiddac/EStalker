@@ -74,6 +74,32 @@ except ImportError:
 playlists_json = cfg.playlists_json.value
 
 
+if pythonVer == 3:
+    superscript_to_normal = str.maketrans(
+        '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ'
+        'ᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂ⁺⁻⁼⁽⁾',
+        '0123456789abcdefghijklmnoprstuvwxyz'
+        'ABDEGHIJKLMNOPRTUVW+-=()'
+    )
+
+
+def normalize_superscripts(text):
+    return text.translate(superscript_to_normal)
+
+
+def clean_names(response):
+    """Clean only 'name' fields inside response['js']."""
+    if "js" in response and "data" in response["js"]:
+        data_block = response["js"]["data"]
+
+        if isinstance(data_block, list):
+            for item in data_block:
+                if isinstance(item, dict):
+                    if "name" in item and isinstance(item["name"], str):
+                        item["name"] = normalize_superscripts(item["name"])
+    return response
+
+
 class EStalker_Series_Categories(Screen):
     ALLOW_SUSPEND = True
 
@@ -797,6 +823,10 @@ class EStalker_Series_Categories(Screen):
                     data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
 
                 if data:
+
+                    if pythonVer == 3 and glob.hassuperscript:
+                        data = clean_names(data)
+
                     js = data.get("js", {})
                     try:
                         self.series_total_items = int(js.get("total_items", 0))
@@ -848,6 +878,9 @@ class EStalker_Series_Categories(Screen):
                     data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
 
                 if data:
+                    if pythonVer == 3 and glob.hassuperscript:
+                        data = clean_names(data)
+
                     js = data.get("js", {})
                     try:
                         self.seasons_total_items = int(js.get("total_items", 0))
@@ -899,6 +932,10 @@ class EStalker_Series_Categories(Screen):
                     data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
 
                 if data:
+
+                    if pythonVer == 3 and glob.hassuperscript:
+                        data = clean_names(data)
+
                     js = data.get("js", {})
                     try:
                         self.episodes_total_items = int(js.get("total_items", 0))
@@ -955,6 +992,10 @@ class EStalker_Series_Categories(Screen):
                     data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
 
                 if data:
+
+                    if pythonVer == 3 and glob.hassuperscript:
+                        data = clean_names(data)
+
                     js = data.get("js", {})
                     try:
                         self.series_total_items = int(js.get("total_items", 0))
@@ -1203,6 +1244,16 @@ class EStalker_Series_Categories(Screen):
             self["key_blue"].setText("")
             self.hideVod()
 
+    def strip_foreign_mixed(self, text):
+        has_ascii = bool(re.search(r'[\x00-\x7F]', text))
+        has_non_ascii = bool(re.search(r'[^\x00-\x7F]', text))
+
+        if has_ascii and has_non_ascii:
+            # Remove only non-ASCII characters
+            text = re.sub(r'[^\x00-\x7F]+', '', text)
+
+        return text
+
     def stripjunk(self, text, database=None):
         searchtitle = text
 
@@ -1217,7 +1268,7 @@ class EStalker_Series_Categories(Screen):
         searchtitle = re.sub(r'^\w{2}\|\w{2}\s', '', searchtitle, flags=re.IGNORECASE)
 
         # remove xx - at start (case-insensitive)
-        searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle, flags=re.IGNORECASE)
+        # searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle, flags=re.IGNORECASE)
 
         # remove all leading content between and including || or |
         searchtitle = re.sub(r'^\|\|.*?\|\|', '', searchtitle)
@@ -1227,10 +1278,12 @@ class EStalker_Series_Categories(Screen):
         # remove all leading content between and including ┃┃ or ┃
         searchtitle = re.sub(r'^┃┃.*?┃┃', '', searchtitle)
         searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
+        searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
         searchtitle = re.sub(r'┃.*?┃', '', searchtitle)
 
         # remove all content between and including () unless it's all digits
-        searchtitle = re.sub(r'\((?!\d+\))[^()]*\)', '', searchtitle)
+        # searchtitle = re.sub(r'\((?!\d+\))[^()]*\)', '', searchtitle)
+        searchtitle = re.sub(r'\(\(.*?\)\)|\([^()]*\)', '', searchtitle)
 
         # remove all content between and including []
         searchtitle = re.sub(r'\[\[.*?\]\]|\[.*?\]', '', searchtitle)
@@ -1238,6 +1291,12 @@ class EStalker_Series_Categories(Screen):
         # remove trailing year (but not if the whole title *is* a year)
         if not re.match(r'^\d{4}$', searchtitle.strip()):
             searchtitle = re.sub(r'[\s\-]*(?:[\(\[\"]?\d{4}[\)\]\"]?)$', '', searchtitle)
+
+        # remove up to 6 characters followed by space and dash at start (e.g. "EN -", "BE-NL -")
+        searchtitle = re.sub(r'^[A-Za-z0-9\-]{1,7}\s*-\s*', '', searchtitle, flags=re.IGNORECASE)
+
+        # Strip foreign / non-ASCII characters
+        searchtitle = self.strip_foreign_mixed(searchtitle)
 
         # Bad substrings to strip (case-insensitive)
         bad_strings = [
@@ -1249,7 +1308,8 @@ class EStalker_Series_Categories(Screen):
             "1080p-dual-lat-cinecalidad.mx", "1080p-lat-cine-calidad.com", "1080p-lat-cine-calidad.com-1",
             "1080p-lat-cinecalidad.mx", "1080p.dual.lat.cine-calidad.com", "3d", "'", "#", "(", ")", "-", "[]", "/",
             "4k", "720p", "aac", "blueray", "ex-yu:", "fhd", "hd", "hdrip", "hindi", "imdb", "multi:", "multi-audio",
-            "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264"
+            "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264",
+            "amz", "dolby", "audio", "8k", "3840p", "50fps", "60fps", "hevc", "raw ", "vip ", "NF", "d+", "a+", "vp", "prmt", "mrvl"
         ]
 
         bad_strings_pattern = re.compile('|'.join(map(re.escape, bad_strings)), flags=re.IGNORECASE)
@@ -1630,202 +1690,147 @@ class EStalker_Series_Categories(Screen):
 
     def displayTMDB(self):
         if debugs:
-            print("*** displayTMDB ***")
-
-        director = ""
-        cast = ""
-        facts = []
-        tagline = ""
-        duration = ""
-        certification = ""
-        release_date = ""
-        genre = ""
-        duration = ""
-        rating = "0"
-        country = ""
+            print("*** displayTMDB (Series) ***")
 
         current_item = self["main_list"].getCurrent()
+        if not current_item or self.level == 1:
+            return
 
-        if current_item and self.level != 1:
+        # Initialize all optional fields
+        duration = ""
+        genre = ""
+        release_date = ""
+        director = ""
+        country = ""
+        cast = ""
+        certification = ""
+        tagline = ""
+        rating = 0
+        text = ""
+        stream_format = ""
 
-            if self.level == 4:
-                duration = current_item[12]
-                try:
-                    time_obj = datetime.strptime(duration, '%H:%M:%S')
-                    duration = "{:0d}h {:02d}m".format(time_obj.hour, time_obj.minute)
-                except:
-                    pass
-
-                stream_format = current_item[13]
-
-            rating_texts = {
-                (0.0, 0.0): "",
-                (0.1, 0.5): "",
-                (0.6, 1.0): "",
-                (1.1, 1.5): "",
-                (1.6, 2.0): "",
-                (2.1, 2.5): "",
-                (2.6, 3.0): "",
-                (3.1, 3.5): "",
-                (3.6, 4.0): "",
-                (4.1, 4.5): "",
-                (4.6, 5.0): "",
-                (5.1, 5.5): "",
-                (5.6, 6.0): "",
-                (6.1, 6.5): "",
-                (6.6, 7.0): "",
-                (7.1, 7.5): "",
-                (7.6, 8.0): "",
-                (8.1, 8.5): "",
-                (8.6, 9.0): "",
-                (9.1, 9.5): "",
-                (9.6, 10.0): "",
-            }
-
-            self["x_title"].setText(current_item[0])
-            self["x_description"].setText(current_item[6])
-            genre = current_item[9]
-
+        # Level-specific fields
+        if self.level == 4:
+            duration = current_item[12]
             try:
-                rating = float(current_item[11])
+                time_obj = datetime.strptime(duration, '%H:%M:%S')
+                duration = "{:0d}h {:02d}m".format(time_obj.hour, time_obj.minute)
+            except Exception:
+                pass
+            stream_format = current_item[13]
+
+        # Basic metadata from list
+        self["x_title"].setText(current_item[0])
+        self["x_description"].setText(current_item[6])
+        genre = current_item[9]
+        try:
+            rating = float(current_item[11])
+        except:
+            rating = 0
+        director = current_item[8]
+        cast = current_item[7]
+        release_date = current_item[10]
+        stream_url = current_item[3]
+
+        if self.level == 4 and stream_url:
+            try:
+                stream_format = stream_url.split(".")[-1]
+            except:
+                pass
+
+        # Override with TMDB results if available
+        if self.tmdbresults:
+            info = self.tmdbresults
+
+            # Titles
+            self["x_title"].setText(str(info.get("name") or info.get("o_name") or "").strip())
+            self["x_description"].setText(str(info.get("description") or info.get("plot") or "").strip())
+            tagline = str(info.get("tagline") or "").strip()
+            duration = str(info.get("duration") or duration).strip()
+            genre = str(info.get("genre") or genre).strip()
+            country = str(info.get("country") or country).strip()
+            director = str(info.get("director") or director).strip()
+            cast = str(info.get("cast") or info.get("actors") or cast).strip()
+            certification = str(info.get("certification") or "").strip().upper()
+            if certification:
+                certification = _("Rating: ") + certification
+
+            # Rating
+            try:
+                rating = float(info.get("rating", rating) or rating)
             except:
                 rating = 0
 
-            director = current_item[8]
-            cast = current_item[7]
+        # Rating display
+        rating_texts = {
+            (0.0, 0.0): "",
+            (0.1, 0.5): "",
+            (0.6, 1.0): "",
+            (1.1, 1.5): "",
+            (1.6, 2.0): "",
+            (2.1, 2.5): "",
+            (2.6, 3.0): "",
+            (3.1, 3.5): "",
+            (3.6, 4.0): "",
+            (4.1, 4.5): "",
+            (4.6, 5.0): "",
+            (5.1, 5.5): "",
+            (5.6, 6.0): "",
+            (6.1, 6.5): "",
+            (6.6, 7.0): "",
+            (7.1, 7.5): "",
+            (7.6, 8.0): "",
+            (8.1, 8.5): "",
+            (8.6, 9.0): "",
+            (9.1, 9.5): "",
+            (9.6, 10.0): "",
+        }
 
-            release_date = current_item[10]
-
-            stream_url = current_item[3]
-
-            if self.level == 4:
-                try:
-                    stream_format = stream_url.split(".")[-1]
-                except:
-                    pass
+        for rating_range, rating_text in rating_texts.items():
+            if rating_range[0] <= rating <= rating_range[1]:
+                text = rating_text
+                break
             else:
-                stream_format = ""
+                text = ""
 
-            # # # # # # # # # # # # # # # # # # # # # # # # #
-
+        self["rating_percent"].setText(str(text))
+        try:
+            rounded_rating = round(rating, 1)
+            rating = "{:.1f}".format(rounded_rating)
             if self.tmdbresults:
-                info = self.tmdbresults
+                self.tmdbresults["rating"] = rating
+        except:
+            if self.tmdbresults:
+                self.tmdbresults["rating"] = str(rating)
 
-                if "name" in info:
-                    self["x_title"].setText(str(info["name"]).strip())
-                elif "o_name" in info:
-                    self["x_title"].setText(str(info["o_name"]).strip())
+        self["rating_text"].setText(str(rating).strip())
 
-                if "description" in info:
-                    self["x_description"].setText(str(info["description"]).strip())
-                elif "plot" in info:
-                    self["x_description"].setText(str(info["plot"]).strip())
+        # Facts section
+        release_date_str = str(release_date).strip()
+        try:
+            release_date_str = datetime.strptime(release_date_str, "%Y-%m-%d").strftime("%d-%m-%Y")
+        except:
+            pass
 
-                if "duration" in info:
-                    duration = str(info["duration"]).strip()
+        facts = self.buildFacts(str(certification), str(release_date_str), str(genre), str(duration), str(stream_format))
+        self["facts"].setText(str(facts))
 
-                if "genre" in info:
-                    genre = str(info["genre"]).strip()
+        # UI fields
+        self["tagline"].setText(str(tagline).strip())
+        self["vod_cast"].setText(str(cast).strip())
+        self["vod_director"].setText(str(director).strip())
+        self["vod_country"].setText(str(country).strip())
 
-                try:
-                    rating = float(info.get("rating", 0) or 0)
-                except:
-                    rating = 0
+        self["vod_cast_label"].setText(_("Cast:") if cast else "")
+        self["vod_director_label"].setText(_("Director:") if director else "")
+        self["vod_country_label"].setText(_("Country:") if country else "")
+        self["overview"].setText(_("Overview") if self["x_description"].getText() else "")
 
-                for key in ["releaseDate", "release_date", "releasedate"]:
-                    if key in info and info[key]:
-                        try:
-                            release_date = datetime.strptime(info[key], "%Y-%m-%d").strftime("%d-%m-%Y")
-                            break
-                        except Exception:
-                            pass
-
-                if "director" in info:
-                    director = str(info["director"]).strip()
-
-                if "country" in info:
-                    country = str(info["country"]).strip()
-
-                if "cast" in info:
-                    cast = str(info["cast"]).strip()
-                elif "actors" in info:
-                    cast = str(info["actors"]).strip()
-
-                certification = info.get("certification", "").strip().upper()
-
-                if certification:
-                    certification = _("Rating: ") + certification
-
-                if "tagline" in info:
-                    tagline = str(info["tagline"]).strip()
-
-            for rating_range, rating_text in rating_texts.items():
-                if rating_range[0] <= rating <= rating_range[1]:
-                    text = rating_text
-                    break
-                else:
-                    text = ""
-
-            # percent dial
-            self["rating_percent"].setText(str(text))
-
-            rating_str = rating
-            if rating_str and rating_str != 0:
-                try:
-                    rating = float(rating_str)
-                    rounded_rating = round(rating, 1)
-                    rating = "{:.1f}".format(rounded_rating)
-                    if self.tmdbresults:
-                        info["rating"] = rating
-                except ValueError:
-                    if self.tmdbresults:
-                        info["rating"] = str(rating_str)
-
-            self["rating_text"].setText(str(rating).strip())
-
-            # # # facts section  # # #
-
-            release_date = str(release_date).strip()
-
-            try:
-                release_date = datetime.strptime(release_date, "%Y-%m-%d").strftime("%d-%m-%Y")
-            except Exception:
-                pass
-
-            facts = self.buildFacts(str(certification), str(release_date), str(genre), str(duration), str(stream_format))
-
-            # # # # # # # # # # # #
-
-            self["facts"].setText(str(facts))
-            self["tagline"].setText(str(tagline).strip())
-            self["vod_cast"].setText(str(cast).strip())
-            self["vod_director"].setText(str(director).strip())
-            self["vod_country"].setText(str(country).strip())
-
-            if self["vod_cast"].getText() != "":
-                self["vod_cast_label"].setText(_("Cast:"))
-            else:
-                self["vod_cast_label"].setText("")
-
-            if self["vod_director"].getText() != "":
-                self["vod_director_label"].setText(_("Director:"))
-            else:
-                self["vod_director_label"].setText("")
-
-            if self["vod_country"].getText() != "":
-                self["vod_country_label"].setText(_("Country:"))
-            else:
-                self["vod_country_label"].setText("")
-
-            if self["x_description"].getText() != "":
-                self["overview"].setText(_("Overview"))
-            else:
-                self["overview"].setText("")
-
-            if (self.level == 2 or self.level == 3) and cfg.channelcovers.value:
-                self.downloadCover()
-                self.downloadBackdrop()
-                self.downloadLogo()
+        # Covers and images
+        if (self.level in [2, 3, 4]) and cfg.channelcovers.value:
+            self.downloadCover()
+            self.downloadBackdrop()
+            self.downloadLogo()
 
     def resetButtons(self):
         if debugs:
