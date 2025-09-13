@@ -26,7 +26,7 @@ from Tools.LoadPixmap import LoadPixmap
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import skin_directory, common_path, version, hasConcurrent, hasMultiprocessing, cfg, debugs, pythonVer
+from .plugin import skin_directory, common_path, version, hasConcurrent, hasMultiprocessing, cfg, debugs, pythonVer, dir_tmp
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data
 
@@ -111,8 +111,9 @@ class EStalker_Menu(Screen):
         glob.active_playlist["data"]["live_streams"] = {}
         glob.active_playlist["data"]["data_downloaded"] = False
 
-        if os.path.exists("/tmp/allchannels.json"):
-            os.remove("/tmp/allchannels.json")
+        allchannels_path = os.path.join(dir_tmp, "allchannels.json")
+        if os.path.exists(allchannels_path):
+            os.remove(allchannels_path)
 
         self.onFirstExecBegin.append(self.start)
         self.onLayoutFinish.append(self.__layoutFinished)

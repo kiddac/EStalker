@@ -42,7 +42,7 @@ with open("/usr/lib/enigma2/python/Plugins/Extensions/EStalker/version.txt", "r"
 screenwidth = getDesktop(0).size()
 
 dir_etc = "/etc/enigma2/estalker/"
-dir_tmp = "/tmp/estalker/"
+dir_tmp = "/etc/enigma2/estalker/tmp/"
 dir_plugins = "/usr/lib/enigma2/python/Plugins/Extensions/EStalker/"
 
 
@@ -192,13 +192,12 @@ addFont(os.path.join(font_folder, "slyk-medium.ttf"), "slykregular", 100, 0)
 addFont(os.path.join(font_folder, "slyk-bold.ttf"), "slykbold", 100, 0)
 addFont(os.path.join(font_folder, "classfont2.ttf"), "iconfont", 100, 0)
 
-# create folder for working files
-if not os.path.exists(dir_etc):
-    os.makedirs(dir_etc)
-
 # delete temporary folder and contents
-if os.path.exists(dir_tmp):
+if os.path.exists("/tmp/estalker"):
     shutil.rmtree("/tmp/estalker")
+
+if os.path.exists(dir_tmp):
+    shutil.rmtree("/etc/enigma2/estalker/tmp/")
 
 # create temporary folder for downloaded files
 if not os.path.exists(dir_tmp):

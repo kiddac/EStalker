@@ -445,7 +445,7 @@ class EStalker_Live_Categories(Screen):
 
                         page += 1
 
-        with open("/tmp/allchannels.json", "w") as f:
+        with open(os.path.join(dir_tmp, "allchannels.json"), "w") as f:
             json.dump(all_filtered_data, f, indent=4)
 
     def createSetup(self, data=None):
@@ -458,7 +458,7 @@ class EStalker_Live_Categories(Screen):
         if self.level == 1:
             self.sortby = "number"
             self.getCategories()
-            if not os.path.isfile("/tmp/allchannels.json"):
+            if not os.path.isfile(os.path.join(dir_tmp, "allchannels.json")):
                 self.getAllChannels()
 
         if self.level == 2:
@@ -513,12 +513,13 @@ class EStalker_Live_Categories(Screen):
         if self.chosen_category == "favourites":
             response = glob.active_playlist["player_info"].get("livefavourites", [])
         else:
-            if os.path.isfile("/tmp/allchannels.json"):
-                with open("/tmp/allchannels.json", "r") as f:
+            allchannels_path = os.path.join(dir_tmp, "allchannels.json")
+            if os.path.isfile(allchannels_path):
+                with open(allchannels_path, "r") as f:
                     try:
                         response = json.load(f)
                     except:
-                        os.remove("/tmp/allchannels.json")
+                        os.remove(allchannels_path)
 
         if not response:
             self.list2 = []
