@@ -586,7 +586,7 @@ class EStalker_VodPlayer(
                     break
 
         with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f, indent=4)
+            json.dump(self.playlists_all, f)
 
     def strip_foreign_mixed(self, text):
         has_ascii = bool(re.search(r'[\x00-\x7F]', text))

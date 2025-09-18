@@ -688,7 +688,7 @@ class EStalker_Playlists(Screen):
             print("*** writeJsonFile ***")
 
         with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f, indent=4)
+            json.dump(self.playlists_all, f)
         self.createSetup()
 
     def createSetup(self):

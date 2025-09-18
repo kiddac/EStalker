@@ -212,6 +212,6 @@ def process_files():
             index += 1
 
     with open(playlists_json, "w") as json_file:
-        json.dump(playlists_grouped, json_file, indent=4)
+        json.dump(playlists_grouped, json_file)
 
     return playlists_grouped

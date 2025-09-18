@@ -375,6 +375,9 @@ class EStalker_Vod_Categories(Screen):
         hidden = "0" in currentHidden
 
         for index, item in enumerate(currentCategoryList, start=len(self.prelist)):
+            if not isinstance(item, dict):
+                continue
+
             category_name = item.get("title", "No category")
             category_id = item.get("id", "999999")
             hidden = category_id in currentHidden
@@ -1745,7 +1748,7 @@ class EStalker_Vod_Categories(Screen):
                     break
 
         with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f, indent=4)
+            json.dump(self.playlists_all, f)
 
         if self.chosen_category == "favourites":
             del self.list2[current_index]
@@ -2375,7 +2378,7 @@ class EStalker_Vod_Categories(Screen):
                     break
 
         with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f, indent=4)
+            json.dump(self.playlists_all, f)
 
         self.buildLists()
 
