@@ -388,9 +388,17 @@ class EStalker_Playlists(Screen):
                         continue
 
             # Final fallback if nothing worked
+            """
             if not portal or not path_prefix:
                 print("*** no xpcom file - exiting ***")
                 return index, {"valid": False}
+                """
+
+            if not portal:
+                portal = host.rstrip("/") + "/portal.php"
+
+            if not path_prefix:
+                path_prefix = host.rstrip("/") + "/c/"
 
             if debugs:
                 print("*** Final portal path ***", portal)
