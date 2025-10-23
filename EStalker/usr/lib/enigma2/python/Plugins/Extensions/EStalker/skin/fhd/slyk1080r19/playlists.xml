@@ -30,24 +30,19 @@
 			<!-- Mac Address -->
 			MultiContentEntryText(pos = (411, 0), size = (180, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 6),	
 
-			<!-- Portal -->
-			MultiContentEntryText(pos = (612, 0), size = (150, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 13),
-
-			<!-- Version -->
-			MultiContentEntryText(pos = (783, 0), size = (90, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 7),
-				
 			<!-- Expires -->
-			MultiContentEntryText(pos = (894, 0), size = (300, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 3),
+			MultiContentEntryText(pos = (690, 0), size = (300, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 3),
+		
+			<!-- Server Label -->
+			MultiContentEntryText(pos = (1035, 0), size = (120, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 10),
+			 
+			<!-- status -->
+			MultiContentEntryText(pos = (1155, 0), size = (100, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 9),
+			
 		
 			<!-- Authorised -->
-			MultiContentEntryText(pos = (1215, 0), size = (120, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 4), 			
+			MultiContentEntryText(pos = (1275, 0), size = (240, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 4), 			
 			
-			<!-- Active Conn Num -->
-			MultiContentEntryText(pos = (1335, 0), size = (90, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_RIGHT | RT_VALIGN_CENTER, text = 9),
-			
-			<!-- Max Conn Num --> 
-			MultiContentEntryText(pos = (1455, 0), size = (90, 54), font=1, color = 0x00ffffff, color_sel = 0x00133171, backcolor_sel = None, flags = RT_HALIGN_LEFT | RT_VALIGN_CENTER, text = 11),
-	
 			<!-- Authorised LED -->
 			MultiContentEntryPixmapAlphaBlend(pos = (1545, 15), size = (23, 24), png = 5),
 		
@@ -66,4 +61,5 @@
 	<widget source="key_yellow" render="Label" position="951,941" size="327,44" font="slykregular;39" foregroundColor="#5ea1e3" backgroundColor="#1c4475" valign="center" transparent="1" zPosition="2"/>
 	<widget source="key_blue" render="Pixmap" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/slyk1080r19/images/key_blue.png" position="1278,946" size="36,36" alphatest="blend" zPosition="2"/>
 	<widget source="key_blue" render="Label" position="1326,941" size="327,44" font="slykregular;39" foregroundColor="#5ea1e3" backgroundColor="#1c4475" valign="center" transparent="1" zPosition="2"/>
+	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/slyk1080r19/images/key-info.png" position="1685,946" size="75,36" alphatest="blend" zPosition="2"/>
 </screen>

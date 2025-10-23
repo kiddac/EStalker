@@ -35,6 +35,7 @@ from enigma import eTimer
 from Screens.MessageBox import MessageBox
 from Screens.Screen import Screen
 from Tools.LoadPixmap import LoadPixmap
+from Components.Label import Label
 
 # Local application/library-specific imports
 from . import _
@@ -45,8 +46,34 @@ from . import checkinternet
 from .utils import get_local_timezone, make_request, xtream_request, perform_handshake, get_profile_data
 from . import processfiles as loadfiles
 
+# from twisted.internet import reactor
+
 playlist_file = cfg.playlist_file.value
 playlists_json = cfg.playlists_json.value
+
+try:
+    basestring
+except NameError:
+    basestring = str
+
+
+def parse_date_safe(date_str):
+    if not date_str or not isinstance(date_str, basestring):
+        return None
+
+    s = date_str.strip()
+
+    # Remove time part: "12:00 am", "12:00am", "1:30 pm", etc.
+    s = re.sub(r'\d{1,2}:\d{2}\s?(am|pm)?', '', s, flags=re.IGNORECASE)
+
+    # Remove any trailing comma and whitespace
+    s = s.rstrip(', ').strip()
+
+    try:
+        # Format: "October 15, 2026"
+        return datetime.strptime(s, "%B %d, %Y")
+    except Exception:
+        return None
 
 
 class EStalker_Playlists(Screen):
@@ -67,6 +94,7 @@ class EStalker_Playlists(Screen):
         self["key_green"] = StaticText(_("OK"))
         self["key_yellow"] = StaticText(_("Delete"))
         self["key_blue"] = StaticText(_("Auto Delete"))
+
         self["version"] = StaticText(version)
 
         self.list = []
@@ -86,8 +114,9 @@ class EStalker_Playlists(Screen):
             "cancel": self.quit,
             "ok": self.getStreamTypes,
             "yellow": self.deleteServer,
-            "blue": self.autoDeleteInvalid,  # Add this line
-            "0": self.goTop
+            "blue": self.autoDeleteInvalid,
+            "0": self.goTop,
+            "info": self.checkXtream,
         }, -2)
 
         self.timezone = get_local_timezone()
@@ -181,25 +210,19 @@ class EStalker_Playlists(Screen):
         expiry = ""
         portal_version = ""
         xtream_creds = {}
-        playback_limit = None
-        username = ""
-        password = ""
-        temp_xtream_get_api = ""
-        temp_xtream_player_api = ""
         active_cons = ""
         max_cons = ""
         token_random = ""
         valid = True
-        path_prefix = None
 
         playlist_info = self.playlists_all[index]["playlist_info"]
         portal = playlist_info.get("portal", None)
-        portal_version = playlist_info.get("version", "")
         expiry = playlist_info.get("expiry", None)
-        original_url = playlist_info.get("url")
+        path_prefix = playlist_info.get("path_prefix", None)
+        portal_version = playlist_info.get("version", "")
+        # original_url = playlist_info.get("url")
 
         def extract_portal_path_from_stream(resp, url):
-
             try:
                 portal_prefix = ""
 
@@ -265,12 +288,10 @@ class EStalker_Playlists(Screen):
                 "Cookie": "mac={}; stb_lang=en; timezone={};".format(mac, timezone),
             }
 
-            path_prefix = None
-
-            if "/stalker_portal/c/" in original_url:
+            if path_prefix == "/stalker_portal/c/":
                 primary = host.rstrip("/") + "/stalker_portal/c/"
                 fallback = host.rstrip("/") + "/c/"
-            elif "/c/" in original_url:
+            elif path_prefix == "/c/":
                 primary = host.rstrip("/") + "/c/"
                 fallback = host.rstrip("/") + "/stalker_portal/c/"
             else:
@@ -286,9 +307,12 @@ class EStalker_Playlists(Screen):
 
                     if "version.js" in r.text.lower():
                         if "/stalker_portal/c/" in final_url:
-                            path_prefix = host.rstrip("/") + "/stalker_portal/c/"
+                            # path_prefix = host.rstrip("/") + "/stalker_portal/c/"
+                            path_prefix = "/stalker_portal/c/"
+
                         elif "/c/" in final_url:
-                            path_prefix = host.rstrip("/") + "/c/"
+                            # path_prefix = host.rstrip("/") + "/c/"
+                            path_prefix = "/c/"
 
                 except Exception as e:
                     print("Error checking primary {}: {}".format(primary, e))
@@ -302,34 +326,17 @@ class EStalker_Playlists(Screen):
 
                     if "version.js" in r.text.lower():
                         if "/stalker_portal/c/" in final_url:
-                            path_prefix = host.rstrip("/") + "/stalker_portal/c/"
+                            # path_prefix = host.rstrip("/") + "/stalker_portal/c/"
+                            path_prefix = "/stalker_portal/c/"
                         elif "/c/" in final_url:
-                            path_prefix = host.rstrip("/") + "/c/"
+                            # path_prefix = host.rstrip("/") + "/c/"
+                            path_prefix = "/c/"
 
                 except Exception as e:
                     print("Error checking fallback {}: {}".format(fallback, e))
 
-            if not path_prefix and not primary:
-                for url in [
-                    host.rstrip("/") + "/c/",
-                    host.rstrip("/") + "/stalker_portal/c/"
-                ]:
-                    try:
-                        r = http.get(url, headers=headers, timeout=(5, 10), verify=False, allow_redirects=True)
-                        r.raise_for_status()
-
-                        final_url = r.url.lower()
-
-                        if "version.js" in r.text.lower():
-                            if "/stalker_portal/c/" in final_url:
-                                path_prefix = host.rstrip("/") + "/stalker_portal/c/"
-                                break
-                            elif "/c/" in final_url:
-                                path_prefix = host.rstrip("/") + "/c/"
-                                break
-
-                    except Exception as e:
-                        print("Error checking {}: {}".format(url, e))
+            if not path_prefix:
+                path_prefix = "/c/"
 
             # Final result
             if debugs:
@@ -342,10 +349,10 @@ class EStalker_Playlists(Screen):
             # 2 read xpcom.common.js file
             # ########################################################################################
 
-            portal = None
+            # portal = None
 
-            if path_prefix:
-                xpcom_url = path_prefix + "xpcom.common.js"
+            if not portal:
+                xpcom_url = host.rstrip("/") + path_prefix + "xpcom.common.js"
 
                 try:
                     r = http.get(xpcom_url, headers=headers, timeout=(5, 10), verify=False, stream=False, allow_redirects=True)
@@ -362,7 +369,7 @@ class EStalker_Playlists(Screen):
                 except Exception as e:
                     print("Error checking {}: {}".format(xpcom_url, e))
 
-            else:
+            if not portal:
                 xpcom_urls = [
                     host.rstrip("/") + "/c/xpcom.common.js",
                     host.rstrip("/") + "/stalker_portal/c/xpcom.common.js",
@@ -380,7 +387,11 @@ class EStalker_Playlists(Screen):
                                 portal_candidate = "/" + portal_candidate
 
                             portal = host.rstrip("/") + portal_candidate
-                            path_prefix = url.rstrip("xpcom.common.js")
+
+                            if "/stalker_portal/c/" in url:
+                                path_prefix = "/stalker_portal/c/"
+                            elif "/c/" in url:
+                                path_prefix = "/c/"
                             break
 
                     except Exception as e:
@@ -388,17 +399,9 @@ class EStalker_Playlists(Screen):
                         continue
 
             # Final fallback if nothing worked
-            """
-            if not portal or not path_prefix:
-                print("*** no xpcom file - exiting ***")
-                return index, {"valid": False}
-                """
 
             if not portal:
                 portal = host.rstrip("/") + "/portal.php"
-
-            if not path_prefix:
-                path_prefix = host.rstrip("/") + "/c/"
 
             if debugs:
                 print("*** Final portal path ***", portal)
@@ -408,7 +411,7 @@ class EStalker_Playlists(Screen):
             # 3 - Get version number
             # ########################################################################################
 
-            version_url = path_prefix + "version.js"
+            version_url = host.rstrip("/") + path_prefix + "version.js"
 
             vresponse = make_request(version_url, method="GET", headers=headers, params=None, response_type="text")
             if vresponse:
@@ -456,9 +459,9 @@ class EStalker_Playlists(Screen):
                 print("*** account_info ***", account_info)
 
             if account_info and isinstance(account_info, dict):
-                expiry = account_info.get("js", {}).get("phone") or account_info.get("js", {}).get("end_date", "Unknown")
+                js_data = account_info.get("js") or {}
+                expiry = js_data.get("phone") or js_data.get("end_date", "Unknown")
             else:
-
                 if not returned_mac or not returned_id:
                     play_token, status, blocked, xtream_creds, returned_mac, returned_id = get_profile_data(
                         portal=portal,
@@ -473,73 +476,10 @@ class EStalker_Playlists(Screen):
                     account_info = make_request(account_info_url, method="POST", headers=headers, params=None, response_type="json")
 
                     if account_info and isinstance(account_info, dict):
-                        expiry = account_info.get("js", {}).get("phone") or account_info.get("js", {}).get("end_date", "Unknown")
+                        js_data = account_info.get("js") or {}
+                        expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
                     else:
                         return index, {"valid": False}
-
-            # ########################################################################################
-            # 7. If no credentials found, try VOD call
-            # ########################################################################################
-
-            if not xtream_creds.get("username") or not xtream_creds.get("password"):
-                vod_url = str(portal) + "?type=vod&action=get_ordered_list&genre=*&JsHttpRequest=1-xml"
-                vod_data = make_request(vod_url, method="GET", headers=headers, params=None, response_type="json")
-
-                if vod_data:
-                    js_data = vod_data.get("js", {})
-
-                    if isinstance(js_data, dict) and js_data.get("data"):
-                        first_vod = next((v for v in js_data["data"] if v.get("cmd")), None)
-                        if first_vod:
-                            if str(first_vod).startswith("/media/"):
-                                first_vod = first_vod.replace("/media/", "/media/file_")
-                            create_link_url = str(portal) + "?type=vod&action=create_link&cmd={}&series=&forced_storage=&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(first_vod["cmd"])
-                            link_data = make_request(create_link_url, method="GET", headers=headers, params=None, response_type="json")
-
-                            if link_data and link_data.get("js", {}).get("cmd"):
-                                stream_url = str(link_data["js"]["cmd"])
-
-                                if isinstance(stream_url, str):
-                                    parsed = urlparse(stream_url)
-                                    if parsed.scheme in ["http", "https"]:
-                                        stream_url = parsed.geturl()
-
-                                match = re.search(r'http://[^/]+/movie/([^/]+)/([^/]+)/', stream_url)
-                                if match:
-                                    username = match.group(1)
-                                    password = match.group(2)
-                                    xtream_creds = {
-                                        "username": username,
-                                        "password": password
-                                    }
-
-            # ########################################################################################
-            # 8. If credentials found, get Xtream API info
-            # ########################################################################################
-
-            if xtream_creds.get("username") and xtream_creds.get("password") and len(password) != 32:
-                temp_xtream_get_api = host.rstrip("/") + "/get.php?username={}&password={}&type=m3u_plus&output=ts".format(xtream_creds["username"], xtream_creds["password"])
-                temp_xtream_player_api = host.rstrip("/") + "/player_api.php?username={}&password={}".format(xtream_creds["username"], xtream_creds["password"])
-                time.sleep(2)
-                api_data = xtream_request(temp_xtream_player_api)
-
-                if api_data:
-                    if api_data and 'user_info' in api_data:
-                        user_info = api_data['user_info']
-
-                        active_cons = str(user_info.get('active_cons', ""))
-                        max_cons = str(user_info.get('max_connections', ""))
-
-                        if user_info.get('auth') == 1 and user_info.get('status') == "Active":
-                            status = 0  # Your custom status code
-
-                        if 'exp_date' in user_info:
-                            try:
-                                expiry_timestamp = int(user_info['exp_date'])
-                                if expiry_timestamp > 0:
-                                    expiry = datetime.utcfromtimestamp(expiry_timestamp).strftime('%Y-%m-%d')
-                            except (ValueError, TypeError):
-                                pass
 
             if not token:
                 valid = False
@@ -551,6 +491,12 @@ class EStalker_Playlists(Screen):
                 if not expiry and status != 0:
                     valid = False
 
+            if expiry == "Unlimited":
+                expiry = _("Unlimited")
+
+            elif expiry and expiry.isdigit():
+                expiry = _("Unknown")
+
             return index, {
                 "portal": portal,
                 "version": portal_version,
@@ -561,14 +507,9 @@ class EStalker_Playlists(Screen):
                 "play_token": play_token or "",
                 "status": status,
                 "blocked": blocked,
-                "playback_limit": playback_limit,
-                "xtream_creds": xtream_creds,
-                "temp_username": username,
-                "temp_password": password,
+                "path_prefix": path_prefix,
                 "active_connections": active_cons,
-                "max_connections": max_cons,
-                "temp_xtream_get_api": temp_xtream_get_api,
-                "temp_xtream_player_api": temp_xtream_player_api
+                "max_connections": max_cons
             }
 
     def process_downloads(self):
@@ -652,44 +593,43 @@ class EStalker_Playlists(Screen):
                 continue
 
             index, response = result
-            if response:
-                self.playlists_all[index]["playlist_info"].update({
-                    "portal": response.get("portal", ""),
-                    "version": response.get("version", ""),
-                    "token": response.get("token", ""),
-                    "token_random": response.get("token_random", ""),
-                    "valid": response.get("valid", False),
-                    "expiry": response.get("expiry", ""),
-                    "play_token": response.get("play_token", ""),
-                    "status": response.get("status", 0),
-                    "blocked": response.get("blocked", "0"),
-                    "temp_username": response.get("temp_username", ""),
-                    "temp_password": response.get("temp_password", ""),
-                    "active_connections": response.get("active_connections", ""),
-                    "max_connections": response.get("max_connections", ""),
-                    "temp_xtream_get_api": response.get("temp_xtream_get_api", ""),
-                    "temp_xtream_player_api": response.get("temp_xtream_player_api", "")
-                })
-            else:
-                self.playlists_all[index]["playlist_info"].update({
-                    "portal": "",
-                    "version": "",
-                    "token": "",
-                    "token_random": "",
-                    "valid": False,
-                    "expiry": "",
-                    "play_token": "",
-                    "status": 0,
-                    "blocked": "0",
-                    "temp_username": "",
-                    "temp_password": "",
-                    "active_connections": "",
-                    "max_connections": "",
-                    "temp_xtream_get_api": "",
-                    "temp_xtream_player_api": ""
-                })
+            try:
+                if response:
+                    self.playlists_all[index]["playlist_info"].update({
+                        "portal": response.get("portal", ""),
+                        "version": response.get("version", ""),
+                        "token": response.get("token", ""),
+                        "token_random": response.get("token_random", ""),
+                        "valid": response.get("valid", False),
+                        "expiry": response.get("expiry", ""),
+                        "play_token": response.get("play_token", ""),
+                        "status": response.get("status", 0),
+                        "blocked": response.get("blocked", "0"),
+                        "path_prefix": response.get("path_prefix", ""),
+                        "active_connections": response.get("active_connections", ""),
+                        "max_connections": response.get("max_connections", ""),
+                    })
+                else:
+                    self.playlists_all[index]["playlist_info"].update({
+                        "portal": "",
+                        "version": "",
+                        "token": "",
+                        "token_random": "",
+                        "valid": False,
+                        "expiry": "",
+                        "play_token": "",
+                        "status": 0,
+                        "blocked": "0",
+                        "path_prefx": "",
+                        "active_connections": "",
+                        "max_connections": "",
+                    })
+            except Exception as e:
+                print(e)
 
         self.writeJsonFile()
+        self.createSetup()
+        # self.startXtreamCheck()  # NEW: Start deferred Xtream credentials check
 
     def writeJsonFile(self):
         if debugs:
@@ -697,7 +637,6 @@ class EStalker_Playlists(Screen):
 
         with open(playlists_json, "w") as f:
             json.dump(self.playlists_all, f)
-        self.createSetup()
 
     def createSetup(self):
         if debugs:
@@ -726,30 +665,37 @@ class EStalker_Playlists(Screen):
             else:
                 portalpath = ""
 
-            active = str(_("Active Conn:"))
-            activenum = playlist["playlist_info"].get("active_connections", "")
-            maxc = str(_("Max Conn:"))
-            maxnum = playlist["playlist_info"].get("max_connections", "")
+            # active = str(_("Active Conn:"))
+            # activenum = playlist["playlist_info"].get("active_connections", "")
+            # maxc = str(_("Max Conn:"))
+            # maxnum = playlist["playlist_info"].get("max_connections", "")
 
-            if not valid:
+            portal_label = str(_("Portal Version:"))
+            status_label = str(_("Status:"))
+
+            parsed_date = parse_date_safe(expiry)
+            if parsed_date and parsed_date < datetime.now():
+                message = _("Expired")
+
+            elif not valid:
                 message = _("Not active")
 
             elif blocked == "1":
                 message = _("Blocked")
 
-            if "stalker" not in portal:
+            elif "stalker" not in portal:
                 if str(status) != "0" and expiry:
                     message = _("Unknown")
 
             portal_version = playlist["playlist_info"].get("version", "")
 
-            self.list.append([index, domain, url, expires, message, mac, token, portal_version, valid, active, activenum, maxc, maxnum, status, portalpath])
+            self.list.append([index, domain, url, expires, message, mac, token, portal_version, portal_label, valid, status, status_label, portalpath])
             index += 1
 
-        self.drawList = [self.buildListEntry(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14]) for x in self.list]
+        self.drawList = [self.buildListEntry(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12]) for x in self.list]
         self["playlists"].setList(self.drawList)
 
-    def buildListEntry(self, index, domain, url, expires, message, mac, token, portal_version, valid, active, activenum, maxc, maxnum, status, portalpath):
+    def buildListEntry(self, index, domain, url, expires, message, mac, token, portal_version, portal_label, valid, status, status_label, portalpath):
 
         if not valid:
             pixmap = LoadPixmap(cached=True, path=os.path.join(common_path, "led_red.png"))
@@ -757,24 +703,16 @@ class EStalker_Playlists(Screen):
         elif message == _("Active"):
             pixmap = LoadPixmap(cached=True, path=os.path.join(common_path, "led_green.png"))
 
-            if activenum:
-                try:
-                    activenum = int(activenum)
-                    maxnum = int(maxnum)
-                    if int(activenum) >= int(maxnum) and int(maxnum) != 0:
-                        pixmap = LoadPixmap(cached=True, path=os.path.join(common_path, "led_yellow.png"))
-                except:
-                    pass
-
-        elif message == _("No Play Token"):
-            pixmap = LoadPixmap(cached=True, path=os.path.join(common_path, "led_yellow.png"))
-
         elif message == _("Unknown"):
             pixmap = LoadPixmap(cached=True, path=os.path.join(common_path, "led_yellow.png"))
+
+        elif message == _("Expired"):
+            pixmap = LoadPixmap(cached=True, path=os.path.join(common_path, "led_yellow.png"))
+
         else:
             pixmap = LoadPixmap(cached=True, path=os.path.join(common_path, "led_red.png"))
 
-        return (index, str(domain), str(url), str(expires), str(message), pixmap, str(mac), str(portal_version), str(active), str(activenum), str(maxc), str(maxnum), str(status), str(portalpath))
+        return (index, str(domain), str(url), str(expires), str(message), pixmap, str(mac), str(portal_version), str(portal_label), str(status), str(status_label), str(portalpath))
 
     def quit(self, answer=None):
         self.close()
@@ -832,7 +770,6 @@ class EStalker_Playlists(Screen):
                     break
 
             self.writeJsonFile()
-            # self.start()
             self.createSetup()
 
     def getCurrentEntry(self):
@@ -918,9 +855,258 @@ class EStalker_Playlists(Screen):
 
         # Save the cleaned JSON
         self.writeJsonFile()
-
-        # Refresh UI
-        # self.start()
         self.createSetup()
 
         self.session.open(MessageBox, _("Removed all invalid playlists"), MessageBox.TYPE_INFO, timeout=3)
+
+    def checkXtream(self):
+        self.session.open(EStalker_UserInfo)
+
+
+class EStalker_UserInfo(Screen):
+    ALLOW_SUSPEND = True
+
+    def __init__(self, session):
+        Screen.__init__(self, session)
+        self.session = session
+
+        skin_path = os.path.join(skin_directory, cfg.skin.value)
+        skin = os.path.join(skin_path, "userinfo.xml")
+        with open(skin, "r") as f:
+            self.skin = f.read()
+
+        self.setup_title = _("User Information")
+
+        self["portalversion"] = Label(_("Unavailable"))
+        self["portalurl"] = Label(_("Unavailable"))
+        self["portalcalls"] = Label(_("Unavailable"))
+
+        self["status"] = Label("-")
+        self["expiry"] = Label("-")
+        self["created"] = Label("-")
+        self["trial"] = Label("-")
+        self["activeconn"] = Label("-")
+        self["maxconn"] = Label("-")
+
+        self["t_portalversion"] = StaticText(_("Portal Version:"))
+        self["t_portalurl"] = StaticText(_("Portal URL:"))
+        self["t_portalcalls"] = StaticText(_("Portal API Calls:"))
+
+        self["t_status"] = StaticText(_("Status:"))
+        self["t_expiry"] = StaticText(_("Expiry Date:"))
+        self["t_created"] = StaticText(_("Created At:"))
+        self["t_trial"] = StaticText(_("Is Trial:"))
+        self["t_activeconn"] = StaticText(_("Active Connections:"))
+        self["t_maxconn"] = StaticText(_("Max Connections:"))
+
+        self["actions"] = ActionMap(["XStreamityActions"], {
+            "ok": self.quit,
+            "cancel": self.quit,
+            "red": self.quit,
+            "menu": self.quit}, -2)
+
+        self["key_red"] = StaticText(_("Close"))
+
+        self.onFirstExecBegin.append(self.createUserSetup)
+        self.onLayoutFinish.append(self.__layoutFinished)
+
+    def __layoutFinished(self):
+        self.setTitle(self.setup_title)
+
+    def createUserSetup(self):
+        playlist_info = glob.active_playlist.get("playlist_info", {})
+        self["portalversion"].setText(str(playlist_info.get("version", "Unknown")))
+        self["portalurl"].setText(str(playlist_info.get("path_prefix", "Unknown")))
+        portaltext = str(playlist_info.get("portal", "")).replace(playlist_info.get("host", ""), "")
+        self["portalcalls"].setText(str(portaltext))
+        self["status"].setText(str(playlist_info.get("status", "")))
+        self["expiry"].setText(str(playlist_info.get("expiry", "Unknown")))
+
+        self.get_stream_url()
+
+    def get_stream_url(self):
+        if debugs:
+            print("*** get_stream_url ***")
+
+        # Try to fetch Xtream credentials
+        def fetch_xtream_creds(portal, headers, content_type="itv", domain=""):
+            try:
+                list_url = "{}?type={}&action=get_ordered_list&genre=*&JsHttpRequest=1-xml".format(portal, content_type)
+                data = make_request(list_url, method="GET", headers=headers, params=None, response_type="json")
+
+                if not data:
+                    return {}
+
+                js_data = data.get("js") or {}
+                data_list = js_data.get("data") or []
+
+                first_item = next((v for v in data_list if isinstance(v, dict) and v.get("cmd")), None)
+                if not first_item:
+                    return {}
+
+                cmd_val = first_item.get("cmd", "")
+                if str(cmd_val).startswith("/media/"):
+                    cmd_val = cmd_val.replace("/media/", "/media/file_")
+
+                create_link_url = "{}?type={}&action=create_link&cmd={}&series=&forced_storage=&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(
+                    portal, content_type, cmd_val
+                )
+
+                link_data = make_request(create_link_url, method="GET", headers=headers, params=None, response_type="json")
+
+                if not link_data:
+                    return {}
+
+                link_js = link_data.get("js") or {}
+                cmd = link_js.get("cmd")
+
+                if not cmd:
+                    return {}
+
+                stream_url = str(cmd)
+                parsed = urlparse(stream_url)
+                if parsed.scheme in ["http", "https"]:
+                    stream_url = parsed.geturl()
+
+                match = re.search(r'/movie/([^/]+)/([^/]+)/', stream_url)
+                if match:
+                    username = match.group(1)
+                    password = match.group(2)
+                    return {"username": username, "password": password}
+
+                return {}
+
+            except Exception as e:
+                print("Error fetching Xtream creds:", e, domain)
+                return {}
+
+        # Try VOD first, then Live
+
+        has_xtream = glob.active_playlist["playlist_info"].get("has_xtream", True)
+        portal = glob.active_playlist["playlist_info"]["portal"]
+        domain = glob.active_playlist["playlist_info"]["domain"]
+        mac = glob.active_playlist["playlist_info"]["mac"]
+        timezone = get_local_timezone()
+
+        headers = {
+            "Host": domain,
+            "Accept": "*/*",
+            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG250 stbapp ver: 2 rev: 369 Safari/533.3",
+            "Accept-Encoding": "gzip, deflate",
+            "X-User-Agent": "Model: MAG250; Link: WiFi",
+            "Connection": "close",
+            "Pragma": "no-cache",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Cookie": "mac={}; stb_lang=en; timezone={};".format(mac, timezone),
+        }
+
+        if has_xtream:
+            xtream_creds = fetch_xtream_creds(portal, headers, content_type="vod", domain=domain) or {}
+            if not xtream_creds.get("username") or not xtream_creds.get("password"):
+                xtream_creds = fetch_xtream_creds(portal, headers, content_type="itv", domain=domain) or {}
+
+        has_xtream = False
+
+        self.fetch_xtream_api(xtream_creds, has_xtream)
+
+    def fetch_xtream_api(self, xtream_creds, has_xtream):
+        if debugs:
+            print("*** fetch_xtream_api ***")
+
+        # ########################################################################################
+        # If credentials found, get Xtream API info
+        # ########################################################################################
+
+        if not xtream_creds:
+            return
+
+        username = xtream_creds.get("username")
+        password = xtream_creds.get("password")
+        host = glob.active_playlist["playlist_info"]["host"]
+        temp_xtream_player_api = host.rstrip("/") + "/player_api.php?username={}&password={}".format(xtream_creds["username"], xtream_creds["password"])
+        expiry = glob.active_playlist["playlist_info"]["expiry"]
+        status = glob.active_playlist["playlist_info"]["status"]
+        active_cons = ""
+        max_cons = ""
+        created_at = ""
+        is_trial = ""
+        index = glob.active_playlist["playlist_info"]["index"]
+
+        if username and password and len(password) != 32:
+            time.sleep(2)
+            api_data = xtream_request(temp_xtream_player_api)
+
+            user_info = {}
+            if api_data:
+                if api_data and 'user_info' in api_data:
+                    user_info = api_data['user_info']
+                    active_cons = str(user_info.get('active_cons', ""))
+                    max_cons = str(user_info.get('max_connections', ""))
+
+                    if user_info.get('auth') == 1:
+                        status_map = {
+                            "Active": _("Active"),
+                            "Banned": _("Banned"),
+                            "Disabled": _("Disabled"),
+                            "Expired": _("Expired")
+                        }
+
+                        status = status_map.get(user_info.get("status"), _("Unknown"))
+                        is_trial = user_info.get('is_trial', "")
+
+                    if 'created_at' in user_info:
+                        try:
+                            created_timestamp = int(user_info['created_at'])
+                            if created_timestamp > 0:
+                                dt = datetime.fromtimestamp(created_timestamp)
+                                hour = dt.hour % 12 or 12
+                                ampm = 'am' if dt.hour < 12 else 'pm'
+                                created_at = dt.strftime('%B %d, %Y, ') + '{:d}:{:02d} {}'.format(hour, dt.minute, ampm)
+                        except (ValueError, TypeError):
+                            pass
+
+                    if 'exp_date' in user_info:
+                        try:
+                            expiry_timestamp = int(user_info['exp_date'])
+                            if expiry_timestamp > 0:
+                                dt = datetime.fromtimestamp(expiry_timestamp)
+                                hour = dt.hour % 12 or 12
+                                ampm = 'am' if dt.hour < 12 else 'pm'
+                                expiry = dt.strftime('%B %d, %Y, ') + '{:d}:{:02d} {}'.format(hour, dt.minute, ampm)
+                        except (ValueError, TypeError):
+                            pass
+
+        self["status"].setText(status)
+        self["expiry"].setText(str(expiry))
+        self["created"].setText(str(created_at))
+        self["trial"].setText(str(is_trial))
+        self["activeconn"].setText(str(active_cons))
+        self["maxconn"].setText(str(max_cons))
+
+        self.update_results(index, expiry, active_cons, max_cons)
+
+    def update_results(self, index, expiry, active_cons, max_cons):
+
+        with open(playlists_json, "r") as f:
+            self.playlists_all = json.load(f)
+
+        self.playlists_all[index]["playlist_info"].update({
+            "expiry": expiry,
+            "active_connections": active_cons,
+            "max_connections": max_cons,
+        })
+
+        self.writeJsonFile()
+
+    def writeJsonFile(self):
+        if debugs:
+            print("*** writeJsonFile ***")
+
+        try:
+            with open(playlists_json, "w") as f:
+                json.dump(self.playlists_all, f)
+        except Exception as e:
+            print("Error writing JSON:", e)
+
+    def quit(self):
+        self.close()

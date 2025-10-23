@@ -115,6 +115,14 @@ def process_files():
         if url.startswith("#"):
             continue
 
+        # Determine path_prefix
+        if "/stalker_portal/c/" in url:
+            path_prefix = "/stalker_portal/c/"
+        elif "/c/" in url:
+            path_prefix = "/c/"
+        else:
+            path_prefix = ""
+
         parsed_uri = urlparse(url)
         protocol = parsed_uri.scheme + "://"
         domain = parsed_uri.hostname.lower() if parsed_uri.hostname else ""
@@ -125,6 +133,7 @@ def process_files():
             port = ""
 
         host = protocol + domain + (":" + str(port) if port else "")
+
         for mac in mac_lines:
             mac_stripped = mac.upper()
             key = (domain, str(port), mac_stripped)
@@ -140,6 +149,9 @@ def process_files():
                 if "url" not in existing_entry["playlist_info"]:
                     existing_entry["playlist_info"]["url"] = url
 
+                # Add path_prefix if missing
+                existing_entry["playlist_info"]["path_prefix"] = path_prefix
+
                 playlists_grouped.append(existing_entry)
 
             else:
@@ -152,6 +164,7 @@ def process_files():
                         "port": port,
                         "host": host,
                         "mac": mac_stripped,
+                        "path_prefix": path_prefix,
                         "token": "",
                         "token_random": "",
                         "valid": True,
