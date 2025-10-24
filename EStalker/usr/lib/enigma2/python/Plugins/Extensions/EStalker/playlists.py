@@ -209,7 +209,7 @@ class EStalker_Playlists(Screen):
         blocked = "0"
         expiry = ""
         portal_version = ""
-        xtream_creds = {}
+        # xtream_creds = {}
         active_cons = ""
         max_cons = ""
         token_random = ""
@@ -438,7 +438,7 @@ class EStalker_Playlists(Screen):
             # 5. Get Profiles
             # ########################################################################################
 
-            play_token, status, blocked, xtream_creds, returned_mac, returned_id = get_profile_data(
+            play_token, status, blocked, returned_mac, returned_id = get_profile_data(
                 portal=portal,
                 mac=mac,
                 token=token,
@@ -463,7 +463,7 @@ class EStalker_Playlists(Screen):
                 expiry = js_data.get("phone") or js_data.get("end_date", "Unknown")
             else:
                 if not returned_mac or not returned_id:
-                    play_token, status, blocked, xtream_creds, returned_mac, returned_id = get_profile_data(
+                    play_token, status, blocked, returned_mac, returned_id = get_profile_data(
                         portal=portal,
                         mac=mac,
                         token=token,
@@ -982,7 +982,6 @@ class EStalker_UserInfo(Screen):
 
         # Try VOD first, then Live
 
-        has_xtream = glob.active_playlist["playlist_info"].get("has_xtream", True)
         portal = glob.active_playlist["playlist_info"]["portal"]
         domain = glob.active_playlist["playlist_info"]["domain"]
         mac = glob.active_playlist["playlist_info"]["mac"]
@@ -1000,16 +999,18 @@ class EStalker_UserInfo(Screen):
             "Cookie": "mac={}; stb_lang=en; timezone={};".format(mac, timezone),
         }
 
-        if has_xtream:
-            xtream_creds = fetch_xtream_creds(portal, headers, content_type="vod", domain=domain) or {}
-            if not xtream_creds.get("username") or not xtream_creds.get("password"):
-                xtream_creds = fetch_xtream_creds(portal, headers, content_type="itv", domain=domain) or {}
+        xtream_creds = fetch_xtream_creds(portal, headers, content_type="vod", domain=domain) or {}
 
-        has_xtream = False
+        if not xtream_creds.get("username") or not xtream_creds.get("password"):
+            xtream_creds = fetch_xtream_creds(portal, headers, content_type="itv", domain=domain) or {}
 
-        self.fetch_xtream_api(xtream_creds, has_xtream)
+        username = xtream_creds.get("username", "")
+        password = xtream_creds.get("password", "")
 
-    def fetch_xtream_api(self, xtream_creds, has_xtream):
+        if username and password:
+            self.fetch_xtream_api(xtream_creds)
+
+    def fetch_xtream_api(self, xtream_creds):
         if debugs:
             print("*** fetch_xtream_api ***")
 
@@ -1017,11 +1018,8 @@ class EStalker_UserInfo(Screen):
         # If credentials found, get Xtream API info
         # ########################################################################################
 
-        if not xtream_creds:
-            return
-
-        username = xtream_creds.get("username")
-        password = xtream_creds.get("password")
+        username = xtream_creds.get("username", "")
+        password = xtream_creds.get("password", "")
         host = glob.active_playlist["playlist_info"]["host"]
         temp_xtream_player_api = host.rstrip("/") + "/player_api.php?username={}&password={}".format(xtream_creds["username"], xtream_creds["password"])
         expiry = glob.active_playlist["playlist_info"]["expiry"]
@@ -1033,7 +1031,7 @@ class EStalker_UserInfo(Screen):
         index = glob.active_playlist["playlist_info"]["index"]
 
         if username and password and len(password) != 32:
-            time.sleep(2)
+            time.sleep(3)
             api_data = xtream_request(temp_xtream_player_api)
 
             user_info = {}

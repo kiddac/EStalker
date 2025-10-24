@@ -292,8 +292,6 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
     play_token = None
     status = 0
     blocked = "0"
-    xtream_creds = {}
-
     id = ""
     mac = ""
 
@@ -307,10 +305,4 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
             mac = js_data.get("mac", "")
             id = js_data.get("id", "")
 
-            if js_data.get("login") and js_data.get("password"):
-                xtream_creds = {
-                    "username": js_data["login"],
-                    "password": js_data["password"]
-                }
-
-    return play_token, status, blocked, xtream_creds, mac, id
+    return play_token, status, blocked, mac, id
