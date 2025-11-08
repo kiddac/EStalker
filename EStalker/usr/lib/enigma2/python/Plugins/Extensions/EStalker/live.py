@@ -1432,7 +1432,7 @@ class EStalker_Live_Categories(Screen):
                                 pass
                                 """
 
-                            self.session.openWithCallback(self.setIndex, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
+                            self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
                     else:
                         """
                         try:
@@ -1441,12 +1441,16 @@ class EStalker_Live_Categories(Screen):
                             pass
                             """
 
-                        self.session.openWithCallback(self.setIndex, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
+                        self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
 
                     self["category_actions"].setEnabled(False)
 
                 else:
                     self.createSetup()
+
+    def reload(self):
+        self.setIndex()
+        self.selectionChanged()
 
     def setIndex(self, data=None):
         """
