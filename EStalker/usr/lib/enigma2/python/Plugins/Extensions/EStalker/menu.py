@@ -377,7 +377,7 @@ class EStalker_Menu(Screen):
         if not self.token:
             return
 
-        play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+        play_token, status, blocked, returned_mac, returned_id = get_profile_data(
             portal=self.portal,
             mac=self.mac,
             token=self.token,
@@ -394,7 +394,7 @@ class EStalker_Menu(Screen):
 
         if not account_info and isinstance(account_info, dict):
             if not returned_mac or not returned_id:
-                play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+                play_token, status, blocked, returned_mac, returned_id = get_profile_data(
                     portal=self.portal,
                     mac=self.mac,
                     token=self.token,

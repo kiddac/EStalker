@@ -160,7 +160,6 @@ class EStalker_Series_Categories(Screen):
         self["listposition"] = StaticText("")
         self.itemsperpage = 14
 
-        self.searchString = ""
         self.filterresult = ""
         self.chosen_category = ""
 
@@ -191,6 +190,7 @@ class EStalker_Series_Categories(Screen):
         self.seriesfirstlist = True
         self.seasonsfirstlist = True
         self.episodesfirstlist = True
+        self.do_sort = False
 
         self.sortindex = 0
         self.sortText = _("Sort: A-Z")
@@ -243,6 +243,8 @@ class EStalker_Series_Categories(Screen):
 
         next_url = ""
         self.sortby = "number"
+        self.level1_sortby = "number"
+        self.level2_sortby = "number"
 
         # buttons / keys
         self["key_red"] = StaticText(_("Back"))
@@ -357,7 +359,7 @@ class EStalker_Series_Categories(Screen):
         self["x_description"].setText("")
 
         if self.level == 1:
-            self.sortby = "number"
+            # self.sortby = "number"
             self.getCategories()
 
         elif self.level == 2:
@@ -408,8 +410,13 @@ class EStalker_Series_Categories(Screen):
         elif self.level == 4:
             self.buildEpisodes()
 
-        self.resetButtons()
-        self.selectionChanged()
+        if self.do_sort:
+            self.do_sort = False
+            self.applyPreviousSort()
+
+        else:
+            self.resetButtons()
+            self.selectionChanged()
 
     def getCategories(self):
         if debugs:
@@ -975,7 +982,7 @@ class EStalker_Series_Categories(Screen):
 
     def downloadSearchData(self, url, page=1):
         if debugs:
-            print("*** downloadApiData ***", url)
+            print("*** downloadSearchData ***", url)
 
         if self.level == 2:
             if not hasattr(self, 'all_series_data') or not isinstance(self.all_series_data, list):
@@ -1063,7 +1070,7 @@ class EStalker_Series_Categories(Screen):
         if not self.token:
             return
 
-        play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+        play_token, status, blocked, returned_mac, returned_id = get_profile_data(
             portal=self.portal,
             mac=self.mac,
             token=self.token,
@@ -1077,7 +1084,7 @@ class EStalker_Series_Categories(Screen):
 
         if not account_info and isinstance(account_info, dict):
             if not returned_mac or not returned_id:
-                play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+                play_token, status, blocked, returned_mac, returned_id = get_profile_data(
                     portal=self.portal,
                     mac=self.mac,
                     token=self.token,
@@ -2277,6 +2284,85 @@ class EStalker_Series_Categories(Screen):
         else:
             self["vod_backdrop"].hide()
 
+    def applyPreviousSort(self):
+        if debugs:
+            print("*** applyPreviousSort ***")
+
+        if self.level == 1:
+            sortlist = [_("Sort: A-Z"), _("Sort: Z-A"), _("Sort: Original")]
+
+            # Determine the previous sort in the cycle
+            prev_sort = sortlist[0]  # default
+            for index, item in enumerate(sortlist):
+                if str(item) == str(self.sortText):
+                    prev_sort = sortlist[index - 1]  # previous in cycle (wraps around automatically)
+                    break
+
+            # Apply sort to list1
+            activelist = self.list1[:]
+
+            if prev_sort == _("Sort: A-Z"):
+                activelist.sort(key=lambda x: x[1].lower(), reverse=False)
+            elif prev_sort == _("Sort: Z-A"):
+                activelist.sort(key=lambda x: x[1].lower(), reverse=True)
+            elif prev_sort == _("Sort: Original"):
+                activelist.sort(key=lambda x: x[0], reverse=False)
+
+            # Always move "All" category to first position if present
+            for i, item in enumerate(activelist):
+                if item[1].lower() == _("all").lower():
+                    activelist.insert(0, activelist.pop(i))
+                    break
+
+            self.list1 = activelist
+            self.buildLists()
+
+        elif self.level == 2:
+            sortlist = [_("Sort: A-Z"), _("Sort: Added"), _("Sort: Original")]
+
+            prev_sort = sortlist[0]
+            for index, item in enumerate(sortlist):
+                if str(item) == str(self.sortText):
+                    prev_sort = sortlist[index - 1]
+                    break
+
+            # Determine sort type for VOD
+            if prev_sort == _("Sort: A-Z"):
+                self.sortby = "name"
+            elif prev_sort == _("Sort: Added"):
+                self.sortby = "added"
+            elif prev_sort == _("Sort: Original"):
+                self.sortby = "number"
+
+            # Reset pagination and data
+            self.series_pages_downloaded = set()
+            self.series_current_page = 1
+            self.all_series_data = []
+
+            # Reset UI indexes
+            if self["main_list"].getCurrent():
+                self["main_list"].setIndex(0)
+
+            glob.nextlist[-1]["index"] = 0
+            glob.nextlist[-1]["sort"] = self["key_yellow"].getText()
+
+            # Trigger reload of VOD list
+            self.selectionChanged()
+            self.series_current_page = 1
+
+            if self.list2:
+                glob.nextlist[-1]["next_url"] = (
+                    "{0}?type=series&action=get_ordered_list&movie_id=0&season_id=0&episode_id=0&"
+                    "category={1}&sortby={2}&p=1&JsHttpRequest=1-xml"
+                ).format(self.portal, self.current_category, self.sortby)
+
+                response = self.downloadApiData(glob.nextlist[-1]["next_url"])
+                self.getSeries(response)
+
+        # Keep previous selection if possible
+        if self["main_list"].getCurrent() and glob.nextlist[-1]["index"] != 0:
+            self["main_list"].setIndex(glob.nextlist[-1]["index"])
+
     def sort(self):
         if debugs:
             print("*** sort ***")
@@ -2315,10 +2401,15 @@ class EStalker_Series_Categories(Screen):
 
             self.list1 = activelist
 
+            for i, item in enumerate(activelist):
+                if item[1].lower() == "all":
+                    activelist.insert(0, activelist.pop(i))
+                    break
+
             self.buildLists()
 
         if self.level == 2:
-            sortlist = [_("Sort: A-Z"), _("Sort: Added")]
+            sortlist = [_("Sort: A-Z"), _("Sort: Added"), _("Sort: Original")]
 
             for index, item in enumerate(sortlist):
                 if str(item) == str(self.sortText):
@@ -2329,6 +2420,8 @@ class EStalker_Series_Categories(Screen):
                 self.sortby = "name"
             elif current_sort == _("Sort: Added"):
                 self.sortby = "added"
+            elif current_sort == _("Sort: Original"):
+                self.sortby = "number"
 
             self.series_pages_downloaded = set()
             self.series_current_page = 1
@@ -2350,8 +2443,8 @@ class EStalker_Series_Categories(Screen):
             self.series_current_page = 1
 
             if self.list2:
-                category_id = self.list2[0][17]
-                glob.nextlist[-1]["next_url"] = "{0}?type=series&action=get_ordered_list&movie_id=0&season_id=0&episode_id=0&category={1}&fav=0&sortby={2}&hd=0&not_ended=0&p=1&JsHttpRequest=1-xml".format(self.portal, category_id, self.sortby)
+                # category_id = self.list2[0][17]
+                glob.nextlist[-1]["next_url"] = "{0}?type=series&action=get_ordered_list&movie_id=0&season_id=0&episode_id=0&category={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(self.portal, self.current_category, self.sortby)
 
                 response = self.downloadApiData(glob.nextlist[-1]["next_url"])
                 self.getSeries(response)
@@ -2365,10 +2458,10 @@ class EStalker_Series_Categories(Screen):
 
         current_filter = self["key_blue"].getText()
 
-        if current_filter == _("Reset Search"):
-            self.resetSearch()
+        if current_filter != _("Reset Search"):
+            self.session.openWithCallback(self.filterChannels, VirtualKeyBoard, title=_("Filter this category..."), text=getattr(self, "searchString", "") or "")
         else:
-            self.session.openWithCallback(self.filterChannels, VirtualKeyBoard, title=_("Filter this category..."), text=self.searchString)
+            self.resetSearch()
 
     def filterChannels(self, result=None):
         if debugs:
@@ -2433,45 +2526,19 @@ class EStalker_Series_Categories(Screen):
             print("*** resetsearch ***")
 
         self["key_yellow"].setText(self.sortText)
+        self.do_sort = True
 
         if self.level == 1:
             self["key_blue"].setText(_("Search"))
             activelist = glob.originalChannelList1[:]
             self.list1 = activelist
-            self.filterresult = ""
-            glob.nextlist[-1]["filter"] = self.filterresult
-            self.buildLists()
-        elif self.level == 2:
+        else:
             self["key_blue"].setText(_("Search All"))
             activelist = glob.originalChannelList2[:]
-            self.series_pages_downloaded = set()
-            self.series_current_page = 1
-            self.all_series_data = []
-            self.sort_check = True
-
-            if self["main_list"].getCurrent():
-                self["main_list"].setIndex(0)
-
-            glob.nextlist[-1]["index"] = 0
-
-            self.series_current_page = 1
-            if self.level == 2:
-                category_id = self.list2[0][17]
-                glob.nextlist[-1]["next_url"] = "{0}?type=series&action=get_ordered_list&movie_id=0&season_id=0&episode_id=0&category={1}&fav=0&sortby={2}&hd=0&not_ended=0&p=1&JsHttpRequest=1-xml".format(self.portal, category_id, self.sortby)
-
-                response = self.downloadApiData(glob.nextlist[-1]["next_url"])
-                self.getSeries(response)
-
-                self.filterresult = ""
-                glob.nextlist[-1]["filter"] = self.filterresult
-
-        elif self.level == 3:
-            pass
-
-        elif self.level == 4:
-            pass
-
-        # self.buildLists()
+            self.list2 = activelist
+        self.filterresult = ""
+        glob.nextlist[-1]["filter"] = self.filterresult
+        self.buildLists()
 
     def pinEntered(self, result=None):
         if debugs:
@@ -2549,7 +2616,9 @@ class EStalker_Series_Categories(Screen):
                 # self.list2 = []
                 if self.list1:
                     category_id = self["main_list"].getCurrent()[3]
-                    next_url = "{0}?type=series&action=get_ordered_list&movie_id=0&season_id=0&episode_id=0&category={1}&fav=0&sortby={2}&hd=0&not_ended=0&p=1&JsHttpRequest=1-xml".format(self.portal, category_id, self.sortby)
+                    self.current_category = category_id
+
+                    next_url = "{0}?type=series&action=get_ordered_list&movie_id=0&season_id=0&episode_id=0&category={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(self.portal, category_id, self.sortby)
                     self.chosen_category = ""
 
                     if self.showfav:
@@ -2632,7 +2701,7 @@ class EStalker_Series_Categories(Screen):
                         print("*** original command **", command)
 
                     if str(command).startswith("/media/"):
-                        pre_vod_url = (str(self.portal) + "?type=vod&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&fav=0&sortby=&hd=0&not_ended=0&p=1&JsHttpRequest=1-xml").format(stream_id)
+                        pre_vod_url = (str(self.portal) + "?type=series&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&sortby=&p=1&JsHttpRequest=1-xml").format(stream_id)
 
                         pre_response = make_request(pre_vod_url, method="POST", headers=self.headers, params=None, response_type="json")
 
@@ -2652,6 +2721,8 @@ class EStalker_Series_Categories(Screen):
 
                     if isinstance(command, str):
                         if "localhost" in command or "http" not in command or "///" in command:
+
+                            # must be type=vod for create_link in series
                             url = "{0}?type=vod&action=create_link&cmd={1}&series={2}&forced_storage=&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command, episode_id)
                             self.retry = False
                             response = self.createLink(url)
@@ -2749,6 +2820,7 @@ class EStalker_Series_Categories(Screen):
             from . import hidden
             current_list = self.prelist + self.list1 if self.level == 1 else self.list2
             if self.level == 1 or (self.level == 2 and self.chosen_category != "favourites"):
+                self.do_sort = True
                 self.session.openWithCallback(self.createSetup, hidden.EStalker_HiddenCategories, "series", current_list, self.level)
 
     def clearWatched(self):

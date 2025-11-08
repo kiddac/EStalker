@@ -609,37 +609,8 @@ class EStalker_StreamPlayer(
         except:
             pass
 
-        startnowunixtime = glob.currentepglist[glob.currentchannellistindex][9]
-        startnextunixtime = glob.currentepglist[glob.currentchannellistindex][10]
-        service_ref = ""
-
-        if startnowunixtime and startnextunixtime:
-            self.unique_ref = 0
-            stream_id = str(glob.currentchannellist[glob.currentchannellistindex][4])
-
-            for j in str(self.streamurl):
-                value = ord(j)
-                self.unique_ref += value
-
-            bouquet_id1 = int(stream_id) // 65535
-            bouquet_id2 = int(stream_id) - int(bouquet_id1 * 65535)
-            service_ref = eServiceReference(str(servicetype) + ":0:1:" + str(format(bouquet_id1, "x")) + ":" + str(format(bouquet_id2, "x")) + ":" + str(format(self.unique_ref, "x")) + ":0:0:0:0:" + str(streamurl).replace(":", "%3a"))
-            service_ref.setName(glob.currentchannellist[glob.currentchannellistindex][0])
-            self.reference = service_ref
-
-        if not service_ref:
-            if streamurl:
-                self.reference = eServiceReference(int(servicetype), 0, str(streamurl))
-            else:
-                return
-            self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
-
-        currently_playing_ref = self.session.nav.getCurrentlyPlayingServiceReference()
-
-        try:
-            self.session.nav.stopService()
-        except Exception as e:
-            print(e)
+        self.reference = eServiceReference(int(servicetype), 0, str(streamurl))
+        self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
         try:
             self.session.nav.playService(self.reference)
@@ -833,7 +804,7 @@ class EStalker_StreamPlayer(
         if not self.token:
             return
 
-        play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+        play_token, status, blocked, returned_mac, returned_id = get_profile_data(
             portal=self.portal,
             mac=self.mac,
             token=self.token,
@@ -847,7 +818,7 @@ class EStalker_StreamPlayer(
 
         if not account_info and isinstance(account_info, dict):
             if not returned_mac or not returned_id:
-                play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+                play_token, status, blocked, returned_mac, returned_id = get_profile_data(
                     portal=self.portal,
                     mac=self.mac,
                     token=self.token,
@@ -875,6 +846,11 @@ class EStalker_StreamPlayer(
                 glob.currentchannellistindex = 0
 
             command = str(glob.currentchannellist[glob.currentchannellistindex][7])
+
+            if not command:
+                glob.currentchannellistindex -= 1
+                self.back()
+                return
 
             if isinstance(command, str):
                 if "localhost" in command or "http" not in command or "///" in command:
@@ -918,6 +894,11 @@ class EStalker_StreamPlayer(
                 glob.currentchannellistindex = list_length - 1
 
             command = str(glob.currentchannellist[glob.currentchannellistindex][7])
+
+            if not command:
+                glob.currentchannellistindex += 1
+                self.back()
+                return
 
             if isinstance(command, str):
                 if "localhost" in command or "http" not in command or "///" in command:

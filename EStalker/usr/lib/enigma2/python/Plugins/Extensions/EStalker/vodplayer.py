@@ -870,7 +870,7 @@ class EStalker_VodPlayer(
         if not self.token:
             return
 
-        play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+        play_token, status, blocked, returned_mac, returned_id = get_profile_data(
             portal=self.portal,
             mac=self.mac,
             token=self.token,
@@ -884,7 +884,7 @@ class EStalker_VodPlayer(
 
         if not account_info and isinstance(account_info, dict):
             if not returned_mac or not returned_id:
-                play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+                play_token, status, blocked, returned_mac, returned_id = get_profile_data(
                     portal=self.portal,
                     mac=self.mac,
                     token=self.token,
@@ -911,10 +911,15 @@ class EStalker_VodPlayer(
 
                 episode_id = str(glob.currentchannellist[glob.currentchannellistindex][20])
                 command = str(glob.currentchannellist[glob.currentchannellistindex][21])
+
+                if not command:
+                    glob.currentchannellistindex -= 1
+                    self.back()
+
                 next_url = command
 
                 if str(command).startswith("/media/"):
-                    pre_vod_url = (str(self.portal) + "?type=vod&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&fav=0&sortby=&hd=0&not_ended=0&p=1&JsHttpRequest=1-xml").format(self.stream_id)
+                    pre_vod_url = (str(self.portal) + "?type=series&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&sortby=&p=1&JsHttpRequest=1-xml").format(self.stream_id)
 
                     pre_response = make_request(pre_vod_url, method="POST", headers=self.headers, params=None, response_type="json")
 
@@ -979,10 +984,15 @@ class EStalker_VodPlayer(
 
                 episode_id = str(glob.currentchannellist[glob.currentchannellistindex][20])
                 command = str(glob.currentchannellist[glob.currentchannellistindex][21])
+
+                if not command:
+                    glob.currentchannellistindex += 1
+                    self.back()
+
                 next_url = command
 
                 if str(command).startswith("/media/"):
-                    pre_vod_url = (str(self.portal) + "?type=vod&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&fav=0&sortby=&hd=0&not_ended=0&p=1&JsHttpRequest=1-xml").format(self.stream_id)
+                    pre_vod_url = (str(self.portal) + "?type=series&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&sortby=&p=1&JsHttpRequest=1-xml").format(self.stream_id)
 
                     pre_response = make_request(pre_vod_url, method="POST", headers=self.headers, params=None, response_type="json")
 

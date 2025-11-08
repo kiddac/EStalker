@@ -27,6 +27,7 @@ try:
 except ImportError:
     from urllib.parse import urlparse
 
+
 # Third-party imports
 from PIL import Image, ImageFile, PngImagePlugin
 from twisted.web.client import downloadPage
@@ -45,7 +46,7 @@ from enigma import eServiceReference, eTimer
 # Local imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory, debugs
+from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory, debugs, isDreambox
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data
 
@@ -71,18 +72,19 @@ if sslverify:
 playlists_json = cfg.playlists_json.value
 
 
-# png hack
+# png hack for older versions of PIL library
 def mycall(self, cid, pos, length):
-    if cid.decode("ascii") == "tRNS":
+    cid_str = cid.decode("ascii")
+    if cid_str == "tRNS":
         return self.chunk_TRNS(pos, length)
-    else:
-        return getattr(self, "chunk_" + cid.decode("ascii"))(pos, length)
+    return getattr(self, "chunk_" + cid_str)(pos, length)
 
 
 def mychunk_TRNS(self, pos, length):
     i16 = PngImagePlugin.i16
     _simple_palette = re.compile(b"^\xff*\x00\xff*$")
     s = ImageFile._safe_read(self.fp, length)
+
     if self.im_mode == "P":
         if _simple_palette.match(s):
             i = s.find(b"\0")
@@ -98,8 +100,9 @@ def mychunk_TRNS(self, pos, length):
 
 
 if pythonVer != 2:
-    PngImagePlugin.ChunkStream.call = mycall
-    PngImagePlugin.PngStream.chunk_TRNS = mychunk_TRNS
+    if hasattr(PngImagePlugin, "ChunkStream") and hasattr(PngImagePlugin, "PngStream"):
+        PngImagePlugin.ChunkStream.call = mycall
+        PngImagePlugin.PngStream.chunk_TRNS = mychunk_TRNS
 
 _initialized = 0
 
@@ -159,7 +162,7 @@ class EStalker_Live_Categories(Screen):
 
         self.skin_path = os.path.join(skin_directory, cfg.skin.value)
         skin = os.path.join(self.skin_path, "live_categories.xml")
-        if os.path.exists("/var/lib/dpkg/status"):
+        if isDreambox:
             skin = os.path.join(self.skin_path, "DreamOS/live_categories.xml")
 
         with codecs.open(skin, "r", encoding="utf-8") as f:
@@ -202,19 +205,20 @@ class EStalker_Live_Categories(Screen):
         self["listposition"] = StaticText("")
         self.itemsperpage = 14
 
-        self.searchString = ""
         self.filterresult = ""
         self.chosen_category = ""
 
         self.showingshortEPG = False
         self.pin = False
-        self.sort_check = False
+        # self.sort_check = False
         self.showfav = False
+        self.firstlist = True
+        self.do_sort = False
 
         self.sortindex = 0
         self.sortText = _("Sort: A-Z")
 
-        self.epgtimeshift = 0
+        # self.epgtimeshift = 0
         self.level = 1
 
         self.selectedlist = self["main_list"]
@@ -230,8 +234,7 @@ class EStalker_Live_Categories(Screen):
 
         self.sn = hashlib.md5(self.mac.encode()).hexdigest().upper()[:13]
 
-        self.device_id = hashlib.sha256(self.mac.encode()).hexdigest().upper()
-
+        # self.device_id = hashlib.sha256(self.mac.encode()).hexdigest().upper()
         # device_id = hashlib.sha256(self.sn.encode()).hexdigest().upper()
         # self.device_id2 = self.device_id
         # device_id2 = hashlib.sha256(self.mac.encode()).hexdigest().upper()
@@ -272,14 +275,7 @@ class EStalker_Live_Categories(Screen):
         self.liveStreamsData = []
 
         next_url = ""
-
-        self.unique_ref = 0
-
         self.sortby = "number"
-
-        for j in str(self.host):
-            value = ord(j)
-            self.unique_ref += value
 
         self.epg_downloaded_channels = set()
 
@@ -332,7 +328,6 @@ class EStalker_Live_Categories(Screen):
             "tv": self.favourite,
             "stop": self.favourite,
             "0": self.reset,
-            "menu": self.showHiddenList,
         }, -1)
 
         self["channel_actions"].setEnabled(False)
@@ -349,105 +344,6 @@ class EStalker_Live_Categories(Screen):
 
         self.setTitle(self.setup_title)
 
-    def getAllChannels(self):
-        if debugs:
-            print("*** getAllChannels ***")
-
-        # Step 1: Get all channels
-        getallchannelsurl = self.portal + "?type=itv&action=get_all_channels"
-        response = make_request(getallchannelsurl, method="POST", headers=self.headers, params=None, response_type="json")
-
-        if pythonVer == 3 and glob.hassuperscript:
-            response = clean_names(response)
-
-        filtered_keys = [
-            "id",
-            "name",
-            "number",
-            "status",
-            "tv_genre_id",
-            "xmltv_id",
-            "enable_tv_archive",
-            "logo",
-            "tv_archive_duration",
-            "archive",
-            "cmd"
-        ]
-
-        all_filtered_data = []
-
-        if response and "js" in response and "data" in response["js"]:
-            for item in response["js"]["data"]:
-                filtered_item = {}
-
-                for key in filtered_keys:
-                    if key in item:
-                        filtered_item[key] = item[key]
-
-                # Only add to list if name exists and is not None
-                if "name" in filtered_item and filtered_item["name"] is not None:
-                    all_filtered_data.append(filtered_item)
-
-        # Now sort (no need to handle None since they're excluded)
-        all_filtered_data = sorted(all_filtered_data, key=lambda x: x["name"].lower())
-
-        # Step 2: Get all adult category IDs
-        if glob.active_playlist["player_info"].get("showadult", False):
-            self.adult_category_ids = []
-
-            categories = glob.active_playlist["data"]["live_categories"]["js"]
-
-            for cat in categories:
-                title = cat.get("title", "")
-                cat_id = cat.get("id")
-                censored = cat.get("censored", 0)
-
-                if "adult" in title or "xxx" in title or censored == 1:
-                    self.adult_category_ids.append(cat_id)
-
-            # Step 3: Append paginated adult channels
-            if self.adult_category_ids:
-                for adult_category_id in self.adult_category_ids:
-
-                    page = 1
-                    total_items = None
-                    downloaded_items = 0
-
-                    while True:
-                        adulturl = "{0}?type=itv&action=get_ordered_list&genre={1}&force_ch_link_check=&fav=0&sortby={2}&hd=1&from_ch_id=0&JsHttpRequest=1-xml&p={3}".format(
-                            self.portal, adult_category_id, self.sortby, page
-                        )
-
-                        response = make_request(adulturl, method="POST", headers=self.headers, params=None, response_type="json")
-
-                        if not response or "js" not in response or "data" not in response["js"]:
-                            break
-
-                        if total_items is None:
-                            total_items = int(response["js"].get("total_items", 0))
-
-                        page_items = response["js"]["data"]
-                        if not page_items:
-                            break
-
-                        for item in page_items:
-                            filtered_item = {}
-
-                            for key in filtered_keys:
-                                if key in item:
-                                    filtered_item[key] = item[key]
-
-                            all_filtered_data.append(filtered_item)
-                            downloaded_items += 1
-
-                        if downloaded_items >= total_items:
-                            break
-
-                        page += 1
-
-        with open(os.path.join(dir_tmp, "allchannels.json"), "w") as f:
-            json.dump(all_filtered_data, f)
-
     def createSetup(self, data=None):
         if debugs:
             print("*** createSetup ***")
@@ -456,19 +352,21 @@ class EStalker_Live_Categories(Screen):
         self["x_description"].setText("")
 
         if self.level == 1:
-            self.sortby = "number"
             self.getCategories()
-            if not os.path.isfile(os.path.join(dir_tmp, "allchannels.json")):
-                self.getAllChannels()
 
         if self.level == 2:
-            self.epg_downloaded_channels.clear()
-            self.pages_downloaded = set()
-            self.short_epg_results = {}
-            self.current_page = None
             self.all_data = []
+            self.pages_downloaded = set()
+            self.current_page = 1
+            self.epg_downloaded_channels.clear()
+            self.short_epg_results = {}
 
-            self.getLevel2()
+            if self.chosen_category != "favourites":
+                response = self.downloadApiData(glob.nextlist[-1]["next_url"])
+            else:
+                response = ""
+            self.firstlist = True
+            self.getLevel2(response)
 
     def buildLists(self):
         if debugs:
@@ -479,10 +377,14 @@ class EStalker_Live_Categories(Screen):
         else:
             self.buildList2()
 
-        self.resetButtons()
-        self.selectionChanged()
+        if self.do_sort:
+            self.do_sort = False
+            self.applyPreviousSort()
 
-    # working
+        else:
+            self.resetButtons()
+            self.selectionChanged()
+
     def getCategories(self):
         if debugs:
             print("*** getCategories **")
@@ -509,231 +411,181 @@ class EStalker_Live_Categories(Screen):
         glob.originalChannelList1 = self.list1[:]
         self.buildLists()
 
-    def getLevel2(self):
+    def getLevel2(self, response):
         if debugs:
             print("*** getLevel2 ***")
 
         if self.chosen_category == "favourites":
             response = glob.active_playlist["player_info"].get("livefavourites", [])
-        else:
-            allchannels_path = os.path.join(dir_tmp, "allchannels.json")
-            if os.path.isfile(allchannels_path):
-                with open(allchannels_path, "r") as f:
-                    try:
-                        response = json.load(f)
-                    except:
-                        os.remove(allchannels_path)
-
-        if not response:
-            self.list2 = []
-            return
 
         self.list2 = []
-        category_id = glob.nextlist[-1]["next_url"]
 
-        if self.chosen_category != "favourites":
-            filteredresponse = []
+        if response:
+            for index, channel in enumerate(response):
+                if not isinstance(channel, dict) or not channel:
+                    self.list2.append([index, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", False, False, False, None, None])
+                    continue
 
-            if str(category_id) != "0" and str(category_id) != "*":
-                for item in response:
-                    if "tv_genre_id" in item and str(item["tv_genre_id"]) == str(category_id):
-                        filteredresponse.append(item)
+                stream_id = str(channel.get("id", ""))
 
-                response = filteredresponse
+                if not stream_id or stream_id == "0" or stream_id == "*":
+                    continue
 
-        for index, channel in enumerate(response):
-            stream_id = str(channel.get("id", ""))
+                name = str(channel.get("name", ""))
 
-            if not stream_id or stream_id == "0" or stream_id == "*":
-                continue
+                if not name or name == "None":
+                    continue
 
-            name = str(channel.get("name", ""))
+                if name and '\" ' in name:
+                    parts = name.split('\" ', 1)
+                    if len(parts) > 1:
+                        name = parts[0]
 
-            if not name or name == "None":
-                continue
+                number = str(channel.get("number", ""))
+                cmd = str(channel.get("cmd", ""))
+                hidden = False
+                stream_icon = str(channel.get("logo", ""))
 
-            if name and '\" ' in name:
-                parts = name.split('\" ', 1)
-                if len(parts) > 1:
-                    name = parts[0]
+                if stream_icon and stream_icon.startswith("http"):
+                    if stream_icon.startswith("https://vignette.wikia.nocookie.net/tvfanon6528"):
+                        if "scale-to-width-down" not in stream_icon:
+                            stream_icon = str(stream_icon) + "/revision/latest/scale-to-width-down/220"
+                else:
+                    stream_icon = ""
 
-            number = str(channel.get("number", ""))
-            cmd = str(channel.get("cmd", ""))
-            hidden = str(stream_id) in glob.active_playlist["player_info"]["channelshidden"]
-            stream_icon = str(channel.get("logo", ""))
+                epg_channel_id = str(channel.get("id", ""))
+                category_id = str(channel.get("tv_genre_id", ""))
+                service_ref = ""
+                next_url = ""
+                favourite = False
 
-            if stream_icon and stream_icon.startswith("http"):
-                if stream_icon.startswith("https://vignette.wikia.nocookie.net/tvfanon6528"):
-                    if "scale-to-width-down" not in stream_icon:
-                        stream_icon = str(stream_icon) + "/revision/latest/scale-to-width-down/220"
-            else:
-                stream_icon = ""
+                if "livefavourites" in glob.active_playlist["player_info"]:
+                    for fav in glob.active_playlist["player_info"]["livefavourites"]:
 
-            epg_channel_id = str(channel.get("id", ""))
-            category_id = str(channel.get("tv_genre_id", ""))
-            service_ref = ""
-            next_url = ""
-            favourite = False
+                        if str(stream_id) == str(fav["id"]):
+                            favourite = True
+                            break
+                else:
+                    glob.active_playlist["player_info"]["livefavourites"] = []
 
-            if "livefavourites" in glob.active_playlist["player_info"]:
-                for fav in glob.active_playlist["player_info"]["livefavourites"]:
+                """
+                0 = index
+                1 = name
+                2 = stream_id
+                3 = stream_icon
+                4 = epg_channel_id
+                5 = number
+                6 = category_id
+                7 = cmd
+                8 = service_ref
+                9 = nowtime
+                10 = nowTitle
+                11 = nowDescription
+                12 = nexttime
+                13 = nextTitle
+                14 = nextDesc
+                15 = next_url
+                16 = favourite
+                17 = watched
+                18 = hidden
+                19 = nowunixtime
+                20 = nextunixtime
+                """
 
-                    if str(stream_id) == str(fav["id"]):
-                        favourite = True
-                        break
-            else:
-                glob.active_playlist["player_info"]["livefavourites"] = []
+                self.list2.append([
+                    index,
+                    str(name),
+                    str(stream_id),
+                    str(stream_icon),
+                    str(epg_channel_id),
+                    str(number),
+                    str(category_id),
+                    str(cmd),
+                    str(service_ref),
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    str(next_url),
+                    favourite,
+                    False,
+                    hidden,
+                    None,
+                    None
+                ])
 
-            """
-            0 = index
-            1 = name
-            2 = stream_id
-            3 = stream_icon
-            4 = epg_channel_id
-            5 = number
-            6 = category_id
-            7 = cmd
-            8 = service_ref
-            9 = nowtime
-            10 = nowTitle
-            11 = nowDescription
-            12 = nexttime
-            13 = nextTitle
-            14 = nextDesc
-            15 = next_url
-            16 = favourite
-            17 = watched
-            18 = hidden
-            19 = nowunixtime
-            20 = nextunixtime
-            """
+        if self.firstlist:
+            glob.originalChannelList2 = self.list2[:]
+            self.firstlist = False
 
-            self.list2.append([index, str(name), str(stream_id), str(stream_icon), str(epg_channel_id), str(number), str(category_id), str(cmd), str(service_ref),
-                              "", "", "", "", "", "", str(next_url), favourite, False, hidden, None, None])
-        glob.originalChannelList2 = self.list2
         self.buildLists()
 
-    def getVisibleChannels(self):
+    def downloadApiData(self, url, page=1):
         if debugs:
-            print("*** getVisibleChannels ***")
+            print("*** downloadApiData ***", url)
 
-        current_index = self["main_list"].getIndex()
-        position = current_index + 1
-        page = (position - 1) // self.itemsperpage + 1
-        start = (page - 1) * self.itemsperpage
-        end = start + self.itemsperpage
-        channel_list = self.main_list if hasattr(self, 'main_list') else []
+        # Initialize storage for all data if it doesn't exist
+        if not hasattr(self, 'all_data') or not isinstance(self.all_data, list):
+            self.all_data = []
 
-        return [item[4] for item in channel_list[start:end] if len(item) > 4]
+        if "all_channels" not in url:
+            paged_url = self._updateUrlPage(url, self.current_page)
+        else:
+            paged_url = url
 
-    def handle_epg_done(self, epg_data):
-        if debugs:
-            print("*** handle_epg_done ***")
+        if paged_url in self.pages_downloaded:
+            return self.all_data
 
-        if not epg_data or "js" not in epg_data:
-            return
+        try:
+            data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
 
-        for event in epg_data["js"]:
-            ch = event.get("ch_id")
-            if ch not in self.short_epg_results:
-                self.short_epg_results[ch] = []
-            self.short_epg_results[ch].append(event)
+            if not data and self.retry is False:
+                self.retry = True
+                self.reauthorize()
+                data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
 
-        self.updateEPGListWithShortEPG()
+            if data:
+                if pythonVer == 3 and glob.hassuperscript:
+                    data = clean_names(data)
 
-    def updateEPGListWithShortEPG(self):
-        if debugs:
-            print("*** updateEPGListWithShortEPG ***")
+                js = data.get("js", {})
 
-        def extract_main_description(descr):
-            if not descr:
-                return ""
+                try:
+                    self.total_items = int(js.get("total_items", 0))
+                except (ValueError, TypeError):
+                    self.total_items = 0
+                current_page_data = js.get("data", [])
 
-            descr = descr.replace("\r\n", "\n")
-            match = re.search(r"Description:\s*(.+)", descr, re.DOTALL)
-            if not match:
-                return descr.strip()
+                if "all_channels" in url:
+                    return current_page_data
 
-            description = match.group(1)
+                if not hasattr(self, 'all_data') or not isinstance(self.all_data, list) or not self.all_data:
+                    self.all_data = [{} for _ in range(self.total_items)]
 
-            stop_labels = ["Credits:", "Director:", "Producer:", "Actor:", "Category:"]
-            for label in stop_labels:
-                index = description.find(label)
-                if index != -1:
-                    description = description[:index]
-                    break
+                # Calculate the position where this page's data should be stored
+                start_index = (self.current_page - 1) * 14
 
-            return description.strip()
+                # Insert the new data at the correct positions
+                for i, item in enumerate(current_page_data):
+                    self.all_data[start_index + i] = item
+                    self.pages_downloaded.add(paged_url)
 
-        now = int(time.time())
-        epgoffset_sec = 0
+                return self.all_data
 
-        for channel in self.list2:
-            epg_channel_id = channel[4]
+        except Exception as e:
+            print("Error downloading API data for page {}: {}".format(self.current_page, e))
+            return self.all_data
 
-            if epg_channel_id in self.short_epg_results:
-                events = self.short_epg_results[epg_channel_id]
-
-                for index, entry in enumerate(events):
-                    time_str = entry.get("time", "")
-                    time_to_str = entry.get("time_to", "")
-
-                    if time_str and time_to_str:
-                        try:
-                            dt_start = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
-                            dt_stop = datetime.strptime(time_to_str, "%Y-%m-%d %H:%M:%S")
-
-                            start = int(time.mktime(dt_start.timetuple())) + epgoffset_sec
-                            stop = int(time.mktime(dt_stop.timetuple())) + epgoffset_sec
-                        except Exception:
-                            start = 0
-                            stop = 0
-                    else:
-                        start = 0
-                        stop = 0
-
-                    next_entry = events[index + 1] if (index + 1) < len(events) else None
-
-                    if start < now and stop > now:
-                        channel[9] = str(time.strftime("%H:%M", time.localtime(start)))
-                        channel[10] = str(entry.get("name", "") or "")
-                        channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
-                        channel[19] = start
-
-                        if next_entry:
-                            next_start_str = next_entry.get("time", "")
-                            try:
-                                dt_next_start = datetime.strptime(next_start_str, "%Y-%m-%d %H:%M:%S")
-                                next_start = int(time.mktime(dt_next_start.timetuple())) + epgoffset_sec
-                            except Exception:
-                                next_start = 0
-
-                            channel[12] = str(time.strftime("%H:%M", time.localtime(next_start)) if next_start else "")
-                            channel[13] = str(next_entry.get("name", "") or "")
-                            channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
-                            channel[20] = next_start
-                        else:
-                            channel[12] = ""
-                            channel[13] = ""
-                            channel[14] = ""
-                            channel[20] = 0
-
-                        break
-
-        self.epglist = [
-            buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20])
-            for x in self.list2 if x[18] is False
-        ]
-
-        self["epg_list"].updateList(self.epglist)
-
-        instance = self["epg_list"].master.master.instance
-        instance.setSelectionEnable(0)
-
-        self.refreshEPGInfo()
+        self.session.openWithCallback(self.back, MessageBox, _("Server error or invalid link."), MessageBox.TYPE_ERROR, timeout=3)
+        return self.all_data
 
     def _updateUrlPage(self, url, page):
-        import re
+        """
+        if debugs:
+            print("*** _updateUrlPage ***", url, page)
+            """
 
         if "p=" in url:
             return re.sub(r"p=\d+", "p=" + str(page), url)
@@ -768,7 +620,7 @@ class EStalker_Live_Categories(Screen):
         if not self.token:
             return
 
-        play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+        play_token, status, blocked, returned_mac, returned_id = get_profile_data(
             portal=self.portal,
             mac=self.mac,
             token=self.token,
@@ -782,7 +634,7 @@ class EStalker_Live_Categories(Screen):
 
         if not account_info and isinstance(account_info, dict):
             if not returned_mac or not returned_id:
-                play_token, status, blocked, _, returned_mac, returned_id = get_profile_data(
+                play_token, status, blocked, returned_mac, returned_id = get_profile_data(
                     portal=self.portal,
                     mac=self.mac,
                     token=self.token,
@@ -810,12 +662,13 @@ class EStalker_Live_Categories(Screen):
         else:
             self.pre_list = []
 
-        self.main_list = [buildCategoryList(x[0], x[1], x[2], x[3], x[4]) for x in self.list1 if not x[3]]
+        if self.list1:
+            self.main_list = [buildCategoryList(x[0], x[1], x[2], x[3], x[4]) for x in self.list1 if not x[3]]
 
-        self["main_list"].setList(self.pre_list + self.main_list)
+            self["main_list"].setList(self.pre_list + self.main_list)
 
-        if self["main_list"].getCurrent() and glob.nextlist[-1]["index"] != 0:
-            self["main_list"].setIndex(glob.nextlist[-1]["index"])
+            if self["main_list"].getCurrent() and glob.nextlist[-1]["index"] != 0:
+                self["main_list"].setIndex(glob.nextlist[-1]["index"])
 
     def buildList2(self):
         if debugs:
@@ -873,20 +726,25 @@ class EStalker_Live_Categories(Screen):
             self["key_blue"].setText(_("Reset Search"))
             self["key_menu"].setText("")
         else:
-            self["key_blue"].setText(_("Search"))
-
             if not glob.nextlist[-1]["sort"]:
                 if self.level == 1:
                     self.sortText = _("Sort: A-Z")
                 else:
                     self.sortText = _("Sort: A-Z")
+
                 glob.nextlist[-1]["sort"] = self.sortText
 
             self["key_yellow"].setText(_(glob.nextlist[-1]["sort"]))
 
-            self["key_menu"].setText("+/-")
+            if self.level == 1:
+                self["key_blue"].setText(_("Search"))
+                self["key_menu"].setText("+/-")
+            else:
+                self["key_menu"].setText("")
+                self["key_blue"].setText(_("Search All"))
 
             if self.chosen_category == "favourites":
+                self["key_blue"].setText("")
                 self["key_menu"].setText("")
 
     def selectionChanged(self):
@@ -894,6 +752,7 @@ class EStalker_Live_Categories(Screen):
             print("*** selectionChanged ***")
 
         current_item = self["main_list"].getCurrent()
+
         if current_item:
             channel_title = current_item[0]
             current_index = self["main_list"].getIndex()
@@ -901,9 +760,14 @@ class EStalker_Live_Categories(Screen):
             glob.nextlist[-1]["index"] = current_index
 
             position = current_index + 1
+
             position_all = len(self.pre_list) + len(self.main_list) if self.level == 1 else len(self.main_list)
             page = (position - 1) // self.itemsperpage + 1
             page_all = (position_all + self.itemsperpage - 1) // self.itemsperpage
+
+            if self.level == 2 and self["key_blue"].getText() != _("Reset Search") and self.chosen_category != "favourites":
+                position_all = int(self.total_items)
+                page_all = (position_all + self.itemsperpage - 1) // self.itemsperpage
 
             self["page"].setText(_("Page: ") + "{}/{}".format(page, page_all))
             self["listposition"].setText("{}/{}".format(position, position_all))
@@ -924,7 +788,11 @@ class EStalker_Live_Categories(Screen):
                         self.timerimage_conn = self.timerimage.timeout.connect(self.downloadImage)
                     self.timerimage.start(250, True)
 
-                self.current_page = page
+                if self["key_blue"].getText() != _("Reset Search"):
+                    if not hasattr(self, 'current_page') or page != self.current_page:
+                        self.current_page = page
+                        response = self.downloadApiData(glob.nextlist[-1]["next_url"])
+                        self.getLevel2(response)
 
                 self.timerrefresh = eTimer()
 
@@ -947,6 +815,11 @@ class EStalker_Live_Categories(Screen):
             self.hideEPG()
 
     def updateDisplay(self):
+        """
+        if debugs:
+            print("*** updateDisplay ***")
+            """
+
         self.refreshEPGInfo()
 
         visible_channels = self.getVisibleChannels()
@@ -960,7 +833,20 @@ class EStalker_Live_Categories(Screen):
             self.epg_downloaded_channels.add(ch_id)
 
         from .getshortepg import EStalker_EPG_Short
-        EStalker_EPG_Short(channels_to_fetch, done_callback=self.handle_epg_done)
+        # EStalker_EPG_Short(channels_to_fetch, done_callback=self.handle_epg_done)
+
+        EStalker_EPG_Short(channels_to_fetch, done_callback=self.handle_epg_done, partial_callback=self.handle_epg_partial)
+
+    def handle_epg_partial(self, result):
+        for entry in result.get("js", []):
+            ch_id = str(entry.get("ch_id"))
+            if not ch_id:
+                continue
+            if ch_id not in self.short_epg_results:
+                self.short_epg_results[ch_id] = []
+            self.short_epg_results[ch_id].append(entry)
+
+        self.updateEPGListWithShortEPG()
 
     def downloadImage(self):
         """
@@ -1100,6 +986,81 @@ class EStalker_Live_Categories(Screen):
         self.selectedlist.setIndex(0)
         self.selectionChanged()
 
+    def applyPreviousSort(self):
+        if debugs:
+            print("*** applyPreviousSort ***")
+
+        if self.level == 1:
+            sortlist = [_("Sort: A-Z"), _("Sort: Z-A"), _("Sort: Original")]
+
+            # Determine the previous sort in the cycle
+            prev_sort = sortlist[0]  # default
+            for index, item in enumerate(sortlist):
+                if str(item) == str(self.sortText):
+                    prev_sort = sortlist[index - 1]  # previous in cycle (wraps around automatically)
+                    break
+
+            # Apply sort to list1
+            activelist = self.list1[:]
+
+            if prev_sort == _("Sort: A-Z"):
+                activelist.sort(key=lambda x: x[1].lower(), reverse=False)
+            elif prev_sort == _("Sort: Z-A"):
+                activelist.sort(key=lambda x: x[1].lower(), reverse=True)
+            elif prev_sort == _("Sort: Original"):
+                activelist.sort(key=lambda x: x[4], reverse=False)
+
+            # Always move "All" category to first position if present
+            for i, item in enumerate(activelist):
+                if item[1].lower() == _("all").lower():
+                    activelist.insert(0, activelist.pop(i))
+                    break
+
+            self.list1 = activelist
+
+        elif self.level == 2:
+            sortlist = [_("Sort: Original"), _("Sort: A-Z"), _("Sort: Added")]
+
+            prev_sort = sortlist[0]
+            for index, item in enumerate(sortlist):
+                if str(item) == str(self.sortText):
+                    prev_sort = sortlist[index - 1]
+                    break
+
+            if prev_sort == _("Sort: A-Z"):
+                self.sortby = "name"
+            elif prev_sort == _("Sort: Original"):
+                self.sortby = "number"
+            elif prev_sort == _("Sort: Added"):
+                self.sortby = "added"
+
+            # reset pagination and data
+            self.pages_downloaded = set()
+            self.current_page = 1
+            self.all_data = []
+
+            if self["main_list"].getCurrent():
+                self["main_list"].setIndex(0)
+
+            glob.nextlist[-1]["index"] = 0
+            glob.nextlist[-1]["sort"] = self["key_yellow"].getText()
+
+            self.selectionChanged()
+            self.current_page = 1
+
+            if self.list2:
+                glob.nextlist[-1]["next_url"] = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(
+                    self.portal, self.current_category, self.sortby
+                )
+                response = self.downloadApiData(glob.nextlist[-1]["next_url"])
+                self.getLevel2(response)
+
+        self.buildLists()
+
+        # Keep previous selection if possible
+        if self["main_list"].getCurrent() and glob.nextlist[-1]["index"] != 0:
+            self["main_list"].setIndex(glob.nextlist[-1]["index"])
+
     def sort(self):
         if debugs:
             print("*** sort ***")
@@ -1111,7 +1072,7 @@ class EStalker_Live_Categories(Screen):
         if self.level == 1:
             activelist = self.list1
 
-            sortlist = [_("Sort: Original"), _("Sort: A-Z"), _("Sort: Z-A")]
+            sortlist = [_("Sort: A-Z"), _("Sort: Z-A"), _("Sort: Original")]
 
             for index, item in enumerate(sortlist):
                 if str(item) == str(self.sortText):
@@ -1138,28 +1099,37 @@ class EStalker_Live_Categories(Screen):
 
             self.list1 = activelist
 
+            for i, item in enumerate(activelist):
+                if item[1].lower() == "all":
+                    activelist.insert(0, activelist.pop(i))
+                    break
+
             self.buildLists()
 
-        if self.level == 2:
-            activelist = self.list2
-            sortlist = [_("Sort: Original"), _("Sort: A-Z"), _("Sort: Z-A")]
+        elif self.level == 2:
+            # activelist = self.list2
+            sortlist = [_("Sort: Original"), _("Sort: A-Z"), _("Sort: Added")]
 
             for index, item in enumerate(sortlist):
                 if str(item) == str(self.sortText):
                     self.sortindex = index
                     break
 
+            if current_sort == _("Sort: A-Z"):
+                self.sortby = "name"
+            elif current_sort == _("Sort: Original"):
+                self.sortby = "number"
+            elif current_sort == _("Sort: Added"):
+                self.sortby = "added"
+
+            self.pages_downloaded = set()
+            self.current_page = 1
+            self.all_data = []
+
             if self["main_list"].getCurrent():
                 self["main_list"].setIndex(0)
 
             glob.nextlist[-1]["index"] = 0
-
-            if current_sort == _("Sort: A-Z"):
-                activelist.sort(key=lambda x: x[1].lower(), reverse=False)
-            elif current_sort == _("Sort: Z-A"):
-                activelist.sort(key=lambda x: x[1].lower(), reverse=True)
-            elif current_sort == _("Sort: Original"):
-                activelist.sort(key=lambda x: x[5], reverse=False)
 
             next_sort_type = next(islice(cycle(sortlist), self.sortindex + 1, None))
             self.sortText = str(next_sort_type)
@@ -1167,9 +1137,14 @@ class EStalker_Live_Categories(Screen):
             self["key_yellow"].setText(self.sortText)
             glob.nextlist[-1]["sort"] = self["key_yellow"].getText()
 
-            self.list2 = activelist
+            self.selectionChanged()
 
-            self.buildLists()
+            self.current_page = 1
+
+            if self.list2:
+                glob.nextlist[-1]["next_url"] = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(self.portal, self.current_category, self.sortby)
+                response = self.downloadApiData(glob.nextlist[-1]["next_url"])
+                self.getLevel2(response)
 
     def search(self, result=None):
         if debugs:
@@ -1180,56 +1155,82 @@ class EStalker_Live_Categories(Screen):
 
         current_filter = self["key_blue"].getText()
 
-        if current_filter == _("Reset Search"):
-            self.resetSearch()
+        if current_filter != _("Reset Search"):
+            self.session.openWithCallback(self.filterChannels, VirtualKeyBoard, title=_("Filter this category..."), text=getattr(self, "searchString", "") or "")
         else:
-            self.session.openWithCallback(self.filterChannels, VirtualKeyBoard, title=_("Filter this category..."), text=self.searchString)
+            self.resetSearch()
 
     def filterChannels(self, result=None):
         if debugs:
             print("*** filterChannels ***")
 
         activelist = []
+
         if result:
             self.filterresult = result
             glob.nextlist[-1]["filter"] = self.filterresult
 
-            activelist = self.list1 if self.level == 1 else self.list2
-
             self.searchString = result
-            activelist = [channel for channel in activelist if str(result).lower() in str(channel[1]).lower()]
 
-            if not activelist:
-                self.searchString = ""
-                self.session.openWithCallback(self.search, MessageBox, _("No results found."), type=MessageBox.TYPE_ERROR, timeout=5)
-            else:
-                if self.level == 1:
-                    self.list1 = activelist
+            if self.level == 1:
+                activelist = self.list1
+
+                activelist = [channel for channel in activelist if str(result).lower() in str(channel[1]).lower()]
+
+                if not activelist:
+                    self.searchString = ""
+                    self.session.openWithCallback(self.search, MessageBox, _("No results found."), type=MessageBox.TYPE_ERROR, timeout=5)
+
                 else:
-                    self.list2 = activelist
+                    self.list1 = activelist
 
-                self["key_blue"].setText(_("Reset Search"))
-                self["key_yellow"].setText("")
+                    self["key_blue"].setText(_("Reset Search"))
+                    self["key_yellow"].setText("")
+                    self.buildLists()
 
-                self.buildLists()
+            if self.level == 2 and self.list2:
+                self.all_data = []
+
+                if self["main_list"].getCurrent():
+                    self["main_list"].setIndex(0)
+
+                glob.nextlist[-1]["index"] = 0
+
+                paged_url = "{0}?type=itv&action=get_all_channels&sortby=name&JsHttpRequest=1-xml".format(self.portal)
+
+                response = self.downloadApiData(paged_url)
+
+                if response and isinstance(response, list):
+                    filtered_response = [ch for ch in response if result.lower() in ch.get('name', '').lower()]
+                    response = filtered_response
+
+                self.getLevel2(response)
+
+                if not self.list2:
+                    self.searchString = ""
+                    self.session.openWithCallback(self.search, MessageBox, _("No results found."), type=MessageBox.TYPE_ERROR, timeout=5)
+
+                else:
+                    self["key_blue"].setText(_("Reset Search"))
+                    self["key_yellow"].setText("")
 
     def resetSearch(self):
         if debugs:
-            print("*** resetSearch ***")
+            print("*** resetsearch ***")
 
-        self["key_blue"].setText(_("Search"))
         self["key_yellow"].setText(self.sortText)
+        self.do_sort = True
 
         if self.level == 1:
+            self["key_blue"].setText(_("Search"))
             activelist = glob.originalChannelList1[:]
             self.list1 = activelist
         else:
+            self["key_blue"].setText(_("Search All"))
             activelist = glob.originalChannelList2[:]
             self.list2 = activelist
-
         self.filterresult = ""
         glob.nextlist[-1]["filter"] = self.filterresult
-
         self.buildLists()
 
     def pinEntered(self, result=None):
@@ -1306,8 +1307,10 @@ class EStalker_Live_Categories(Screen):
             if self.level == 1:
                 if self.list1:
                     category_id = self["main_list"].getCurrent()[3]
+                    self.sortby = "number"
+                    self.current_category = category_id
 
-                    next_url = category_id
+                    next_url = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(self.portal, category_id, self.sortby)
 
                     self.chosen_category = ""
 
@@ -1320,7 +1323,6 @@ class EStalker_Live_Categories(Screen):
                     self["channel_actions"].setEnabled(True)
                     self["key_yellow"].setText(_("Sort: A-Z"))
                     self.sortText = _("Sort: A-Z")
-
                     glob.nextlist.append({"next_url": next_url, "index": 0, "level": self.level, "sort": self["key_yellow"].getText(), "filter": ""})
 
                     self.createSetup()
@@ -1376,15 +1378,17 @@ class EStalker_Live_Categories(Screen):
 
                     if self.session.nav.getCurrentlyPlayingServiceReference():
 
-                        def strip_play_token(url):
-                            return re.sub(r'([&?])(play_token|token)=[^&]*&?', lambda m: m.group(1) if not m.group(0).endswith('&') else '', url).rstrip('&?')
+                        def strip_query_from_ref(ref):
+                            if not ref:
+                                return ""
+                            s = ref.toString() if hasattr(ref, "toString") else str(ref)
+                            s = s.partition('?')[0]
+                            return s
 
-                        if strip_play_token(self.session.nav.getCurrentlyPlayingServiceReference().toString()) != strip_play_token(self.reference.toString()) and cfg.livepreview.value is True:
-                            try:
-                                self.session.nav.stopService()
-                            except Exception as e:
-                                print(e)
+                        current_ref = strip_query_from_ref(self.session.nav.getCurrentlyPlayingServiceReference())
+                        new_ref = strip_query_from_ref(self.reference)
 
+                        if current_ref != new_ref and cfg.livepreview.value is True:
                             try:
                                 self.session.nav.playService(self.reference)
                             except Exception as e:
@@ -1405,6 +1409,7 @@ class EStalker_Live_Categories(Screen):
                             else:
                                 self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
                             self["main_list"].setList(self.main_list)
+                            self.setIndex()
 
                         else:
                             for channel in self.list2:
@@ -1418,18 +1423,23 @@ class EStalker_Live_Categories(Screen):
                             else:
                                 self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
                             self["main_list"].setList(self.main_list)
+                            self.setIndex()
 
+                            """
                             try:
                                 self.session.nav.stopService()
                             except:
                                 pass
+                                """
 
                             self.session.openWithCallback(self.setIndex, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
                     else:
+                        """
                         try:
                             self.session.nav.stopService()
                         except:
                             pass
+                            """
 
                         self.session.openWithCallback(self.setIndex, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
 
@@ -1475,6 +1485,7 @@ class EStalker_Live_Categories(Screen):
             self["category_actions"].setEnabled(True)
             self["channel_actions"].setEnabled(False)
             self.sortText = _("Sort: A-Z")
+            print("*** self.sortText 13 ***", self.sortText)
 
             self.buildLists()
 
@@ -1488,13 +1499,13 @@ class EStalker_Live_Categories(Screen):
 
             if self.level == 1 or (self.level == 2 and self.chosen_category != "favourites"):
                 self.xmltvdownloaded = False
+                self.do_sort = True
                 self.session.openWithCallback(self.createSetup, hidden.EStalker_HiddenCategories, "live", current_list, self.level)
 
     def showfavourites(self):
         if debugs:
             print("*** show favourites ***")
 
-        # self.chosen_category = "favourites"
         self.showfav = True
         self.parentalCheck()
 
@@ -1581,8 +1592,10 @@ class EStalker_Live_Categories(Screen):
             self["progress"].show()
 
     def refreshEPGInfo(self):
+        """
         if debugs:
             print("*** refreshEPGInfo ***")
+            """
 
         current_item = self["epg_list"].getCurrent()
         if not current_item:
@@ -1741,6 +1754,7 @@ class EStalker_Live_Categories(Screen):
 
                             self["progress"].hide()
                             self["key_yellow"].setText("")
+                            print("*** yellow 12 ***", self["key_yellow"].getText())
                             self["key_blue"].setText("")
                             self["key_epg"].setText("")
 
@@ -1780,6 +1794,133 @@ class EStalker_Live_Categories(Screen):
                 self.session.nav.stopService()
             self.session.nav.playService(eServiceReference(current_playing_ref))
             glob.newPlayingServiceRefString = current_playing_ref
+
+    def getVisibleChannels(self):
+        """
+        if debugs:
+            print("*** getVisibleChannels ***")
+            """
+
+        current_index = self["main_list"].getIndex()
+        position = current_index + 1
+        page = (position - 1) // self.itemsperpage + 1
+        start = (page - 1) * self.itemsperpage
+        end = start + self.itemsperpage
+        channel_list = self.main_list if hasattr(self, 'main_list') else []
+
+        return [item[4] for item in channel_list[start:end] if len(item) > 4]
+
+    def handle_epg_done(self, epg_data):
+        """
+        if debugs:
+            print("*** handle_epg_done ***")
+            """
+
+        if not epg_data or "js" not in epg_data:
+            return
+
+        for entry in epg_data["js"]:
+            ch_id = str(entry.get("ch_id"))
+            if not ch_id:
+                continue
+            if ch_id not in self.short_epg_results:
+                self.short_epg_results[ch_id] = []
+            self.short_epg_results[ch_id].append(entry)
+
+        self.updateEPGListWithShortEPG()
+
+    def updateEPGListWithShortEPG(self):
+        """
+        if debugs:
+            print("*** updateEPGListWithShortEPG ***")
+            """
+
+        def extract_main_description(descr):
+            if not descr:
+                return ""
+
+            descr = descr.replace("\r\n", "\n")
+            match = re.search(r"Description:\s*(.+)", descr, re.DOTALL)
+            if not match:
+                return descr.strip()
+
+            description = match.group(1)
+
+            stop_labels = ["Credits:", "Director:", "Producer:", "Actor:", "Category:"]
+            for label in stop_labels:
+                index = description.find(label)
+                if index != -1:
+                    description = description[:index]
+                    break
+
+            return description.strip()
+
+        now = int(time.time())
+        epgoffset_sec = 0
+
+        for channel in self.list2:
+            epg_channel_id = channel[4]
+
+            if epg_channel_id in self.short_epg_results:
+                events = self.short_epg_results[epg_channel_id]
+
+                for index, entry in enumerate(events):
+                    time_str = entry.get("time", "")
+                    time_to_str = entry.get("time_to", "")
+
+                    if time_str and time_to_str:
+                        try:
+                            dt_start = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                            dt_stop = datetime.strptime(time_to_str, "%Y-%m-%d %H:%M:%S")
+
+                            start = int(time.mktime(dt_start.timetuple())) + epgoffset_sec
+                            stop = int(time.mktime(dt_stop.timetuple())) + epgoffset_sec
+                        except Exception:
+                            start = 0
+                            stop = 0
+                    else:
+                        start = 0
+                        stop = 0
+
+                    next_entry = events[index + 1] if (index + 1) < len(events) else None
+
+                    if start < now and stop > now:
+                        channel[9] = str(time.strftime("%H:%M", time.localtime(start)))
+                        channel[10] = str(entry.get("name", "") or "")
+                        channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
+                        channel[19] = start
+
+                        if next_entry:
+                            next_start_str = next_entry.get("time", "")
+                            try:
+                                dt_next_start = datetime.strptime(next_start_str, "%Y-%m-%d %H:%M:%S")
+                                next_start = int(time.mktime(dt_next_start.timetuple())) + epgoffset_sec
+                            except Exception:
+                                next_start = 0
+
+                            channel[12] = str(time.strftime("%H:%M", time.localtime(next_start)) if next_start else "")
+                            channel[13] = str(next_entry.get("name", "") or "")
+                            channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
+                            channel[20] = next_start
+                        else:
+                            channel[12] = ""
+                            channel[13] = ""
+                            channel[14] = ""
+                            channel[20] = 0
+
+                        break
+
+        self.epglist = [
+            buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20])
+            for x in self.list2 if x[18] is False
+        ]
+
+        self["epg_list"].updateList(self.epglist)
+
+        instance = self["epg_list"].master.master.instance
+        instance.setSelectionEnable(0)
+
+        self.refreshEPGInfo()
 
 
 def buildEPGListEntry(index, title, epgNowTime, epgNowTitle, epgNowDesc, epgNextTime, epgNextTitle, epgNextDesc, hidden, epgNowUnixTime, epgNextUnixTime):

@@ -899,7 +899,7 @@ class EStalker_UserInfo(Screen):
         self["t_activeconn"] = StaticText(_("Active Connections:"))
         self["t_maxconn"] = StaticText(_("Max Connections:"))
 
-        self["actions"] = ActionMap(["XStreamityActions"], {
+        self["actions"] = ActionMap(["EStalkerActions"], {
             "ok": self.quit,
             "cancel": self.quit,
             "red": self.quit,
