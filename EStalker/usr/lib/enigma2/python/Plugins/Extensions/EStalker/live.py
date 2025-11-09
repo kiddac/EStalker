@@ -23,9 +23,11 @@ except ImportError:
     HTTPConnection.debuglevel = 0
 
 try:
-    from urlparse import urlparse
+    # Python 3
+    from urllib.parse import urlparse, parse_qs, urlunparse
 except ImportError:
-    from urllib.parse import urlparse
+    # Python 2.7
+    from urlparse import urlparse, parse_qs, urlunparse
 
 
 # Third-party imports
@@ -396,7 +398,16 @@ class EStalker_Live_Categories(Screen):
         currentCategoryList = currentPlaylist.get("data", {}).get("live_categories", {}).get("js", [])
         currentHidden = set(currentPlaylist.get("player_info", {}).get("livehidden", []))
 
+        hiddenfavourites = "-1" in currentHidden
+        hiddenrecent = "-2" in currentHidden
         hidden = "0" in currentHidden
+
+        i = 0
+
+        self.prelist.extend([
+            [i, _("FAVOURITES"), "-1", hiddenfavourites, "-1"],
+            [i + 1, _("RECENTLY WATCHED"), "-2", hiddenrecent, "-2"],
+        ])
 
         for index, item in enumerate(currentCategoryList, start=len(self.prelist)):
             if not isinstance(item, dict):
@@ -417,6 +428,8 @@ class EStalker_Live_Categories(Screen):
 
         if self.chosen_category == "favourites":
             response = glob.active_playlist["player_info"].get("livefavourites", [])
+        elif self.chosen_category == "recents":
+            response = glob.active_playlist["player_info"].get("liverecents", [])
 
         self.list2 = []
 
@@ -461,7 +474,6 @@ class EStalker_Live_Categories(Screen):
 
                 if "livefavourites" in glob.active_playlist["player_info"]:
                     for fav in glob.active_playlist["player_info"]["livefavourites"]:
-
                         if str(stream_id) == str(fav["id"]):
                             favourite = True
                             break
@@ -737,14 +749,16 @@ class EStalker_Live_Categories(Screen):
             self["key_yellow"].setText(_(glob.nextlist[-1]["sort"]))
 
             if self.level == 1:
-                self["key_blue"].setText(_("Search"))
-                self["key_menu"].setText("+/-")
+                if self.chosen_category == "recents":
+                    self["key_blue"].setText(_("Delete"))
+                else:
+                    self["key_blue"].setText(_("Search"))
+                    self["key_menu"].setText("+/-")
             else:
                 self["key_menu"].setText("")
                 self["key_blue"].setText(_("Search All"))
 
-            if self.chosen_category == "favourites":
-                self["key_blue"].setText("")
+            if self.chosen_category == "favourites" or self.chosen_category == "recent":
                 self["key_menu"].setText("")
 
     def selectionChanged(self):
@@ -1155,10 +1169,40 @@ class EStalker_Live_Categories(Screen):
 
         current_filter = self["key_blue"].getText()
 
-        if current_filter != _("Reset Search"):
-            self.session.openWithCallback(self.filterChannels, VirtualKeyBoard, title=_("Filter this category..."), text=getattr(self, "searchString", "") or "")
-        else:
+        if current_filter == _("Reset Search"):
             self.resetSearch()
+
+        elif current_filter == _("Delete"):
+            self.deleteRecent()
+        else:
+            self.session.openWithCallback(self.filterChannels, VirtualKeyBoard, title=_("Filter this category..."), text=getattr(self, "searchString", "") or "")
+
+    def deleteRecent(self):
+        # print("*** deleterecent ***")
+        current_item = self["main_list"].getCurrent()
+        if current_item:
+            current_index = self["main_list"].getIndex()
+
+            with open(self.playlists_json, "r") as f:
+                try:
+                    self.playlists_all = json.load(f)
+                except Exception:
+                    os.remove(self.playlists_json)
+
+            del glob.active_playlist["player_info"]['liverecents'][current_index]
+            self.hideEPG()
+
+            if self.playlists_all:
+                for idx, playlists in enumerate(self.playlists_all):
+                    if playlists["playlist_info"]["domain"] == glob.active_playlist["playlist_info"]["domain"] and playlists["playlist_info"]["mac"] == glob.active_playlist["playlist_info"]["mac"]:
+                        self.playlists_all[idx] = glob.active_playlist
+                        break
+
+            with open(self.playlists_json, "w") as f:
+                json.dump(self.playlists_all, f)
+
+            del self.list2[current_index]
+            self.buildLists()
 
     def filterChannels(self, result=None):
         if debugs:
@@ -1311,11 +1355,16 @@ class EStalker_Live_Categories(Screen):
                     self.current_category = category_id
 
                     next_url = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(self.portal, category_id, self.sortby)
-
                     self.chosen_category = ""
 
                     if self.showfav:
                         self.chosen_category = "favourites"
+
+                    if category_id == "-1":
+                        self.chosen_category = "favourites"
+
+                    elif category_id == "-2":
+                        self.chosen_category = "recents"
 
                     self.level += 1
                     self["main_list"].setIndex(0)
@@ -1381,9 +1430,20 @@ class EStalker_Live_Categories(Screen):
                         def strip_query_from_ref(ref):
                             if not ref:
                                 return ""
+
                             s = ref.toString() if hasattr(ref, "toString") else str(ref)
-                            s = s.partition('?')[0]
-                            return s
+                            parsed = urlparse(s)
+                            query = parse_qs(parsed.query)
+
+                            # Keep only 'stream=' parameter if it exists
+                            if "stream" in query:
+                                new_query = "stream=" + query["stream"][0]
+                            else:
+                                new_query = ""
+
+                            # Rebuild the URL with only the stream param (if any)
+                            new_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', new_query, ''))
+                            return new_url
 
                         current_ref = strip_query_from_ref(self.session.nav.getCurrentlyPlayingServiceReference())
                         new_ref = strip_query_from_ref(self.reference)
@@ -1501,7 +1561,7 @@ class EStalker_Live_Categories(Screen):
             from . import hidden
             current_list = self.prelist + self.list1 if self.level == 1 else self.list2
 
-            if self.level == 1 or (self.level == 2 and self.chosen_category != "favourites"):
+            if self.level == 1 or (self.level == 2 and self.chosen_category != "favourites" and self.chosen_category != "recents"):
                 self.xmltvdownloaded = False
                 self.do_sort = True
                 self.session.openWithCallback(self.createSetup, hidden.EStalker_HiddenCategories, "live", current_list, self.level)

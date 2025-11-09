@@ -5,6 +5,7 @@ from __future__ import absolute_import, print_function
 from __future__ import division
 
 # Standard library imports
+import json
 import os
 import re
 import time
@@ -625,6 +626,59 @@ class EStalker_StreamPlayer(
             self["nowtime"].setText("")
             self["nexttime"].setText("")
 
+    def addRecentLiveList(self):
+        if glob.adultChannel:
+            return
+
+        name = glob.originalChannelList2[glob.currentchannellistindex][1]
+        id = glob.originalChannelList2[glob.currentchannellistindex][2]
+        logo = glob.originalChannelList2[glob.currentchannellistindex][3]
+        xmltv_id = glob.originalChannelList2[glob.currentchannellistindex][4]
+        number = glob.originalChannelList2[glob.currentchannellistindex][5]
+        tv_genre_id = glob.originalChannelList2[glob.currentchannellistindex][6]
+        cmd = glob.originalChannelList2[glob.currentchannellistindex][7]
+
+        # Remove existing entry if stream_id matches
+        recent_entries = glob.active_playlist["player_info"]["liverecents"]
+        recent_entries[:] = [recent for recent in recent_entries if recent["id"] != id]
+
+        new_recent = {
+            "name": name,
+            "id": id,
+            "logo": logo,
+            "xmltv_id": xmltv_id,
+            "number": number,
+            "tv_genre_id": tv_genre_id,
+            "cmd": cmd
+        }
+
+        recent_entries.insert(0, new_recent)
+
+        if len(recent_entries) >= 28:
+            recent_entries.pop()
+
+        if os.path.exists(playlists_json):
+            with open(playlists_json, "r") as f:
+                try:
+                    self.playlists_all = json.load(f)
+                except:
+                    os.remove(playlists_json)
+
+            if self.playlists_all:
+                """
+                for index, playlist in enumerate(self.playlists_all):
+                    if playlist["playlist_info"] == glob.active_playlist["playlist_info"]:
+                        self.playlists_all[index] = glob.active_playlist
+                        break
+                        """
+
+                for playlists in self.playlists_all:
+                    if (playlists["playlist_info"]["host"] == glob.active_playlist["playlist_info"]["host"] and playlists["playlist_info"]["mac"] == glob.active_playlist["playlist_info"]["mac"]):
+                        playlists.update(glob.active_playlist)
+                        break
+        with open(playlists_json, "w") as f:
+            json.dump(self.playlists_all, f)
+
     def playStream(self, servicetype, streamurl):
         if debugs:
             print("*** playStream ***")
@@ -649,10 +703,20 @@ class EStalker_StreamPlayer(
         self.reference = eServiceReference(int(servicetype), 0, str(streamurl))
         self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
-        try:
-            self.session.nav.playService(self.reference)
-        except Exception as e:
-            print(e)
+        currently_playing_ref = self.session.nav.getCurrentlyPlayingServiceReference()
+
+        if currently_playing_ref and self.reference:
+
+            if self.reference.toString() != currently_playing_ref.toString():
+                try:
+                    self.session.nav.playService(self.reference)
+                except Exception as e:
+                    print(e)
+        else:
+            try:
+                self.session.nav.playService(self.reference)
+            except Exception as e:
+                print(e)
 
         currently_playing_ref = self.session.nav.getCurrentlyPlayingServiceReference()
 
@@ -669,12 +733,21 @@ class EStalker_StreamPlayer(
                 self.timerimage_conn = self.timerimage.timeout.connect(self.downloadImage)
             self.timerimage.start(250, True)
 
+        # clear cache
         self.timerCache = eTimer()
         try:
             self.timerCache.callback.append(clear_caches)
         except:
             self.timerCache_conn = self.timerCache.timeout.connect(clear_caches)
-        self.timerCache.start(5 * 60 * 1000, False)
+        self.timerCache.start(5 * 60 * 1000, False)  # 5 mins
+
+        # add to recently watched
+        self.timerRecent = eTimer()
+        try:
+            self.timerRecent.callback.append(self.addRecentLiveList)
+        except:
+            self.timerRecent_conn = self.timerRecent.timeout.connect(self.addRecentLiveList)
+        self.timerRecent.start(2 * 60 * 1000, True)  # 5 mins
 
         self.originalservicetype = self.servicetype
 
