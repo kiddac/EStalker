@@ -1516,7 +1516,6 @@ class EStalker_Series_Categories(Screen):
         if debugs:
             print("*** processTMDBDetails ***")
 
-        self.repeatcount = 0
         response = ""
 
         self.tmdbresults = {}
@@ -1623,8 +1622,12 @@ class EStalker_Series_Categories(Screen):
                             else:
                                 self.tmdbresults["cover_big"] = "http://image.tmdb.org/t/p/w400" + str(self.tmdbdetails["poster_path"])
 
+                        if "cover_big" in self.tmdbresults and self.tmdbresults["cover_big"]:
+                            self.storedcover = self.tmdbresults["cover_big"]
+
                         if "backdrop_path" in self.tmdbdetails and self.tmdbdetails["backdrop_path"]:
                             self.tmdbresults["backdrop_path"] = "http://image.tmdb.org/t/p/w1280" + str(self.tmdbdetails["backdrop_path"])
+                            self.storedbackdrop = self.tmdbresults["backdrop_path"]
 
                         if "images" in self.tmdbdetails and "logos" in self.tmdbdetails["images"]:
                             logos = self.tmdbdetails["images"]["logos"]
@@ -1637,15 +1640,9 @@ class EStalker_Series_Categories(Screen):
                                     self.tmdbresults["logo"] = "http://image.tmdb.org/t/p/w300" + str(logo_path)
                                 else:
                                     self.tmdbresults["logo"] = "http://image.tmdb.org/t/p/w500" + str(logo_path)
-
-                        if self.tmdbresults["cover_big"]:
-                            self.storedcover = self.tmdbresults["cover_big"]
-
-                        if self.tmdbresults["backdrop_path"]:
-                            self.storedbackdrop = self.tmdbresults["backdrop_path"]
-
-                        if self.tmdbresults["logo"]:
-                            self.storedlogo = self.tmdbresults["logo"]
+                                self.storedlogo = self.tmdbresults["logo"]
+                            else:
+                                self.storedlogo = ""
 
                     if self.level != 2:
                         if "air_date" in self.tmdbdetails and self.tmdbdetails["air_date"]:
@@ -1696,6 +1693,7 @@ class EStalker_Series_Categories(Screen):
                     if "tagline" in self.tmdbdetails and self.tmdbdetails["tagline"].strip():
                         self.tmdbresults["tagline"] = str(self.tmdbdetails["tagline"])
 
+                    self.repeatcount = 0
                     self.displayTMDB()
 
     def displayTMDB(self):
@@ -2967,7 +2965,9 @@ class EStalker_Series_Categories(Screen):
         # self["vod_cover"].hide()
         # self["vod_logo"].hide()
         # self["vod_backdrop"].hide()
-        self["main_title"].setText("")
+        if self.level == 3 or self.level == 4:
+            self["main_title"].setText("")
+
         self["x_title"].setText("")
         self["x_description"].setText("")
         self["tagline"].setText("")

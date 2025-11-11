@@ -1811,7 +1811,7 @@ class EStalker_Vod_Categories(Screen):
         self["vod_cover"].hide()
         self["vod_logo"].hide()
         self["vod_backdrop"].hide()
-        self["main_title"].setText("")
+        # self["main_title"].setText("")
         self["x_title"].setText("")
         self["x_description"].setText("")
         self["tagline"].setText("")
