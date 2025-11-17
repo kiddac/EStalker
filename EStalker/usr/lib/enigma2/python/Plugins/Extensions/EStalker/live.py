@@ -1403,7 +1403,6 @@ class EStalker_Live_Categories(Screen):
 
                             if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
                                 next_url = str(response["js"]["cmd"])
-
                         else:
                             next_url = command
 
@@ -1425,27 +1424,46 @@ class EStalker_Live_Categories(Screen):
                     self.reference = eServiceReference(int(streamtype), 0, str(next_url))
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
-                    if self.session.nav.getCurrentlyPlayingServiceReference():
+                    def strip_query_from_ref(ref):
+                        if not ref:
+                            return ""
 
-                        def strip_query_from_ref(ref):
-                            if not ref:
-                                return ""
+                        s = ref.toString() if hasattr(ref, "toString") else str(ref)
 
-                            s = ref.toString() if hasattr(ref, "toString") else str(ref)
-                            parsed = urlparse(s)
-                            query = parse_qs(parsed.query)
+                        # Only decode if it's bytes (Python 2 compatibility)
+                        if isinstance(s, bytes):
+                            try:
+                                s = s.decode("utf-8")
+                            except:
+                                s = s.decode("latin-1", "ignore")
 
-                            # Keep only 'stream=' parameter if it exists
-                            if "stream" in query:
-                                new_query = "stream=" + query["stream"][0]
-                            else:
-                                new_query = ""
+                        parsed = urlparse(s)
+                        query = parse_qs(parsed.query)
 
-                            # Rebuild the URL with only the stream param (if any)
-                            new_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', new_query, ''))
-                            return new_url
+                        if "stream" in query:
+                            new_query = "stream=" + query["stream"][0]
+                        else:
+                            new_query = ""
 
-                        current_ref = strip_query_from_ref(self.session.nav.getCurrentlyPlayingServiceReference())
+                        return urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', new_query, ''))
+
+                    def update_channel_icons_and_list():
+                        for channel in self.list2:
+                            channel[17] = (channel[2] == stream_id)
+
+                        if self.chosen_category == "favourites":
+                            self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[16] is True]
+                        else:
+                            self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
+
+                        self["main_list"].setList(self.main_list)
+                        self.setIndex()
+                    # ============================================================
+
+                    playing = self.session.nav.getCurrentlyPlayingServiceReference()
+
+                    if playing:
+                        current_ref = strip_query_from_ref(playing)
                         new_ref = strip_query_from_ref(self.reference)
 
                         if current_ref != new_ref and cfg.livepreview.value is True:
@@ -1454,54 +1472,33 @@ class EStalker_Live_Categories(Screen):
                             except Exception as e:
                                 print(e)
 
-                            if self.session.nav.getCurrentlyPlayingServiceReference():
-                                glob.newPlayingServiceRef = self.session.nav.getCurrentlyPlayingServiceReference()
-                                glob.newPlayingServiceRefString = glob.newPlayingServiceRef.toString()
+                            nowref = self.session.nav.getCurrentlyPlayingServiceReference()
+                            if nowref:
+                                glob.newPlayingServiceRef = nowref
+                                glob.newPlayingServiceRefString = nowref.toString()
 
-                            for channel in self.list2:
-                                if channel[2] == stream_id:
-                                    channel[17] = True  # set watching icon
-                                else:
-                                    channel[17] = False
-
-                            if self.chosen_category == "favourites":
-                                self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[16] is True]
-                            else:
-                                self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
-                            self["main_list"].setList(self.main_list)
-                            self.setIndex()
+                            update_channel_icons_and_list()
 
                         else:
-                            for channel in self.list2:
-                                if channel[2] == stream_id:
-                                    channel[17] = True  # set watching icon
-                                else:
-                                    channel[17] = False
-
-                            if self.chosen_category == "favourites":
-                                self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[16] is True]
-                            else:
-                                self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
-                            self["main_list"].setList(self.main_list)
-                            self.setIndex()
-
-                            """
-                            try:
-                                self.session.nav.stopService()
-                            except:
-                                pass
-                                """
-
+                            update_channel_icons_and_list()
                             self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
                     else:
-                        """
-                        try:
-                            self.session.nav.stopService()
-                        except:
-                            pass
-                            """
+                        if cfg.livepreview.value is True:
+                            try:
+                                self.session.nav.playService(self.reference)
+                            except Exception as e:
+                                print(e)
 
-                        self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
+                            nowref = self.session.nav.getCurrentlyPlayingServiceReference()
+                            if nowref:
+                                glob.newPlayingServiceRef = nowref
+                                glob.newPlayingServiceRefString = nowref.toString()
+
+                            update_channel_icons_and_list()
+
+                        else:
+                            update_channel_icons_and_list()
+                            self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
 
                     self["category_actions"].setEnabled(False)
 

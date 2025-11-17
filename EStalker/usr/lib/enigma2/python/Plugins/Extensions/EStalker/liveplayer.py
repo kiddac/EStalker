@@ -14,10 +14,10 @@ from itertools import cycle, islice
 import hashlib
 
 try:
-    from urlparse import urlparse
+    from urlparse import urlparse, parse_qs, urlunparse
     from urllib import unquote
 except ImportError:
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, parse_qs, urlunparse
     from urllib.parse import unquote
 
 try:
@@ -703,26 +703,52 @@ class EStalker_StreamPlayer(
         self.reference = eServiceReference(int(servicetype), 0, str(streamurl))
         self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
-        currently_playing_ref = self.session.nav.getCurrentlyPlayingServiceReference()
+        def strip_query_from_ref(ref):
+            if not ref:
+                return ""
 
-        if currently_playing_ref and self.reference:
+            s = ref.toString() if hasattr(ref, "toString") else str(ref)
 
-            if self.reference.toString() != currently_playing_ref.toString():
+            # Only decode if it's bytes (Python 2 compatibility)
+            if isinstance(s, bytes):
+                try:
+                    s = s.decode("utf-8")
+                except:
+                    s = s.decode("latin-1", "ignore")
+
+            parsed = urlparse(s)
+            query = parse_qs(parsed.query)
+
+            if "stream" in query:
+                new_query = "stream=" + query["stream"][0]
+            else:
+                new_query = ""
+
+            return urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', new_query, ''))
+
+        playing = self.session.nav.getCurrentlyPlayingServiceReference()
+
+        if playing:
+            current_ref = strip_query_from_ref(playing)
+            new_ref = strip_query_from_ref(self.reference)
+
+            if current_ref != new_ref and cfg.livepreview.value is True:
                 try:
                     self.session.nav.playService(self.reference)
                 except Exception as e:
                     print(e)
+
         else:
-            try:
-                self.session.nav.playService(self.reference)
-            except Exception as e:
-                print(e)
+            if cfg.livepreview.value is True:
+                try:
+                    self.session.nav.playService(self.reference)
+                except Exception as e:
+                    print(e)
 
-        currently_playing_ref = self.session.nav.getCurrentlyPlayingServiceReference()
-
-        if currently_playing_ref:
-            glob.newPlayingServiceRef = currently_playing_ref
-            glob.newPlayingServiceRefString = currently_playing_ref.toString()
+        nowref = self.session.nav.getCurrentlyPlayingServiceReference()
+        if nowref:
+            glob.newPlayingServiceRef = nowref
+            glob.newPlayingServiceRefString = nowref.toString()
 
         if cfg.infobarpicons.value is True:
             self.timerimage = eTimer()
