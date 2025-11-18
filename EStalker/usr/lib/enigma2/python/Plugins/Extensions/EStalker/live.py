@@ -1004,7 +1004,7 @@ class EStalker_Live_Categories(Screen):
         if debugs:
             print("*** applyPreviousSort ***")
 
-        if self.level == 1:
+        if self.level == 1 and self.list1:
             sortlist = [_("Sort: A-Z"), _("Sort: Z-A"), _("Sort: Original")]
 
             # Determine the previous sort in the cycle
@@ -1508,6 +1508,29 @@ class EStalker_Live_Categories(Screen):
     def reload(self):
         self.setIndex()
         self.selectionChanged()
+        self.setWatchingIcon(glob.currentchannellistindex)
+
+    def setWatchingIcon(self, idx):
+        if self["main_list"].getCurrent() and self.list2:
+            # Clear all watching flags
+            for channel in self.list2:
+                channel[17] = False
+
+            # Set watching for currently active channel index
+            try:
+                self.list2[idx][17] = True
+            except:
+                pass
+
+            if self.chosen_category == "favourites":
+                self.main_list = [
+                    buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6])for x in self.list2 if x[16] is True
+                ]
+            else:
+                self.main_list = [
+                    buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
+
+            self["main_list"].setList(self.main_list)
 
     def setIndex(self, data=None):
         """

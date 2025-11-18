@@ -732,18 +732,16 @@ class EStalker_StreamPlayer(
             current_ref = strip_query_from_ref(playing)
             new_ref = strip_query_from_ref(self.reference)
 
-            if current_ref != new_ref and cfg.livepreview.value is True:
+            if current_ref != new_ref:
                 try:
                     self.session.nav.playService(self.reference)
                 except Exception as e:
                     print(e)
-
         else:
-            if cfg.livepreview.value is True:
-                try:
-                    self.session.nav.playService(self.reference)
-                except Exception as e:
-                    print(e)
+            try:
+                self.session.nav.playService(self.reference)
+            except Exception as e:
+                print(e)
 
         nowref = self.session.nav.getCurrentlyPlayingServiceReference()
         if nowref:
@@ -1356,64 +1354,65 @@ class EStalker_StreamPlayer(
         now = int(time.time())
         epgoffset_sec = 0
 
-        for channel in self.list2:
-            epg_channel_id = channel[4]
+        if self.list2:
+            for channel in self.list2:
+                epg_channel_id = channel[4]
 
-            if epg_channel_id in self.short_epg_results:
-                events = self.short_epg_results[epg_channel_id]
+                if epg_channel_id in self.short_epg_results:
+                    events = self.short_epg_results[epg_channel_id]
 
-                for index, entry in enumerate(events):
-                    time_str = entry.get("time", "")
-                    time_to_str = entry.get("time_to", "")
+                    for index, entry in enumerate(events):
+                        time_str = entry.get("time", "")
+                        time_to_str = entry.get("time_to", "")
 
-                    if time_str and time_to_str:
-                        try:
-                            dt_start = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
-                            dt_stop = datetime.strptime(time_to_str, "%Y-%m-%d %H:%M:%S")
+                        if time_str and time_to_str:
+                            try:
+                                dt_start = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                                dt_stop = datetime.strptime(time_to_str, "%Y-%m-%d %H:%M:%S")
 
-                            start = int(time.mktime(dt_start.timetuple())) + epgoffset_sec
-                            stop = int(time.mktime(dt_stop.timetuple())) + epgoffset_sec
-                        except Exception:
+                                start = int(time.mktime(dt_start.timetuple())) + epgoffset_sec
+                                stop = int(time.mktime(dt_stop.timetuple())) + epgoffset_sec
+                            except Exception:
+                                start = 0
+                                stop = 0
+                        else:
                             start = 0
                             stop = 0
-                    else:
-                        start = 0
-                        stop = 0
 
-                    next_entry = events[index + 1] if (index + 1) < len(events) else None
+                        next_entry = events[index + 1] if (index + 1) < len(events) else None
 
-                    if start < now and stop > now:
-                        channel[9] = str(time.strftime("%H:%M", time.localtime(start)))
-                        channel[10] = str(entry.get("name", "") or "")
-                        channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
-                        channel[19] = start
+                        if start < now and stop > now:
+                            channel[9] = str(time.strftime("%H:%M", time.localtime(start)))
+                            channel[10] = str(entry.get("name", "") or "")
+                            channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
+                            channel[19] = start
 
-                        if next_entry:
-                            next_start_str = next_entry.get("time", "")
-                            try:
-                                dt_next_start = datetime.strptime(next_start_str, "%Y-%m-%d %H:%M:%S")
-                                next_start = int(time.mktime(dt_next_start.timetuple())) + epgoffset_sec
-                            except Exception:
-                                next_start = 0
+                            if next_entry:
+                                next_start_str = next_entry.get("time", "")
+                                try:
+                                    dt_next_start = datetime.strptime(next_start_str, "%Y-%m-%d %H:%M:%S")
+                                    next_start = int(time.mktime(dt_next_start.timetuple())) + epgoffset_sec
+                                except Exception:
+                                    next_start = 0
 
-                            channel[12] = str(time.strftime("%H:%M", time.localtime(next_start)) if next_start else "")
-                            channel[13] = str(next_entry.get("name", "") or "")
-                            channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
-                            channel[20] = next_start
-                        else:
-                            channel[12] = ""
-                            channel[13] = ""
-                            channel[14] = ""
-                            channel[20] = 0
+                                channel[12] = str(time.strftime("%H:%M", time.localtime(next_start)) if next_start else "")
+                                channel[13] = str(next_entry.get("name", "") or "")
+                                channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
+                                channel[20] = next_start
+                            else:
+                                channel[12] = ""
+                                channel[13] = ""
+                                channel[14] = ""
+                                channel[20] = 0
 
-                        break
+                            break
 
-        self.epglist = [
-            buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20])
-            for x in self.list2 if x[18] is False
-        ]
+            self.epglist = [
+                buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20])
+                for x in self.list2 if x[18] is False
+            ]
 
-        glob.currentepglist = self.epglist[:]
+            glob.currentepglist = self.epglist[:]
 
 
 def buildEPGListEntry(index, title, epgNowTime, epgNowTitle, epgNowDesc, epgNextTime, epgNextTitle, epgNextDesc, hidden, epgNowUnixTime, epgNextUnixTime):
