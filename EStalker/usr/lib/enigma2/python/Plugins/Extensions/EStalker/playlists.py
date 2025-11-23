@@ -695,6 +695,9 @@ class EStalker_Playlists(Screen):
         self.drawList = [self.buildListEntry(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12]) for x in self.list]
         self["playlists"].setList(self.drawList)
 
+        if len(self.list) == 1 and cfg.skipplaylistsscreen.value:
+            self.getStreamTypes()
+
     def buildListEntry(self, index, domain, url, expires, message, mac, token, portal_version, portal_label, valid, status, status_label, portalpath):
 
         if not valid:
@@ -794,8 +797,7 @@ class EStalker_Playlists(Screen):
     def getStreamTypes(self):
         if glob.active_playlist["playlist_info"]["valid"] is True:
             from . import menu
-            self.session.open(menu.EStalker_Menu)
-            self.checkoneplaylist()
+            self.session.openWithCallback(self.checkoneplaylist, menu.EStalker_Menu)
 
     def checkoneplaylist(self):
         if len(self.list) == 1 and cfg.skipplaylistsscreen.value is True:
