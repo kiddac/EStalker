@@ -660,6 +660,13 @@ class EStalker_Playlists(Screen):
             expires = str(expiry)
             portal = playlist["playlist_info"].get("portal", "")
 
+            alias = playlist["playlist_info"].get("alias", "").strip()
+
+            if alias:
+                display_name = alias
+            else:
+                display_name = mac
+
             if "stalker" in portal:
                 portalpath = "stalker_portal"
             else:
@@ -689,7 +696,7 @@ class EStalker_Playlists(Screen):
 
             portal_version = playlist["playlist_info"].get("version", "")
 
-            self.list.append([index, domain, url, expires, message, mac, token, portal_version, portal_label, valid, status, status_label, portalpath])
+            self.list.append([index, domain, url, expires, message, display_name, token, portal_version, portal_label, valid, status, status_label, portalpath])
             index += 1
 
         self.drawList = [self.buildListEntry(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12]) for x in self.list]

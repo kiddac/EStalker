@@ -39,6 +39,37 @@ def process_files():
     collecting = False
     raw_lines_preserved = []
 
+    def _parse_mac_alias(line):
+        if not line:
+            return (None, "", False)
+
+        s = line.strip()
+        if not s:
+            return (None, "", False)
+
+        is_commented = False
+        if s.startswith("#"):
+            is_commented = True
+            s = s.lstrip("#").strip()
+            if not s:
+                return (None, "", True)
+
+        if "#" in s:
+            left, right = s.split("#", 1)
+            mac_part = left.strip()
+            alias_part = right.strip()
+        else:
+            mac_part = s.strip()
+            alias_part = ""
+
+        if not mac_part:
+            return (None, "", is_commented)
+
+        if not mac_regex.match(mac_part):
+            return (None, "", is_commented)
+
+        return (mac_part.upper(), alias_part, is_commented)
+
     for raw_line in lines:
         raw_lines_preserved.append(raw_line)
         stripped_line = raw_line.strip()
@@ -69,15 +100,26 @@ def process_files():
             current_url = cleaned_url
             collecting = True
 
-        elif collecting and current_url is not None and mac_regex.match(stripped_line):
-            if current_url not in grouped:
-                grouped[current_url] = []
+        elif collecting and current_url is not None:
+            mac_value, alias_value, is_commented = _parse_mac_alias(stripped_line)
 
-            grouped[current_url].append(stripped_line.upper())
+            # Commented MAC lines are allowed (may include alias) but stay disabled
+            if mac_value and not is_commented:
+                if current_url not in grouped:
+                    grouped[current_url] = []
 
-    # Deduplicate MACs per URL
+                grouped[current_url].append((mac_value, alias_value))
+
+    # Deduplicate MACs per URL (keep first alias seen; if first is blank and later has one, fill it)
     for key in grouped:
-        grouped[key] = list(OrderedDict.fromkeys(grouped[key]))
+        dedup = OrderedDict()
+        for mac_value, alias_value in grouped[key]:
+            if mac_value not in dedup:
+                dedup[mac_value] = alias_value
+            else:
+                if (not dedup[mac_value]) and alias_value:
+                    dedup[mac_value] = alias_value
+        grouped[key] = [(m, dedup[m]) for m in dedup]
 
     # Write original lines back to file (preserving comments and formatting)
     try:
@@ -134,7 +176,8 @@ def process_files():
 
         host = protocol + domain + (":" + str(port) if port else "")
 
-        for mac in mac_lines:
+        for mac, alias in mac_lines:
+            alias = (alias or "").strip()
             mac_stripped = mac.upper()
             key = (domain, str(port), mac_stripped)
             if key in valid_keys:
@@ -152,6 +195,9 @@ def process_files():
                 # Add path_prefix if missing
                 existing_entry["playlist_info"]["path_prefix"] = path_prefix
 
+                # Always sync alias with the playlist file (clears it if removed)
+                existing_entry["playlist_info"]["alias"] = alias or ""
+
                 playlists_grouped.append(existing_entry)
 
             else:
@@ -164,6 +210,7 @@ def process_files():
                         "port": port,
                         "host": host,
                         "mac": mac_stripped,
+                        "alias": alias or "",
                         "path_prefix": path_prefix,
                         "token": "",
                         "token_random": "",

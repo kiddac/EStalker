@@ -87,6 +87,7 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         self.serverCfg = NoSave(ConfigText(fixed_size=False))
         self.portCfg = NoSave(ConfigText(fixed_size=False))
         self.macCfg = NoSave(ConfigText(default="", fixed_size=False))
+        self.aliasCfg = NoSave(ConfigText(default="", fixed_size=False))
         self.createSetup()
 
     def createSetup(self):
@@ -98,10 +99,18 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         self.list.append(getConfigListEntry(_("Server URL: i.e. domain.xyz"), self.serverCfg))
         self.list.append(getConfigListEntry(_("Port:"), self.portCfg))
         self.list.append(getConfigListEntry(_("MAC Address (12 hex chars, no colons):"), self.macCfg))
+        self.list.append(getConfigListEntry(_("Alias (optional):"), self.aliasCfg))
 
         # Show added MAC addresses
-        for i, mac in enumerate(self.mac_addresses):
-            self.list.append(getConfigListEntry(_("Added MAC #%d:") % (i + 1), NoSave(ConfigText(default=mac, fixed_size=False))))
+        for i, item in enumerate(self.mac_addresses):
+            mac = item.get("mac", "")
+            alias = item.get("alias", "")
+            if alias:
+                shown = "{} # {}".format(mac, alias)
+            else:
+                shown = mac
+
+            self.list.append(getConfigListEntry(_("Added MAC #%d:") % (i + 1), NoSave(ConfigText(default=shown, fixed_size=False))))
 
         self["config"].list = self.list
         self["config"].l.setList(self.list)
@@ -115,11 +124,19 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         currConfig = self["config"].getCurrent()
         if currConfig and currConfig[1] == self.macCfg:
             mac = self.macCfg.value.strip()
+            alias = self.aliasCfg.value.strip()
+
             if mac:
                 if self.validate_mac(mac):
                     formatted_mac = ":".join(mac[i:i + 2] for i in range(0, 12, 2)).upper()
-                    self.mac_addresses.append(formatted_mac)
+
+                    self.mac_addresses.append({
+                        "mac": formatted_mac,
+                        "alias": alias
+                    })
+
                     self.macCfg.setValue("")
+                    self.aliasCfg.setValue("")
                     self.createSetup()
                     self.session.open(MessageBox, _("MAC address added"), MessageBox.TYPE_INFO, timeout=3)
                 else:
@@ -161,8 +178,14 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         try:
             with open(playlist_file, 'a') as f:
                 f.write('\n' + urlline + '\n')
-                for mac in self.mac_addresses:
-                    f.write(mac + '\n')
+                for item in self.mac_addresses:
+                    mac = item.get("mac", "")
+                    alias = item.get("alias", "").strip()
+
+                    if alias:
+                        f.write("{} # {}\n".format(mac, alias))
+                    else:
+                        f.write(mac + '\n')
                 f.write('\n')
 
             self.session.open(MessageBox, _("Playlist added successfully!"), MessageBox.TYPE_INFO, timeout=5)
