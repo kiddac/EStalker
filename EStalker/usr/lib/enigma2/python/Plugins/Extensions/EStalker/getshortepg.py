@@ -20,6 +20,11 @@ except ImportError:
     from twisted.web.client import WebClientContextFactory
     contextFactory = WebClientContextFactory()
 
+try:
+    from urllib import quote
+except ImportError:
+    from urllib.parse import quote
+
 
 class EStalker_EPG_Short:
     def __init__(self, visible_ids, done_callback=None, partial_callback=None):
@@ -42,40 +47,41 @@ class EStalker_EPG_Short:
     def prepare(self):
         timezone = get_local_timezone()
         token = glob.active_playlist["playlist_info"]["token"]
-        domain = str(glob.active_playlist["playlist_info"].get("domain", "")).rstrip("/")
+        domain = str(glob.active_playlist["playlist_info"].get("domain", ""))
+        port = glob.active_playlist["playlist_info"].get("port", "")
+        host = str(glob.active_playlist["playlist_info"].get("host", "")).rstrip("/")
         mac = glob.active_playlist["playlist_info"].get("mac", "").upper()
         self.portal = glob.active_playlist["playlist_info"].get("portal", None)
-
+        path_prefix = glob.active_playlist["playlist_info"].get("path_prefix", "")
+        referer = host + path_prefix + "index.html"
         sn = hashlib.md5(mac.encode()).hexdigest().upper()[:13]
         adid = hashlib.md5((sn + mac).encode()).hexdigest()
+        encoded_mac = quote(mac, safe='')
+        encoded_timezone = quote(timezone, safe='')
 
         base_headers = {
-            b"Accept": [b"*/*"],
-            b"User-Agent": [b"Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG250 stbapp ver: 2 rev: 369 Safari/533.3"],
-            b"Accept-Encoding": [b"gzip, deflate"],
-            b"X-User-Agent": [b"Model: MAG250; Link: WiFi"],
-            b"Connection": [b"close"],
             b"Pragma": [b"no-cache"],
-            b"Cache-Control": [b"no-store, no-cache, must-revalidate"]
+            b"Accept-Language": [b"en-US,en;q=0.5"],
+            b"Accept-Encoding": [b"gzip, deflate"],
+            b"Host": [("{}:{}".format(domain, port) if port else domain).encode()],
+            b"User-Agent": [b"Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG250 stbapp ver: 2 rev: 369 Safari/533.3"],
+            b"X-User-Agent": [b"Model: MAG250; Link: WiFi"],
+            b"Connection": [b"Close"],
+            b"Referer": [referer.encode()],
         }
 
-        if "/stalker_portal/" in self.portal:
+        if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                b"Host": [domain.encode()],
-                b"Cookie": [("mac={}; stb_lang=en; timezone={}; adid={}".format(mac, timezone, adid)).encode()]
+                b"Cookie": [("mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, adid)).encode()]
             }
         else:
             host_headers = {
-                b"Host": [domain.encode()],
-                b"Cookie": [("mac={}; stb_lang=en; timezone={}".format(mac, timezone)).encode()]
+                b"Cookie": [("mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)).encode()]
             }
 
-        merged_headers = base_headers.copy()
-        merged_headers.update(host_headers)
-        merged_headers[b"Authorization"] = [("Bearer " + token).encode()]
-
-        self.headers = Headers(merged_headers)
-
+        base_headers.update(host_headers)
+        base_headers[b"Authorization"] = [("Bearer " + token).encode()]
+        self.headers = Headers(base_headers)
         self.download_epgs()
 
     def download_epgs(self):
@@ -106,6 +112,9 @@ class EStalker_EPG_Short:
                 data = body
 
             # print("*** data ***", data)
+
+            if not data:
+                return
 
             if sys.version_info[0] == 3:
                 data = data.decode('utf-8')

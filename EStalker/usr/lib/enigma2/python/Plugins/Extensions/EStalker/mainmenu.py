@@ -69,7 +69,6 @@ class EStalker_MainMenu(Screen):
             glob.newPlayingServiceRef = self.session.nav.getCurrentlyPlayingServiceReference()
             glob.newPlayingServiceRefString = glob.newPlayingServiceRef.toString()
 
-        self.onShow.append(self.createSetup)
         self.onFirstExecBegin.append(self.check_dependencies)
         self.onLayoutFinish.append(self.__layoutFinished)
 
@@ -121,7 +120,7 @@ class EStalker_MainMenu(Screen):
         else:
             self.start()
 
-    def start(self):
+    def start(self, answer=None):
         self.playlists_all = loadfiles.process_files()
         self.createSetup()
 
@@ -138,15 +137,15 @@ class EStalker_MainMenu(Screen):
 
     def playlists(self):
         from . import playlists
-        self.session.openWithCallback(lambda: self.start, playlists.EStalker_Playlists)
+        self.session.openWithCallback(self.start, playlists.EStalker_Playlists)
 
     def settings(self):
         from . import settings
-        self.session.openWithCallback(lambda: self.start, settings.EStalker_Settings)
+        self.session.openWithCallback(self.start, settings.EStalker_Settings)
 
     def addServer(self):
         from . import server
-        self.session.openWithCallback(lambda: self.start, server.EStalker_AddServer)
+        self.session.openWithCallback(self.start, server.EStalker_AddServer)
 
     def __next__(self):
         current_entry = self["list"].getCurrent()

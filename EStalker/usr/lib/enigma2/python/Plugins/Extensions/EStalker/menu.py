@@ -30,6 +30,11 @@ from .plugin import skin_directory, common_path, version, hasConcurrent, hasMult
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data
 
+try:
+    from urllib import quote
+except ImportError:
+    from urllib.parse import quote
+
 
 playlists_json = cfg.playlists_json.value
 
@@ -48,7 +53,6 @@ def normalize_superscripts(text):
 
 
 def clean_names(response):
-    """Clean only 'title' fields inside response['js'] and set glob.hassuperscript."""
     found_superscript = False
 
     if "js" in response and isinstance(response["js"], list):
@@ -159,25 +163,41 @@ class EStalker_Menu(Screen):
         self.token = glob.active_playlist["playlist_info"]["token"]
         self.token_random = glob.active_playlist["playlist_info"]["token_random"]
         self.domain = str(glob.active_playlist["playlist_info"].get("domain", ""))
+        self.port = glob.active_playlist["playlist_info"].get("port", "")
         self.host = str(glob.active_playlist["playlist_info"].get("host", "")).rstrip("/")
         self.mac = glob.active_playlist["playlist_info"].get("mac", "").upper()
         self.portal = glob.active_playlist["playlist_info"].get("portal", None)
         self.portal_version = glob.active_playlist["playlist_info"].get("version", "5.3.1")
+        self.path_prefix = glob.active_playlist["playlist_info"].get("path_prefix", "")
+
+        self.referer = self.host + self.path_prefix + "index.html"
 
         self.sn = hashlib.md5(self.mac.encode()).hexdigest().upper()[:13]
         self.adid = hashlib.md5((self.sn + self.mac).encode()).hexdigest()
 
+        encoded_mac = quote(self.mac, safe='')
+        encoded_timezone = quote(self.timezone, safe='')
+
         self.headers = {
-            "Host": self.domain,
-            "Accept": "*/*",
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG250 stbapp ver: 2 rev: 369 Safari/533.3",
-            "Accept-Encoding": "gzip, deflate",
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "close",
             "Pragma": "no-cache",
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Cookie": "mac={}; stb_lang=en; timezone={};".format(self.mac, self.timezone),
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
+            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+            "X-User-Agent": "Model: MAG250; Link: WiFi",
+            "Connection": "Close",
+            "Referer": self.referer,
         }
+
+        if self.portal and "/stalker_portal/" in self.portal:
+            host_headers = {
+                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
+            }
+        else:
+            host_headers = {
+                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
+            }
+        self.headers.update(host_headers)
 
         self.headers["Authorization"] = "Bearer " + self.token
 
@@ -280,7 +300,7 @@ class EStalker_Menu(Screen):
         playlists_all[glob.current_selection] = glob.active_playlist
 
         with open(playlists_json, "w") as f:
-            json.dump(playlists_all, f)
+            json.dump(playlists_all, f, indent=4)
 
     def createSetup(self):
         if debugs:
@@ -306,11 +326,6 @@ class EStalker_Menu(Screen):
 
         glob.active_playlist["data"]["live_streams"] = {}
 
-        """
-        if has_catchup:
-            glob.active_playlist["data"]["catchup"] = True
-            """
-
         if show_live:
             add_category_to_list(_("Live TV"), "live_categories", 0)
 
@@ -319,12 +334,6 @@ class EStalker_Menu(Screen):
 
         if show_series:
             add_category_to_list(_("TV Series"), "series_categories", 2)
-
-        """
-        if show_catchup and glob.active_playlist["data"]["catchup"]:
-            self.index += 1
-            self.list.append([self.index, _("Catch Up TV"), 3, ""])
-            """
 
         self.index += 1
         self.list.append([self.index, _("Playlist Settings"), 4, ""])
@@ -368,6 +377,28 @@ class EStalker_Menu(Screen):
         from . import playsettings
         self.session.openWithCallback(self.start, playsettings.EStalker_Settings)
 
+    def _get_profile(self, portal, mac, token, token_random, headers, param_mode):
+        return get_profile_data(portal, mac, token, token_random, headers, param_mode)
+
+    def _get_account_info(self, portal, mac, token, token_random, headers):
+        account_info_url = "{}?".format(portal)
+        account_info_params = {
+            "type": "account_info",
+            "action": "get_main_info",
+            "JsHttpRequest": "1-xml",
+        }
+        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
+
+        if debugs:
+            print("*** account_info ***", account_info)
+
+        if account_info and isinstance(account_info, dict):
+            js_data = account_info.get("js") or {}
+            expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
+            return expiry, True
+
+        return None, False
+
     def reauthorize(self):
         if debugs:
             print("*** reauthorize ***")
@@ -377,31 +408,14 @@ class EStalker_Menu(Screen):
         if not self.token:
             return
 
-        play_token, status, blocked, returned_mac, returned_id = get_profile_data(
-            portal=self.portal,
-            mac=self.mac,
-            token=self.token,
-            token_random=self.token_random,
-            headers=self.headers,
-            param_mode="full"
+        play_token, status, blocked, returned_mac, returned_id = self._get_profile(
+            self.portal, self.mac, self.token, self.token_random, self.headers, param_mode="full"
         )
 
-        account_info_url = str(self.portal) + "?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
-        account_info = make_request(account_info_url, method="POST", headers=self.headers, params=None, response_type="json")
+        expiry, account_valid = self._get_account_info(self.portal, self.mac, self.token, self.token_random, self.headers)
 
-        if debugs:
-            print("*** account_info ***", account_info)
-
-        if not account_info and isinstance(account_info, dict):
-            if not returned_mac or not returned_id:
-                play_token, status, blocked, returned_mac, returned_id = get_profile_data(
-                    portal=self.portal,
-                    mac=self.mac,
-                    token=self.token,
-                    token_random=self.token_random,
-                    headers=self.headers,
-                    param_mode="basic"
-                )
+        if not account_valid:
+            play_token, status, blocked, returned_mac, returned_id = self._get_profile(self.portal, self.mac, self.token, self.token_random, self.headers, "basic")
 
         glob.active_playlist["playlist_info"]["token"] = self.token
         glob.active_playlist["playlist_info"]["token_random"] = self.token_random

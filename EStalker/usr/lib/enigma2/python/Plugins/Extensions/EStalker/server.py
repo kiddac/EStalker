@@ -72,7 +72,6 @@ class EStalker_AddServer(ConfigListScreen, Screen):
             "ok": self.okPressed,
         }, -2)
 
-        self.playlists_all = self.getPlaylistJson()
         self.onFirstExecBegin.append(self.initConfig)
         self.onLayoutFinish.append(self.__layoutFinished)
 
@@ -120,7 +119,6 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         if debugs:
             print("*** okPressed ***")
 
-        """Handle OK button press for adding MAC addresses"""
         currConfig = self["config"].getCurrent()
         if currConfig and currConfig[1] == self.macCfg:
             mac = self.macCfg.value.strip()
@@ -147,7 +145,6 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         if debugs:
             print("*** validate_mac ***")
 
-        """Validate MAC address format"""
         import re
         return re.match(r"^[0-9A-Fa-f]{12}$", mac) is not None
 
@@ -155,7 +152,6 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         if debugs:
             print("*** save ***")
 
-        """Handle green button press - save configuration"""
         # If MAC field has content, add it first
         if self.macCfg.value.strip():
             self.okPressed()
@@ -195,8 +191,6 @@ class EStalker_AddServer(ConfigListScreen, Screen):
             print("Error writing to e-portals.txt:", e)
             self.session.open(MessageBox, _("Error saving playlist"), MessageBox.TYPE_ERROR, timeout=5)
 
-        loadfiles.process_files()
-
     def cancel(self, answer=None):
         if debugs:
             print("*** cancel ***")
@@ -213,50 +207,42 @@ class EStalker_AddServer(ConfigListScreen, Screen):
             self.close()
 
     def handleInputHelpers(self):
-        if debugs:
-            print("*** handleInputHelpers ***")
-
         from enigma import ePoint
         currConfig = self["config"].getCurrent()
 
         if currConfig is not None:
-            if isinstance(currConfig[1], ConfigText):
-                if "VKeyIcon" in self:
-                    if isinstance(currConfig[1], ConfigNumber):
-                        try:
-                            self["VirtualKB"].setEnabled(False)
-                        except:
-                            pass
-
-                        try:
-                            self["virtualKeyBoardActions"].setEnabled(False)
-                        except:
-                            pass
-
-                        self["VKeyIcon"].hide()
-                    else:
-                        try:
-                            self["VirtualKB"].setEnabled(True)
-                        except:
-                            pass
-
-                        try:
-                            self["virtualKeyBoardActions"].setEnabled(True)
-                        except:
-                            pass
-                        self["VKeyIcon"].show()
-
-                if "HelpWindow" in self and currConfig[1].help_window and currConfig[1].help_window.instance is not None:
-                    helpwindowpos = self["HelpWindow"].getPosition()
-                    currConfig[1].help_window.instance.move(ePoint(helpwindowpos[0], helpwindowpos[1]))
-
-            else:
-                if "VKeyIcon" in self:
+            if "VKeyIcon" in self:
+                if isinstance(currConfig[1], ConfigNumber):
+                    try:
+                        self["VirtualKB"].setEnabled(False)
+                    except:
+                        pass
+                    try:
+                        self["virtualKeyBoardActions"].setEnabled(False)
+                    except:
+                        pass
+                    self["VKeyIcon"].hide()
+                elif isinstance(currConfig[1], ConfigText):
+                    try:
+                        self["VirtualKB"].setEnabled(True)
+                    except:
+                        pass
+                    try:
+                        self["virtualKeyBoardActions"].setEnabled(True)
+                    except:
+                        pass
+                    self["VKeyIcon"].show()
+                else:
                     try:
                         self["VirtualKB"].setEnabled(False)
                     except:
                         pass
                     self["VKeyIcon"].hide()
+
+            if "HelpWindow" in self and isinstance(currConfig[1], ConfigText):
+                if currConfig[1].help_window and currConfig[1].help_window.instance is not None:
+                    helpwindowpos = self["HelpWindow"].getPosition()
+                    currConfig[1].help_window.instance.move(ePoint(helpwindowpos[0], helpwindowpos[1]))
 
     def getPlaylistJson(self):
         if debugs:

@@ -32,7 +32,7 @@ class ProtectedScreen:
             self.onFirstExecBegin.append(boundFunction(self.session.openWithCallback, self.pinEntered, PinInput, pinList=[cfg.adultpin.value], triesEntry=cfg.retries.adultpin, title=_("Please enter the correct pin code"), windowTitle=_("Enter pin code")))
 
     def isProtected(self):
-        return (config.plugins.EStalker.adult.value)
+        return cfg.adult.value
 
     def pinEntered(self, result=None):
         if result is None:
@@ -50,8 +50,7 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
     def __init__(self, session):
         Screen.__init__(self, session)
 
-        if cfg.adult.value is True:
-            ProtectedScreen.__init__(self)
+        ProtectedScreen.__init__(self)
 
         self.session = session
 
@@ -88,13 +87,6 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
         self.initConfig()
         self.onLayoutFinish.append(self.__layoutFinished)
 
-    def clear_caches(self):
-        try:
-            with open("/proc/sys/vm/drop_caches", "w") as drop_caches:
-                drop_caches.write("1\n2\n3\n")
-        except IOError:
-            pass
-
     def __layoutFinished(self):
         self.setTitle(self.setup_title)
 
@@ -110,34 +102,42 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
                 x[1].cancel()
 
             self.close()
-        return
 
     def save(self):
-        if cfg.adult.value and cfg.adultpin.value in (0, 1111, 1234):
-            self.session.open(MessageBox, _("Please change default parental pin.\n\nPin cannot be 0000, 1111, or 1234"), MessageBox.TYPE_WARNING)
+        pin_value = str(cfg.adultpin.value).strip()
+        pin_value = pin_value.zfill(4)
+
+        if cfg.adult.value and pin_value in ("0000", "1111", "1234"):
+            self.session.open(
+                MessageBox,
+                _("Please change default parental pin.\n\nPin cannot be 0000, 1111, or 1234"),
+                MessageBox.TYPE_WARNING
+            )
             return
+
+        restart_needed = (
+            self.org_main != cfg.main.value or
+            self.location != cfg.location.value
+        )
 
         if self["config"].isChanged():
             for x in self["config"].list:
                 x[1].save()
+
             cfg.save()
             configfile.save()
 
-            if self.org_main != cfg.main.value or self.location != cfg.location.value:
-
-                self.changedFinished()
-        self.clear_caches()
-        self.close()
-
-    def changedFinished(self):
-        self.session.openWithCallback(self.ExecuteRestart, MessageBox, _("You need to restart the GUI") + "\n" + _("Do you want to restart now?"), MessageBox.TYPE_YESNO)
-        self.close()
-
-    def ExecuteRestart(self, result=None):
-        if result:
-            Standby.quitMainloop(3)
-        else:
+        if restart_needed:
+            self.session.openWithCallback(
+                self.ExecuteRestart,
+                MessageBox,
+                _("You need to restart the GUI") + "\n" + _("Do you want to restart now?"),
+                MessageBox.TYPE_YESNO
+            )
             self.close()
+            return
+
+        self.close()
 
     def initConfig(self):
         self.cfg_skin = getConfigListEntry(_("Select skin"), cfg.skin)
@@ -253,25 +253,20 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
             pass
 
     def openDirectoryBrowser(self, path, cfgitem):
-        try:
-            callback_map = {
-                "location": self.openDirectoryBrowserCB(cfg.location)
-            }
+        if cfgitem != "location":
+            return
 
-            if cfgitem in callback_map:
-                self.session.openWithCallback(
-                    callback_map[cfgitem],
-                    LocationBox,
-                    windowTitle=_("Choose Directory:"),
-                    text=_("Choose directory"),
-                    currDir=str(path),
-                    bookmarks=config.movielist.videodirs,
-                    autoAdd=True,
-                    editDir=True,
-                    inhibitDirs=["/bin", "/boot", "/dev", "/home", "/lib", "/proc", "/run", "/sbin", "/sys", "/usr", "/var"]
-                )
-        except Exception as e:
-            print(e)
+        self.session.openWithCallback(
+            self.openDirectoryBrowserCB(cfg.location),
+            LocationBox,
+            windowTitle=_("Choose Directory:"),
+            text=_("Choose directory"),
+            currDir=str(path),
+            bookmarks=config.movielist.videodirs,
+            autoAdd=True,
+            editDir=True,
+            inhibitDirs=["/bin", "/boot", "/dev", "/home", "/lib", "/proc", "/run", "/sbin", "/sys", "/usr", "/var"]
+        )
 
     def openDirectoryBrowserCB(self, config_entry):
         def callback(path):

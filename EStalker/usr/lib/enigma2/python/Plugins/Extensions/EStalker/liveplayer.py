@@ -12,13 +12,15 @@ import time
 from datetime import datetime
 from itertools import cycle, islice
 import hashlib
+import tempfile
 
 try:
     from urlparse import urlparse, parse_qs, urlunparse
-    from urllib import unquote
+    from urllib import unquote, quote
 except ImportError:
     from urllib.parse import urlparse, parse_qs, urlunparse
-    from urllib.parse import unquote
+    from urllib.parse import unquote, quote
+
 
 try:
     from http.client import HTTPConnection
@@ -28,7 +30,7 @@ except ImportError:
     HTTPConnection.debuglevel = 0
 
 # Third-party imports
-from PIL import Image, ImageFile, PngImagePlugin
+from PIL import Image
 from twisted.web.client import downloadPage
 
 # https twisted client hack #
@@ -92,7 +94,6 @@ def normalize_superscripts(text):
 
 
 def clean_names(response):
-    """Clean only 'name' fields inside response['js']."""
     if "js" in response and "data" in response["js"]:
         data_block = response["js"]["data"]
 
@@ -102,56 +103,6 @@ def clean_names(response):
                     if "name" in item and isinstance(item["name"], str):
                         item["name"] = normalize_superscripts(item["name"])
     return response
-
-
-# png hack
-def mycall(self, cid, pos, length):
-    if cid.decode("ascii") == "tRNS":
-        return self.chunk_TRNS(pos, length)
-    else:
-        return getattr(self, "chunk_" + cid.decode("ascii"))(pos, length)
-
-
-def mychunk_TRNS(self, pos, length):
-    i16 = PngImagePlugin.i16
-    _simple_palette = re.compile(b"^\xff*\x00\xff*$")
-    s = ImageFile._safe_read(self.fp, length)
-    if self.im_mode == "P":
-        if _simple_palette.match(s):
-            i = s.find(b"\0")
-            if i >= 0:
-                self.im_info["transparency"] = i
-        else:
-            self.im_info["transparency"] = s
-    elif self.im_mode in ("1", "L", "I"):
-        self.im_info["transparency"] = i16(s)
-    elif self.im_mode == "RGB":
-        self.im_info["transparency"] = i16(s), i16(s, 2), i16(s, 4)
-    return s
-
-
-if pythonVer != 2:
-    PngImagePlugin.ChunkStream.call = mycall
-    PngImagePlugin.PngStream.chunk_TRNS = mychunk_TRNS
-
-
-_initialized = 0
-
-
-def _mypreinit():
-    global _initialized
-    if _initialized >= 1:
-        return
-    try:
-        from . import MyPngImagePlugin
-        assert MyPngImagePlugin
-    except ImportError:
-        pass
-
-    _initialized = 1
-
-
-Image.preinit = _mypreinit
 
 
 VIDEO_ASPECT_RATIO_MAP = {
@@ -179,14 +130,6 @@ if os.path.exists("/usr/bin/exteplayer3"):
 if os.path.exists("/usr/bin/apt-get"):
     streamtypelist.append("8193")
     vodstreamtypelist.append("8193")
-
-
-def clear_caches():
-    try:
-        with open("/proc/sys/vm/drop_caches", "w") as drop_caches:
-            drop_caches.write("1\n2\n3\n")
-    except IOError:
-        pass
 
 
 class IPTVInfoBarShowHide():
@@ -437,34 +380,39 @@ class EStalker_StreamPlayer(
         self.token = glob.active_playlist["playlist_info"]["token"]
         self.token_random = glob.active_playlist["playlist_info"]["token_random"]
         self.domain = str(glob.active_playlist["playlist_info"].get("domain", ""))
+        self.port = glob.active_playlist["playlist_info"].get("port", "")
         self.host = str(glob.active_playlist["playlist_info"].get("host", "")).rstrip("/")
         self.mac = glob.active_playlist["playlist_info"].get("mac", "").upper()
         self.portal = glob.active_playlist["playlist_info"].get("portal", None)
         self.portal_version = glob.active_playlist["playlist_info"].get("version", "5.3.1")
+        self.path_prefix = glob.active_playlist["playlist_info"].get("path_prefix", "")
+
+        self.referer = self.host + self.path_prefix + "index.html"
 
         self.sn = hashlib.md5(self.mac.encode()).hexdigest().upper()[:13]
-        self.device_id = hashlib.sha256(self.mac.encode()).hexdigest().upper()
         self.adid = hashlib.md5((self.sn + self.mac).encode()).hexdigest()
 
+        encoded_mac = quote(self.mac, safe='')
+        encoded_timezone = quote(self.timezone, safe='')
+
         self.headers = {
-            "Host": self.domain,
-            "Accept": "*/*",
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG250 stbapp ver: 2 rev: 369 Safari/533.3",
-            "Accept-Encoding": "gzip, deflate",
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "close",
             "Pragma": "no-cache",
-            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
+            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+            "X-User-Agent": "Model: MAG250; Link: WiFi",
+            "Connection": "Close",
+            "Referer": self.referer,
         }
 
-        if "/stalker_portal/" in self.portal:
+        if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                "Cookie": ("mac={}; stb_lang=en; timezone={}; adid={}").format(self.mac, self.timezone, self.adid)
+                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
             }
         else:
             host_headers = {
-
-                "Cookie": ("mac={}; stb_lang=en; timezone={}").format(self.mac, self.timezone)
+                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
             }
 
         self.headers.update(host_headers)
@@ -486,6 +434,18 @@ class EStalker_StreamPlayer(
             "ok": self.OKButton,
         }, -2)
 
+        self.timerImage = eTimer()
+        try:
+            self.timerImage.callback.append(self.downloadImage)
+        except:
+            self.timerImage_conn = self.timerImage.timeout.connect(self.downloadImage)
+
+        self.timerRecent = eTimer()
+        try:
+            self.timerRecent.callback.append(self.addRecentLiveList)
+        except:
+            self.timerRecent_conn = self.timerRecent.timeout.connect(self.addRecentLiveList)
+
         # Pagination variables - add these
         self.all_data = []
         self.pages_downloaded = set()
@@ -497,6 +457,30 @@ class EStalker_StreamPlayer(
         self.short_epg_results = {}
 
         self.onFirstExecBegin.append(boundFunction(self.playStream, self.servicetype, self.streamurl))
+
+    def _stopTimer(self, name):
+        t = getattr(self, name, None)
+        if t:
+            try:
+                t.stop()
+            except:
+                pass
+
+    def _cleanupTimer(self, name):
+        t = getattr(self, name, None)
+        if t:
+            try:
+                t.stop()
+            except:
+                pass
+            try:
+                t.callback[:] = []
+            except:
+                pass
+        try:
+            setattr(self, name, None)
+        except:
+            pass
 
     def restartStream(self):
         if debugs:
@@ -536,81 +520,6 @@ class EStalker_StreamPlayer(
                 self["progress"].setValue(percent)
             else:
                 self["progress"].hide()
-
-            # Check every 5 mins to see if EPG needs to be updated
-            nowtime = datetime.now()
-            minutes = nowtime.minute
-            if minutes % 5 == 1:
-
-                now = int(time.time())
-
-                """
-                if startnextunixtime and now >= startnextunixtime:
-                    try:
-                        player_api = str(glob.active_playlist["playlist_info"]["player_api"])
-                        stream_id = str(glob.currentchannellist[glob.currentchannellistindex][4])
-
-                        shortEPGJson = []
-                        url = player_api + "&action=get_short_epg&stream_id=" + str(stream_id) + "&limit=2"
-
-                        retries = Retry(total=3, backoff_factor=1)
-                        adapter = HTTPAdapter(max_retries=retries)
-
-                        with requests.Session() as http:
-                            http.mount("http://", adapter)
-                            http.mount("https://", adapter)
-
-                            try:
-                                r = http.get(url, headers=hdr, timeout=(10, 20), verify=False)
-                                r.raise_for_status()
-
-                                if r.status_code == requests.codes.ok:
-                                    response = r.json()
-                                    shortEPGJson = response.get("epg_listings", [])
-                            except Exception as e:
-                                print("Error fetching or processing response:", e)
-                                response = None
-                                shortEPGJson = []
-
-                        if shortEPGJson and len(shortEPGJson) > 1:
-                            self.epgshortlist = []
-                            for listing in shortEPGJson:
-                                title = base64.b64decode(listing.get("title", "")).decode("utf-8")
-                                description = base64.b64decode(listing.get("description", "")).decode("utf-8")
-                                shift = int(glob.active_playlist["player_info"].get("serveroffset", 0))
-                                start = listing.get("start", "")
-                                end = listing.get("end", "")
-                                if start and end:
-                                    time_formats = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H-%M-%S", "%Y-%m-%d-%H:%M:%S", "%Y- %m-%d %H:%M:%S"]
-                                    for time_format in time_formats:
-                                        try:
-                                            start_datetime = datetime.strptime(start, time_format) + timedelta(hours=shift)
-                                            start_time = start_datetime.strftime("%H:%M")
-                                            self.epgshortlist.append([str(title), str(description), str(start_time)])
-                                            break
-                                        except ValueError:
-                                            pass
-
-                            templist = list(glob.currentepglist[glob.currentchannellistindex])
-                            if self.epgshortlist:
-                                templist[4] = str(self.epgshortlist[0][1])  # description
-                                templist[3] = str(self.epgshortlist[0][0])  # title
-                                templist[2] = str(self.epgshortlist[0][2])  # now start
-                                templist[6] = str(self.epgshortlist[1][0])  # next title
-                                templist[5] = str(self.epgshortlist[1][2])  # next start
-
-                            glob.currentepglist[glob.currentchannellistindex] = tuple(templist)
-                        else:
-                            templist = list(glob.currentepglist[glob.currentchannellistindex])
-                            templist[4] = glob.currentepglist[glob.currentchannellistindex][7]  # description
-                            templist[3] = glob.currentepglist[glob.currentchannellistindex][6]  # title
-                            templist[2] = glob.currentepglist[glob.currentchannellistindex][5]  # now start
-                            templist[6] = ""  # next title
-                            templist[5] = ""  # next start
-                            glob.currentepglist[glob.currentchannellistindex] = tuple(templist)
-                    except Exception as e:
-                        print("Error during short EPG update:", e)
-                        """
 
             self["x_description"].setText(glob.currentepglist[glob.currentchannellistindex][4])
             self["nowchannel"].setText(glob.currentchannellist[glob.currentchannellistindex][0])
@@ -657,31 +566,32 @@ class EStalker_StreamPlayer(
         if len(recent_entries) >= 28:
             recent_entries.pop()
 
+        self.playlists_all = []
         if os.path.exists(playlists_json):
-            with open(playlists_json, "r") as f:
+            try:
+                with open(playlists_json, "r") as f:
+                    self.playlists_all = json.load(f) or []
+            except:
                 try:
-                    self.playlists_all = json.load(f)
-                except:
                     os.remove(playlists_json)
+                except:
+                    pass
+            self.playlists_all = []
 
-            if self.playlists_all:
-                """
-                for index, playlist in enumerate(self.playlists_all):
-                    if playlist["playlist_info"] == glob.active_playlist["playlist_info"]:
-                        self.playlists_all[index] = glob.active_playlist
-                        break
-                        """
-
-                for playlists in self.playlists_all:
-                    if (playlists["playlist_info"]["host"] == glob.active_playlist["playlist_info"]["host"] and playlists["playlist_info"]["mac"] == glob.active_playlist["playlist_info"]["mac"]):
-                        playlists.update(glob.active_playlist)
-                        break
+        if self.playlists_all:
+            for playlists in self.playlists_all:
+                if (playlists["playlist_info"]["host"] == glob.active_playlist["playlist_info"]["host"] and playlists["playlist_info"]["mac"] == glob.active_playlist["playlist_info"]["mac"]):
+                    playlists.update(glob.active_playlist)
+                    break
         with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f)
+            json.dump(self.playlists_all, f, indent=4)
 
     def playStream(self, servicetype, streamurl):
         if debugs:
             print("*** playStream ***")
+
+        self._stopTimer("timerImage")
+        self._stopTimer("timerRecent")
 
         if not streamurl:
             return
@@ -749,51 +659,23 @@ class EStalker_StreamPlayer(
             glob.newPlayingServiceRefString = nowref.toString()
 
         if cfg.infobarpicons.value is True:
-            self.timerimage = eTimer()
-
-            try:
-                self.timerimage.callback.append(self.downloadImage)
-            except:
-                self.timerimage_conn = self.timerimage.timeout.connect(self.downloadImage)
-            self.timerimage.start(250, True)
-
-        # clear cache
-        self.timerCache = eTimer()
-        try:
-            self.timerCache.callback.append(clear_caches)
-        except:
-            self.timerCache_conn = self.timerCache.timeout.connect(clear_caches)
-        self.timerCache.start(5 * 60 * 1000, False)  # 5 mins
+            self.timerImage.start(250, True)
 
         # add to recently watched
-        self.timerRecent = eTimer()
-        try:
-            self.timerRecent.callback.append(self.addRecentLiveList)
-        except:
-            self.timerRecent_conn = self.timerRecent.timeout.connect(self.addRecentLiveList)
-        self.timerRecent.start(2 * 60 * 1000, True)  # 5 mins
+        self.timerRecent.start(5 * 60 * 1000, True)
 
         self.originalservicetype = self.servicetype
 
         self.refreshInfobar()
 
-        self.timerrefresh = eTimer()
-        try:
-            self.timerrefresh.callback.append(self.refreshInfobar)
-        except:
-            self.timerrefresh_conn = self.timerrefresh.timeout.connect(self.refreshInfobar)
-
-        self.timerrefresh.start(1 * 60 * 1000, False)
-
     def back(self):
         if debugs:
             print("*** back ***")
 
+        self._cleanupTimer("timerImage")
+        self._cleanupTimer("timerRecent")
+
         glob.nextlist[-1]["index"] = glob.currentchannellistindex
-        try:
-            self.timerCache.stop()
-        except:
-            pass
 
         self.close()
 
@@ -815,41 +697,92 @@ class EStalker_StreamPlayer(
         self.playStream(self.servicetype, self.streamurl)
 
     def downloadImage(self):
-        if debugs:
-            print("*** downloadImage ***")
-
+        # Clear picon immediately on zap so previous one doesn't remain if new fails
         self.loadDefaultImage()
+
         try:
-            os.remove(os.path.join(dir_tmp, "original.png"))
-            os.remove(os.path.join(dir_tmp, "temp.png"))
+            self._picon_req_id += 1
         except:
-            pass
+            self._picon_req_id = 1
+
+        req_id = self._picon_req_id
 
         desc_image = ""
         try:
             desc_image = glob.currentchannellist[glob.currentchannellistindex][5]
         except:
-            pass
+            desc_image = ""
 
-        if not desc_image:
-            self.loadDefaultImage()
+        if not desc_image or desc_image == "n/A":
             return
 
-        temp = os.path.join(dir_tmp, "temp.png")
+        fd = None
+        temp = None
+
         try:
+            fd, temp = tempfile.mkstemp(prefix="xst_picon_", suffix=".png", dir=dir_tmp)
+            try:
+                os.close(fd)
+            except:
+                pass
+
             parsed = urlparse(desc_image)
             domain = parsed.hostname
             scheme = parsed.scheme
 
+            url = desc_image
             if pythonVer == 3:
-                desc_image = desc_image.encode()
+                try:
+                    url = desc_image.encode()
+                except:
+                    url = desc_image
+
+            def _cleanup_temp():
+                try:
+                    if temp and os.path.exists(temp):
+                        os.remove(temp)
+                except:
+                    pass
+
+            def _ok(_data=None):
+                # Ignore stale callbacks (e.g. user zapped again)
+                if getattr(self, "_picon_req_id", 0) != req_id:
+                    _cleanup_temp()
+                    return
+
+                self.resizeImage(temp)
+
+            def _err(_failure=None):
+                # Ignore stale callbacks
+                if getattr(self, "_picon_req_id", 0) != req_id:
+                    _cleanup_temp()
+                    return
+
+                _cleanup_temp()
+                self.loadDefaultImage()
 
             if scheme == "https" and sslverify:
                 sniFactory = SNIFactory(domain)
-                downloadPage(desc_image, temp, sniFactory, timeout=2).addCallback(self.resizeImage).addErrback(self.loadDefaultImage)
+                d = downloadPage(url, temp, sniFactory, timeout=2)
             else:
-                downloadPage(desc_image, temp, timeout=2).addCallback(self.resizeImage).addErrback(self.loadDefaultImage)
+                d = downloadPage(url, temp, timeout=2)
+
+            d.addCallback(_ok)
+            d.addErrback(_err)
+
         except:
+            try:
+                if fd:
+                    os.close(fd)
+            except:
+                pass
+
+            try:
+                if temp and os.path.exists(temp):
+                    os.remove(temp)
+            except:
+                pass
+
             self.loadDefaultImage()
 
     def loadDefaultImage(self, data=None):
@@ -859,13 +792,7 @@ class EStalker_StreamPlayer(
         if self["picon"].instance:
             self["picon"].instance.setPixmapFromFile(os.path.join(common_path, "picon.png"))
 
-    def resizeImage(self, data=None):
-        if debugs:
-            print("*** resizeImage ***")
-
-        original = os.path.join(dir_tmp, "temp.png")
-
-        # Determine the target size based on screen width
+    def resizeImage(self, original, data=None):
         if screenwidth.width() == 2560:
             size = [294, 176]
         elif screenwidth.width() > 1280:
@@ -874,32 +801,21 @@ class EStalker_StreamPlayer(
             size = [147, 88]
 
         if os.path.exists(original):
+            im = None
             try:
                 im = Image.open(original)
-
                 if im.mode != "RGBA":
                     im = im.convert("RGBA")
 
-                target_w, target_h = size
-                src_w, src_h = im.size
-
-                scale = min(float(target_w) / src_w, float(target_h) / src_h)
-
-                new_w = int(src_w * scale)
-                new_h = int(src_h * scale)
-
                 try:
-                    resized = im.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    im.thumbnail(size, Image.Resampling.LANCZOS)
                 except:
-                    resized = im.resize((new_w, new_h), Image.ANTIALIAS)
+                    im.thumbnail(size, Image.ANTIALIAS)
 
-                bg = Image.new("RGBA", (target_w, target_h), (255, 255, 255, 0))
-
-                left = (target_w - new_w) // 2
-                top = (target_h - new_h) // 2
-
-                bg.paste(resized, (left, top), mask=resized)
-
+                bg = Image.new("RGBA", size, (255, 255, 255, 0))
+                left = (size[0] - im.size[0]) // 2
+                top = (size[1] - im.size[1]) // 2
+                bg.paste(im, (left, top), mask=im)
                 bg.save(original, "PNG")
 
                 if self["picon"].instance:
@@ -908,6 +824,17 @@ class EStalker_StreamPlayer(
             except Exception as e:
                 print("Error resizing image:", e)
                 self.loadDefaultImage()
+            finally:
+                if im is not None:
+                    try:
+                        im.close()
+                    except:
+                        pass
+
+            try:
+                os.remove(original)
+            except:
+                pass
         else:
             self.loadDefaultImage()
 
@@ -929,6 +856,28 @@ class EStalker_StreamPlayer(
 
         return response
 
+    def _get_profile(self, portal, mac, token, token_random, headers, param_mode):
+        return get_profile_data(portal, mac, token, token_random, headers, param_mode)
+
+    def _get_account_info(self, portal, mac, token, token_random, headers):
+        account_info_url = "{}?".format(portal)
+        account_info_params = {
+            "type": "account_info",
+            "action": "get_main_info",
+            "JsHttpRequest": "1-xml",
+        }
+        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
+
+        if debugs:
+            print("*** account_info ***", account_info)
+
+        if account_info and isinstance(account_info, dict):
+            js_data = account_info.get("js") or {}
+            expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
+            return expiry, True
+
+        return None, False
+
     def reauthorize(self):
         if debugs:
             print("*** reauthorize ***")
@@ -938,28 +887,14 @@ class EStalker_StreamPlayer(
         if not self.token:
             return
 
-        play_token, status, blocked, returned_mac, returned_id = get_profile_data(
-            portal=self.portal,
-            mac=self.mac,
-            token=self.token,
-            token_random=self.token_random,
-            headers=self.headers,
-            param_mode="full"
+        play_token, status, blocked, returned_mac, returned_id = self._get_profile(
+            self.portal, self.mac, self.token, self.token_random, self.headers, param_mode="full"
         )
 
-        account_info_url = str(self.portal) + "?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
-        account_info = make_request(account_info_url, method="POST", headers=self.headers, params=None, response_type="json")
+        expiry, account_valid = self._get_account_info(self.portal, self.mac, self.token, self.token_random, self.headers)
 
-        if not account_info and isinstance(account_info, dict):
-            if not returned_mac or not returned_id:
-                play_token, status, blocked, returned_mac, returned_id = get_profile_data(
-                    portal=self.portal,
-                    mac=self.mac,
-                    token=self.token,
-                    token_random=self.token_random,
-                    headers=self.headers,
-                    param_mode="basic"
-                )
+        if not account_valid:
+            play_token, status, blocked, returned_mac, returned_id = self._get_profile(self.portal, self.mac, self.token, self.token_random, self.headers, "basic")
 
         glob.active_playlist["playlist_info"]["token"] = self.token
         glob.active_playlist["playlist_info"]["token_random"] = self.token_random
@@ -1157,11 +1092,6 @@ class EStalker_StreamPlayer(
         return self.all_data
 
     def _updateUrlPage(self, url, page):
-        """
-        if debugs:
-            print("*** _updateUrlPage ***", url, page)
-            """
-
         if "p=" in url:
             return re.sub(r"p=\d+", "p=" + str(page), url)
         else:
@@ -1171,12 +1101,6 @@ class EStalker_StreamPlayer(
     def processdata(self, response):
         if debugs:
             print("*** processdata ***")
-
-        """
-        if self.chosen_category == "favourites":
-            response = glob.active_playlist["player_info"].get("livefavourites", [])
-            """
-
         self.list2 = []
 
         if response:
@@ -1260,11 +1184,6 @@ class EStalker_StreamPlayer(
         glob.currentepglist = self.epglist[:]
 
     def updateDisplay(self):
-        """
-        if debugs:
-            print("*** updateDisplay ***")
-            """
-
         visible_channels = self.getVisibleChannels()
         channels_to_fetch = [ch_id for ch_id in visible_channels if ch_id not in self.epg_downloaded_channels]
 
@@ -1281,11 +1200,6 @@ class EStalker_StreamPlayer(
         EStalker_EPG_Short(channels_to_fetch, done_callback=self.handle_epg_done, partial_callback=self.handle_epg_partial)
 
     def getVisibleChannels(self):
-        """
-        if debugs:
-            print("*** getVisibleChannels ***")
-            """
-
         current_index = glob.currentchannellistindex
         position = current_index + 1
         page = (position - 1) // self.itemsperpage + 1
@@ -1296,11 +1210,6 @@ class EStalker_StreamPlayer(
         return [item[4] for item in channel_list[start:end] if len(item) > 4]
 
     def handle_epg_done(self, epg_data):
-        """
-        if debugs:
-            print("*** handle_epg_done ***")
-            """
-
         if not epg_data or "js" not in epg_data:
             return
 
@@ -1326,11 +1235,6 @@ class EStalker_StreamPlayer(
         self.updateEPGListWithShortEPG()
 
     def updateEPGListWithShortEPG(self):
-        """
-        if debugs:
-            print("*** updateEPGListWithShortEPG ***")
-            """
-
         def extract_main_description(descr):
             if not descr:
                 return ""

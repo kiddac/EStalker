@@ -88,7 +88,6 @@ def normalize_superscripts(text):
 
 
 def clean_names(response):
-    """Clean only 'name' fields inside response['js']."""
     if "js" in response and "data" in response["js"]:
         data_block = response["js"]["data"]
 
@@ -202,35 +201,39 @@ class EStalker_Series_Categories(Screen):
         self.token = glob.active_playlist["playlist_info"]["token"]
         self.token_random = glob.active_playlist["playlist_info"]["token_random"]
         self.domain = str(glob.active_playlist["playlist_info"].get("domain", ""))
+        self.port = glob.active_playlist["playlist_info"].get("port", "")
         self.host = str(glob.active_playlist["playlist_info"].get("host", "")).rstrip("/")
         self.mac = glob.active_playlist["playlist_info"].get("mac", "").upper()
         self.portal = glob.active_playlist["playlist_info"].get("portal", None)
         self.portal_version = glob.active_playlist["playlist_info"].get("version", "5.3.1")
+        self.path_prefix = glob.active_playlist["playlist_info"].get("path_prefix", "")
+
+        self.referer = self.host + self.path_prefix + "index.html"
 
         self.sn = hashlib.md5(self.mac.encode()).hexdigest().upper()[:13]
-
-        self.device_id = hashlib.sha256(self.mac.encode()).hexdigest().upper()
         self.adid = hashlib.md5((self.sn + self.mac).encode()).hexdigest()
 
+        encoded_mac = quote(self.mac, safe='')
+        encoded_timezone = quote(self.timezone, safe='')
+
         self.headers = {
-            "Host": self.domain,
-            "Accept": "*/*",
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG250 stbapp ver: 2 rev: 369 Safari/533.3",
-            "Accept-Encoding": "gzip, deflate",
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "close",
             "Pragma": "no-cache",
-            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
+            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+            "X-User-Agent": "Model: MAG250; Link: WiFi",
+            "Connection": "Close",
+            "Referer": self.referer,
         }
 
-        if "/stalker_portal/" in self.portal:
+        if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                "Cookie": ("mac={}; stb_lang=en; timezone={}; adid={}").format(self.mac, self.timezone, self.adid)
+                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
             }
         else:
             host_headers = {
-
-                "Cookie": ("mac={}; stb_lang=en; timezone={}").format(self.mac, self.timezone)
+                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
             }
 
         self.headers.update(host_headers)
@@ -857,11 +860,6 @@ class EStalker_Series_Categories(Screen):
                         self.all_series_data[start_index + i] = item
                         self.series_pages_downloaded.add(paged_url)
 
-                    """
-                    if debugs:
-                        print("*** self.all_series_data ***", json.dumps(self.all_series_data))
-                        """
-
                     return self.all_series_data
 
             except Exception as e:
@@ -910,11 +908,6 @@ class EStalker_Series_Categories(Screen):
                     for i, item in enumerate(current_page_data):
                         self.all_seasons_data[start_index + i] = item
                         self.seasons_pages_downloaded.add(paged_url)
-
-                    """
-                    if debugs:
-                        print("*** self.all_seasons_data ***", json.dumps(self.all_seasons_data))
-                        """
 
                     return self.all_seasons_data
 
@@ -965,11 +958,6 @@ class EStalker_Series_Categories(Screen):
                     for i, item in enumerate(current_page_data):
                         self.all_episodes_data[start_index + i] = item
                         self.episodes_pages_downloaded.add(paged_url)
-
-                    """
-                    if debugs:
-                        print("*** self.all_episodes_data ***", json.dumps(self.all_episodes_data))
-                        """
 
                     return self.all_episodes_data
 
@@ -1061,6 +1049,28 @@ class EStalker_Series_Categories(Screen):
 
         return response
 
+    def _get_profile(self, portal, mac, token, token_random, headers, param_mode):
+        return get_profile_data(portal, mac, token, token_random, headers, param_mode)
+
+    def _get_account_info(self, portal, mac, token, token_random, headers):
+        account_info_url = "{}?".format(portal)
+        account_info_params = {
+            "type": "account_info",
+            "action": "get_main_info",
+            "JsHttpRequest": "1-xml",
+        }
+        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
+
+        if debugs:
+            print("*** account_info ***", account_info)
+
+        if account_info and isinstance(account_info, dict):
+            js_data = account_info.get("js") or {}
+            expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
+            return expiry, True
+
+        return None, False
+
     def reauthorize(self):
         if debugs:
             print("*** reauthorize ***")
@@ -1070,28 +1080,14 @@ class EStalker_Series_Categories(Screen):
         if not self.token:
             return
 
-        play_token, status, blocked, returned_mac, returned_id = get_profile_data(
-            portal=self.portal,
-            mac=self.mac,
-            token=self.token,
-            token_random=self.token_random,
-            headers=self.headers,
-            param_mode="full"
+        play_token, status, blocked, returned_mac, returned_id = self._get_profile(
+            self.portal, self.mac, self.token, self.token_random, self.headers, param_mode="full"
         )
 
-        account_info_url = str(self.portal) + "?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
-        account_info = make_request(account_info_url, method="POST", headers=self.headers, params=None, response_type="json")
+        expiry, account_valid = self._get_account_info(self.portal, self.mac, self.token, self.token_random, self.headers)
 
-        if not account_info and isinstance(account_info, dict):
-            if not returned_mac or not returned_id:
-                play_token, status, blocked, returned_mac, returned_id = get_profile_data(
-                    portal=self.portal,
-                    mac=self.mac,
-                    token=self.token,
-                    token_random=self.token_random,
-                    headers=self.headers,
-                    param_mode="basic"
-                )
+        if not account_valid:
+            play_token, status, blocked, returned_mac, returned_id = self._get_profile(self.portal, self.mac, self.token, self.token_random, self.headers, "basic")
 
         glob.active_playlist["playlist_info"]["token"] = self.token
         glob.active_playlist["playlist_info"]["token_random"] = self.token_random
@@ -1874,11 +1870,6 @@ class EStalker_Series_Categories(Screen):
                 self["key_menu"].setText("")
 
     def downloadCover(self):
-        """
-        if debugs:
-            print("*** downloadCover ***")
-            """
-
         if cfg.channelcovers.value is False:
             return
 
@@ -1902,18 +1893,13 @@ class EStalker_Series_Categories(Screen):
 
             if "http" in desc_image:
                 self.redirect_count = 0
-                self.cover_download_deferred = self.agent.request(b'GET', desc_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
+                self.cover_download_deferred = self.agent.request(b'GET', desc_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]}))
                 self.cover_download_deferred.addCallback(self.handleCoverResponse)
                 self.cover_download_deferred.addErrback(self.handleCoverError)
             else:
                 self.loadDefaultCover()
 
     def downloadLogo(self):
-        """
-        if debugs:
-            print("*** downloadLogo ***")
-            """
-
         if cfg.channelcovers.value is False:
             return
 
@@ -1932,18 +1918,13 @@ class EStalker_Series_Categories(Screen):
                 logo_image = str(self.tmdbresults.get("logo") or "").strip() or self.storedlogo or ""
 
             if "http" in logo_image:
-                self.logo_download_deferred = self.agent.request(b'GET', logo_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
+                self.logo_download_deferred = self.agent.request(b'GET', logo_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]}))
                 self.logo_download_deferred.addCallback(self.handleLogoResponse)
                 self.logo_download_deferred.addErrback(self.handleLogoError)
             else:
                 self.loadDefaultLogo()
 
     def downloadBackdrop(self):
-        """
-        if debugs:
-            print("*** downloadBackdrop ***")
-            """
-
         if cfg.channelcovers.value is False:
             return
 
@@ -1973,32 +1954,22 @@ class EStalker_Series_Categories(Screen):
                     backdrop_image = self.storedbackdrop or ""
 
             if "http" in backdrop_image:
-                self.backdrop_download_deferred = self.agent.request(b'GET', backdrop_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]}))
+                self.backdrop_download_deferred = self.agent.request(b'GET', backdrop_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]}))
                 self.backdrop_download_deferred.addCallback(self.handleBackdropResponse)
                 self.backdrop_download_deferred.addErrback(self.handleBackdropError)
             else:
                 self.loadDefaultBackdrop()
 
     def downloadCoverFromUrl(self, url):
-        """
-        if debugs:
-            print("*** downloadCoverFromUrl ***")
-            """
-
         self.cover_download_deferred = self.agent.request(
             b'GET',
             url.encode(),
-            Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]})
+            Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]})
         )
         self.cover_download_deferred.addCallback(self.handleCoverResponse)
         self.cover_download_deferred.addErrback(self.handleCoverError)
 
     def handleCoverResponse(self, response):
-        """
-        if debugs:
-            print("*** handleCoverResponse ***")
-            """
-
         if response.code == 200:
             d = readBody(response)
             d.addCallback(self.handleCoverBody)
@@ -2012,117 +1983,60 @@ class EStalker_Series_Categories(Screen):
             self.handleCoverError("HTTP error code: %s" % response.code)
 
     def handleLogoResponse(self, response):
-        """
-        if debugs:
-            print("*** handleLogoResponse ***")
-            """
-
         if response.code == 200:
             d = readBody(response)
             d.addCallback(self.handleLogoBody)
             return d
 
     def handleBackdropResponse(self, response):
-        """
-        if debugs:
-            print("*** handleBackdropResponse ***")
-            """
-
         if response.code == 200:
             d = readBody(response)
             d.addCallback(self.handleBackdropBody)
             return d
 
     def handleCoverBody(self, body):
-        """
-        if debugs:
-            print("*** handleCoverBody ***")
-            """
-
         temp = os.path.join(dir_tmp, "cover.jpg")
         with open(temp, 'wb') as f:
             f.write(body)
         self.resizeCover(temp)
 
     def handleLogoBody(self, body):
-        """
-        if debugs:
-            print("***  handleLogoBody ***")
-            """
         temp = os.path.join(dir_tmp, "logo.png")
         with open(temp, 'wb') as f:
             f.write(body)
         self.resizeLogo(temp)
 
     def handleBackdropBody(self, body):
-        """
-        if debugs:
-            print("*** handleBackdropBody ***")
-            """
         temp = os.path.join(dir_tmp, "backdrop.jpg")
         with open(temp, 'wb') as f:
             f.write(body)
         self.resizeBackdrop(temp)
 
     def handleCoverError(self, error):
-        """
-        if debugs:
-            print("*** handleCoverError ***")
-            """
-
         print(error)
         self.loadDefaultCover()
 
     def handleLogoError(self, error):
-        """
-        if debugs:
-            print("*** handleLogoError ***")
-            """
-
         print(error)
         self.loadDefaultLogo()
 
     def handleBackdropError(self, error):
-        """
-        if debugs:
-            print("*** handleBackdropError ***")
-            """
-
         print(error)
         self.loadDefaultBackdrop()
 
     def loadDefaultCover(self, data=None):
-        """
-        if debugs:
-            print("*** loadDefaultCover ***")
-            """
-
         if self["vod_cover"].instance:
             self["vod_cover"].instance.setPixmapFromFile(os.path.join(skin_directory, "common/blank.png"))
 
     def loadDefaultLogo(self, data=None):
-        """
-        if debugs:
-            print("*** loadDefaultLogo ***")
-            """
-
         if self["vod_logo"].instance:
             self["vod_logo"].instance.setPixmapFromFile(os.path.join(skin_directory, "common/blank.png"))
 
     def loadDefaultBackdrop(self, data=None):
-        """
-        if debugs:
-            print("*** loadDefaultBackdrop ***")
-            """
-
         if self["vod_backdrop"].instance:
             self["vod_backdrop"].instance.setPixmapFromFile(os.path.join(skin_directory, "common/blank.png"))
 
     def resizeCover(self, data=None):
-        """
-        if debugs:
-            print("*** resizeCover ***")
-            """
         if self["main_list"].getCurrent() and self["vod_cover"].instance:
             preview = os.path.join(dir_tmp, "cover.jpg")
             if os.path.isfile(preview):
@@ -2133,11 +2047,6 @@ class EStalker_Series_Categories(Screen):
                     print(e)
 
     def resizeLogo(self, data=None):
-        """
-        if debugs:
-            print("*** resizeLogo ***")
-            """
-
         if self["main_list"].getCurrent() and self["vod_logo"].instance:
             preview = os.path.join(dir_tmp, "logo.png")
             if os.path.isfile(preview):
@@ -2191,17 +2100,10 @@ class EStalker_Series_Categories(Screen):
             if im.mode != "RGBA":
                 im = im.convert("RGBA")
 
-            # Backward-compatible resampling method selection
             try:
-                # New versions (Pillow >= 9.1.0)
                 resample_method = Image.Resampling.LANCZOS
-            except AttributeError:
-                try:
-                    # Older versions (Pillow 2.0+)
-                    resample_method = Image.LANCZOS
-                except AttributeError:
-                    # Very old versions (pre-2.0)
-                    resample_method = Image.ANTIALIAS
+            except:
+                resample_method = Image.ANTIALIAS
 
             # Resize image
             im.thumbnail(bd_size, resample_method)
@@ -2244,11 +2146,6 @@ class EStalker_Series_Categories(Screen):
             self["vod_backdrop"].hide()
 
     def DecodeCover(self, PicInfo=None):
-        """
-        if debugs:
-            print("*** DecodeCover ***")
-            """
-
         ptr = self.coverLoad.getData()
         if ptr is not None and self.level != 1:
             self["vod_cover"].instance.setPixmap(ptr)
@@ -2257,11 +2154,6 @@ class EStalker_Series_Categories(Screen):
             self["vod_cover"].hide()
 
     def DecodeLogo(self, PicInfo=None):
-        """
-        if debugs:
-            print("*** DecodeLogo ***")
-            """
-
         ptr = self.logoLoad.getData()
         if ptr is not None and self.level != 2:
             self["vod_logo"].instance.setPixmap(ptr)
@@ -2270,11 +2162,6 @@ class EStalker_Series_Categories(Screen):
             self["vod_logo"].hide()
 
     def DecodeBackdrop(self, PicInfo=None):
-        """
-        if debugs:
-            print("*** DecodeBackdrop ***")
-            """
-
         ptr = self.backdropLoad.getData()
         if ptr is not None and self.level != 2:
             self["vod_backdrop"].instance.setPixmap(ptr)
@@ -2755,11 +2642,6 @@ class EStalker_Series_Categories(Screen):
                     self.createSetup()
 
     def setIndex(self, data=None):
-        """
-        if debugs:
-            print("*** setIndex ***")
-            """
-
         if self["main_list"].getCurrent():
             self["main_list"].setIndex(glob.currentchannellistindex)
 
@@ -2934,11 +2816,6 @@ class EStalker_Series_Categories(Screen):
         self.buildLists()
 
     def hideVod(self):
-        """
-        if debugs:
-            print("*** hideVod ***")
-            """
-
         self["vod_cover"].hide()
         self["vod_logo"].hide()
         self["vod_backdrop"].hide()
@@ -2958,10 +2835,6 @@ class EStalker_Series_Categories(Screen):
         self["overview"].setText("")
 
     def clearVod(self):
-        """
-        if debugs:
-            print("*** clearVod ***")
-            """
         # self["vod_cover"].hide()
         # self["vod_logo"].hide()
         # self["vod_backdrop"].hide()
@@ -2979,21 +2852,12 @@ class EStalker_Series_Categories(Screen):
         self["rating_percent"].setText("")
 
     def showVod(self):
-        """
-        if debugs:
-            print("*** showVod ***")
-            """
         if self["main_list"].getCurrent():
             self["vod_cover"].show()
             self["vod_logo"].show()
             self["vod_backdrop"].show()
 
     def check(self, token):
-        """
-        if debugs:
-            print("*** check ***", token)
-            """
-
         result = base64.b64decode(token)
         result = zlib.decompress(base64.b64decode(result))
         result = base64.b64decode(result).decode()

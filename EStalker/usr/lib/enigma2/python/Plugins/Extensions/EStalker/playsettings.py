@@ -63,13 +63,6 @@ class EStalker_Settings(ConfigListScreen, Screen):
         self.onFirstExecBegin.append(self.initConfig)
         self.onLayoutFinish.append(self.__layoutFinished)
 
-    def clear_caches(self):
-        try:
-            with open("/proc/sys/vm/drop_caches", "w") as drop_caches:
-                drop_caches.write("1\n2\n3\n")
-        except IOError:
-            pass
-
     def __layoutFinished(self):
         self.setTitle(self.setup_title)
 
@@ -227,7 +220,7 @@ class EStalker_Settings(ConfigListScreen, Screen):
             try:
                 with open(playlists_json) as f:
                     playlists_all = json.load(f)
-            except json.JSONDecodeError as e:
+            except ValueError as e:
                 print("Error loading playlists:", e)
                 os.remove(playlists_json)
         return playlists_all
@@ -244,5 +237,4 @@ class EStalker_Settings(ConfigListScreen, Screen):
     def writeJsonFile(self):
         with open(playlists_json, "w") as f:
             json.dump(self.playlists_all, f)
-        self.clear_caches()
         self.close()

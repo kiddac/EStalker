@@ -79,7 +79,7 @@ def process_files():
 
         if stripped_line.startswith("#") and (stripped_line.lstrip("#").strip().startswith("http://") or stripped_line.lstrip("#").strip().startswith("https://")):
             collecting = False
-            url = stripped_line.lstrip("#").strip()
+            url = stripped_line.lstrip("#").strip().split(" #")[0].strip()
 
             if not url.endswith("/"):
                 cleaned_url = url + "/"
@@ -92,10 +92,11 @@ def process_files():
 
         elif stripped_line.startswith("http://") or stripped_line.startswith("https://"):
             collecting = False  # Stop collecting previous block
-            if not stripped_line.endswith("/"):
-                cleaned_url = stripped_line + "/"
+            url_only = stripped_line.split(" #")[0].strip()
+            if not url_only.endswith("/"):
+                cleaned_url = url_only + "/"
             else:
-                cleaned_url = stripped_line
+                cleaned_url = url_only
 
             current_url = cleaned_url
             collecting = True
@@ -121,10 +122,59 @@ def process_files():
                     dedup[mac_value] = alias_value
         grouped[key] = [(m, dedup[m]) for m in dedup]
 
-    # Write original lines back to file (preserving comments and formatting)
+    # Write corrected lines back to file (uppercase MACs, normalised URLs)
     try:
+        corrected_lines = []
+        for raw_line in raw_lines_preserved:
+            stripped = raw_line.strip()
+            if not stripped:
+                corrected_lines.append(raw_line)
+                continue
+
+            is_commented_url = stripped.startswith("#") and (
+                stripped.lstrip("#").strip().startswith("http://") or
+                stripped.lstrip("#").strip().startswith("https://")
+            )
+            is_url = stripped.startswith("http://") or stripped.startswith("https://")
+
+            if is_url or is_commented_url:
+                # Normalise URL - ensure ends with /c/ or /stalker_portal/c/
+                if is_commented_url:
+                    url_part = stripped.lstrip("#").strip()
+                    prefix = "# "
+                else:
+                    url_part = stripped
+                    prefix = ""
+
+                # Split off any inline comment and preserve it
+                inline_comment = ""
+                if " #" in url_part:
+                    url_part, inline_comment = url_part.split(" #", 1)
+                    url_part = url_part.strip()
+                    inline_comment = " #" + inline_comment
+
+                if not url_part.endswith("/"):
+                    url_part = url_part + "/"
+
+                if "/stalker_portal/c/" not in url_part and "/c/" not in url_part:
+                    url_part = url_part + "c/"
+
+                corrected_lines.append("{}{}{}\n".format(prefix, url_part, inline_comment))
+                continue
+
+            mac_value, alias_value, was_commented = _parse_mac_alias(stripped)
+
+            if mac_value:
+                mac_prefix = "# " if was_commented else ""
+                if alias_value:
+                    corrected_lines.append("{}{} #{}\n".format(mac_prefix, mac_value, alias_value))
+                else:
+                    corrected_lines.append("{}{}\n".format(mac_prefix, mac_value))
+            else:
+                corrected_lines.append(raw_line)
+
         with open(playlist_file, "w") as f:
-            f.writelines(raw_lines_preserved)
+            f.writelines(corrected_lines)
     except:
         pass
 

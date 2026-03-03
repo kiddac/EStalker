@@ -29,9 +29,13 @@ except ImportError:
     # Python 2.7
     from urlparse import urlparse, parse_qs, urlunparse
 
+try:
+    from urllib import quote
+except ImportError:
+    from urllib.parse import quote
 
 # Third-party imports
-from PIL import Image, ImageFile, PngImagePlugin
+from PIL import Image
 from twisted.web.client import downloadPage
 
 # Enigma2 components
@@ -74,57 +78,6 @@ if sslverify:
 playlists_json = cfg.playlists_json.value
 
 
-# png hack for older versions of PIL library
-def mycall(self, cid, pos, length):
-    cid_str = cid.decode("ascii")
-    if cid_str == "tRNS":
-        return self.chunk_TRNS(pos, length)
-    return getattr(self, "chunk_" + cid_str)(pos, length)
-
-
-def mychunk_TRNS(self, pos, length):
-    i16 = PngImagePlugin.i16
-    _simple_palette = re.compile(b"^\xff*\x00\xff*$")
-    s = ImageFile._safe_read(self.fp, length)
-
-    if self.im_mode == "P":
-        if _simple_palette.match(s):
-            i = s.find(b"\0")
-            if i >= 0:
-                self.im_info["transparency"] = i
-        else:
-            self.im_info["transparency"] = s
-    elif self.im_mode in ("1", "L", "I"):
-        self.im_info["transparency"] = i16(s)
-    elif self.im_mode == "RGB":
-        self.im_info["transparency"] = i16(s), i16(s, 2), i16(s, 4)
-    return s
-
-
-if pythonVer != 2:
-    if hasattr(PngImagePlugin, "ChunkStream") and hasattr(PngImagePlugin, "PngStream"):
-        PngImagePlugin.ChunkStream.call = mycall
-        PngImagePlugin.PngStream.chunk_TRNS = mychunk_TRNS
-
-_initialized = 0
-
-
-def _mypreinit():
-    global _initialized
-    if _initialized >= 1:
-        return
-    try:
-        from . import MyPngImagePlugin
-        assert MyPngImagePlugin
-    except ImportError:
-        pass
-
-    _initialized = 1
-
-
-Image.preinit = _mypreinit
-
-
 if pythonVer == 3:
     superscript_to_normal = str.maketrans(
         '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ'
@@ -139,7 +92,6 @@ def normalize_superscripts(text):
 
 
 def clean_names(response):
-    """Clean only 'name' fields inside response['js']."""
     if "js" in response and "data" in response["js"]:
         data_block = response["js"]["data"]
 
@@ -229,12 +181,20 @@ class EStalker_Live_Categories(Screen):
         self.token = glob.active_playlist["playlist_info"]["token"]
         self.token_random = glob.active_playlist["playlist_info"]["token_random"]
         self.domain = str(glob.active_playlist["playlist_info"].get("domain", ""))
+        self.port = glob.active_playlist["playlist_info"].get("port", "")
         self.host = str(glob.active_playlist["playlist_info"].get("host", "")).rstrip("/")
         self.mac = glob.active_playlist["playlist_info"].get("mac", "").upper()
         self.portal = glob.active_playlist["playlist_info"].get("portal", None)
         self.portal_version = glob.active_playlist["playlist_info"].get("version", "5.3.1")
+        self.path_prefix = glob.active_playlist["playlist_info"].get("path_prefix", "")
+
+        self.referer = self.host + self.path_prefix + "index.html"
 
         self.sn = hashlib.md5(self.mac.encode()).hexdigest().upper()[:13]
+        self.adid = hashlib.md5((self.sn + self.mac).encode()).hexdigest()
+
+        encoded_mac = quote(self.mac, safe='')
+        encoded_timezone = quote(self.timezone, safe='')
 
         # self.device_id = hashlib.sha256(self.mac.encode()).hexdigest().upper()
         # device_id = hashlib.sha256(self.sn.encode()).hexdigest().upper()
@@ -245,27 +205,24 @@ class EStalker_Live_Categories(Screen):
         # self.prehash = hashlib.sha1((self.sn + self.mac).encode()).hexdigest()
         # prehash = 0
 
-        self.adid = hashlib.md5((self.sn + self.mac).encode()).hexdigest()
-
         self.headers = {
-            "Host": self.domain,
-            "Accept": "*/*",
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG250 stbapp ver: 2 rev: 369 Safari/533.3",
-            "Accept-Encoding": "gzip, deflate",
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "close",
             "Pragma": "no-cache",
-            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
+            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+            "X-User-Agent": "Model: MAG250; Link: WiFi",
+            "Connection": "Close",
+            "Referer": self.referer,
         }
 
-        if "/stalker_portal/" in self.portal:
+        if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                "Cookie": ("mac={}; stb_lang=en; timezone={}; adid={}").format(self.mac, self.timezone, self.adid)
+                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
             }
         else:
             host_headers = {
-
-                "Cookie": ("mac={}; stb_lang=en; timezone={}").format(self.mac, self.timezone)
+                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
             }
 
         self.headers.update(host_headers)
@@ -594,11 +551,6 @@ class EStalker_Live_Categories(Screen):
         return self.all_data
 
     def _updateUrlPage(self, url, page):
-        """
-        if debugs:
-            print("*** _updateUrlPage ***", url, page)
-            """
-
         if "p=" in url:
             return re.sub(r"p=\d+", "p=" + str(page), url)
         else:
@@ -623,6 +575,28 @@ class EStalker_Live_Categories(Screen):
 
         return response
 
+    def _get_profile(self, portal, mac, token, token_random, headers, param_mode):
+        return get_profile_data(portal, mac, token, token_random, headers, param_mode)
+
+    def _get_account_info(self, portal, mac, token, token_random, headers):
+        account_info_url = "{}?".format(portal)
+        account_info_params = {
+            "type": "account_info",
+            "action": "get_main_info",
+            "JsHttpRequest": "1-xml",
+        }
+        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
+
+        if debugs:
+            print("*** account_info ***", account_info)
+
+        if account_info and isinstance(account_info, dict):
+            js_data = account_info.get("js") or {}
+            expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
+            return expiry, True
+
+        return None, False
+
     def reauthorize(self):
         if debugs:
             print("*** reauthorize ***")
@@ -632,28 +606,14 @@ class EStalker_Live_Categories(Screen):
         if not self.token:
             return
 
-        play_token, status, blocked, returned_mac, returned_id = get_profile_data(
-            portal=self.portal,
-            mac=self.mac,
-            token=self.token,
-            token_random=self.token_random,
-            headers=self.headers,
-            param_mode="full"
+        play_token, status, blocked, returned_mac, returned_id = self._get_profile(
+            self.portal, self.mac, self.token, self.token_random, self.headers, param_mode="full"
         )
 
-        account_info_url = str(self.portal) + "?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
-        account_info = make_request(account_info_url, method="POST", headers=self.headers, params=None, response_type="json")
+        expiry, account_valid = self._get_account_info(self.portal, self.mac, self.token, self.token_random, self.headers)
 
-        if not account_info and isinstance(account_info, dict):
-            if not returned_mac or not returned_id:
-                play_token, status, blocked, returned_mac, returned_id = get_profile_data(
-                    portal=self.portal,
-                    mac=self.mac,
-                    token=self.token,
-                    token_random=self.token_random,
-                    headers=self.headers,
-                    param_mode="basic"
-                )
+        if not account_valid:
+            play_token, status, blocked, returned_mac, returned_id = self._get_profile(self.portal, self.mac, self.token, self.token_random, self.headers, "basic")
 
         glob.active_playlist["playlist_info"]["token"] = self.token
         glob.active_playlist["playlist_info"]["token_random"] = self.token_random
@@ -794,13 +754,13 @@ class EStalker_Live_Categories(Screen):
                     self["epg_list"].setIndex(current_index)
 
                 if cfg.channelpicons.value:
-                    self.timerimage = eTimer()
+                    self.timerImage = eTimer()
 
                     try:
-                        self.timerimage.callback.append(self.downloadImage)
+                        self.timerImage.callback.append(self.downloadImage)
                     except:
-                        self.timerimage_conn = self.timerimage.timeout.connect(self.downloadImage)
-                    self.timerimage.start(250, True)
+                        self.timerImage_conn = self.timerImage.timeout.connect(self.downloadImage)
+                    self.timerImage.start(250, True)
 
                 if self["key_blue"].getText() != _("Reset Search"):
                     if not hasattr(self, 'current_page') or page != self.current_page:
@@ -829,11 +789,6 @@ class EStalker_Live_Categories(Screen):
             self.hideEPG()
 
     def updateDisplay(self):
-        """
-        if debugs:
-            print("*** updateDisplay ***")
-            """
-
         self.refreshEPGInfo()
 
         visible_channels = self.getVisibleChannels()
@@ -863,11 +818,6 @@ class EStalker_Live_Categories(Screen):
         self.updateEPGListWithShortEPG()
 
     def downloadImage(self):
-        """
-        if debugs:
-            print("*** downloadimage ***")
-            """
-
         if self["main_list"].getCurrent():
             try:
                 for filename in ["original.png", "temp.png"]:
@@ -906,29 +856,14 @@ class EStalker_Live_Categories(Screen):
                 self.loadDefaultImage()
 
     def loadBlankImage(self, data=None):
-        """
-        if debugs:
-            print("*** loadblankimage ***")
-            """
-
         if self["picon"].instance:
             self["picon"].instance.setPixmapFromFile(os.path.join(common_path, "picon_blank.png"))
 
     def loadDefaultImage(self, data=None):
-        """
-        if debugs:
-            print("*** loaddefaultimage ***")
-            """
-
         if self["picon"].instance:
             self["picon"].instance.setPixmapFromFile(os.path.join(common_path, "picon.png"))
 
     def resizeImage(self, data=None):
-        """
-        if debugs:
-            print("*** resizeImage ***")
-            """
-
         current_item = self["main_list"].getCurrent()
         if current_item:
             original = os.path.join(dir_tmp, "temp.png")
@@ -1533,11 +1468,6 @@ class EStalker_Live_Categories(Screen):
             self["main_list"].setList(self.main_list)
 
     def setIndex(self, data=None):
-        """
-        if debugs:
-            print("*** setIndex ***")
-            """
-
         if self["main_list"].getCurrent():
             self["main_list"].setIndex(glob.currentchannellistindex)
             self["epg_list"].setIndex(glob.currentchannellistindex)
@@ -1676,11 +1606,6 @@ class EStalker_Live_Categories(Screen):
             self["progress"].show()
 
     def refreshEPGInfo(self):
-        """
-        if debugs:
-            print("*** refreshEPGInfo ***")
-            """
-
         current_item = self["epg_list"].getCurrent()
         if not current_item:
             return
@@ -1880,11 +1805,6 @@ class EStalker_Live_Categories(Screen):
             glob.newPlayingServiceRefString = current_playing_ref
 
     def getVisibleChannels(self):
-        """
-        if debugs:
-            print("*** getVisibleChannels ***")
-            """
-
         current_index = self["main_list"].getIndex()
         position = current_index + 1
         page = (position - 1) // self.itemsperpage + 1
@@ -1895,11 +1815,6 @@ class EStalker_Live_Categories(Screen):
         return [item[4] for item in channel_list[start:end] if len(item) > 4]
 
     def handle_epg_done(self, epg_data):
-        """
-        if debugs:
-            print("*** handle_epg_done ***")
-            """
-
         if not epg_data or "js" not in epg_data:
             return
 
@@ -1914,11 +1829,6 @@ class EStalker_Live_Categories(Screen):
         self.updateEPGListWithShortEPG()
 
     def updateEPGListWithShortEPG(self):
-        """
-        if debugs:
-            print("*** updateEPGListWithShortEPG ***")
-            """
-
         def extract_main_description(descr):
             if not descr:
                 return ""
