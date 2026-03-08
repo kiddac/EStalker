@@ -283,14 +283,14 @@ class EStalker_Playlists(Screen):
         encoded_timezone = quote(timezone, safe='')
         return {
             "Pragma": "no-cache",
-            "Accept-Language": "en-US,en;q=0.5",
+            "Accept": "*/*",
             "Accept-Encoding": "gzip, deflate",
             "Host": "{}:{}".format(domain, port) if port else domain,
             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
             "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "Close",
+            "Connection": "CLose",
             "Referer": referer,
-            "Cookie": "mac={}; stb_lang=en; timezone={};".format(encoded_mac, encoded_timezone),
+            "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone),
         }
 
     def _get_path_prefix(self, http, host, headers, path_prefix):
@@ -330,7 +330,7 @@ class EStalker_Playlists(Screen):
         if try_url(fallback_url):
             return fallback_prefix
 
-        return None
+        return primary_prefix
 
     def _get_portal_url(self, http, host, headers, path_prefix, portal):
         if portal:
@@ -372,8 +372,8 @@ class EStalker_Playlists(Screen):
             """
 
         version_url = host + path_prefix + "version.js"
-        new_referer = host + path_prefix + "index.html"
-        headers["Referer"] = new_referer
+        # new_referer = host + path_prefix + "index.html"
+        # headers["Referer"] = new_referer
 
         vresponse = make_request(version_url, method="GET", headers=headers, params=None, response_type="text")
         if vresponse:
@@ -385,7 +385,7 @@ class EStalker_Playlists(Screen):
                     print("*** portal_version ***", portal_version)
                     """
                 return portal_version
-        return ""
+        return path_prefix
 
     def _do_handshake(self, portal, host, mac, headers):
         """Stage 4: Perform handshake and return updated portal, token, token_random, headers."""
@@ -408,7 +408,7 @@ class EStalker_Playlists(Screen):
             "action": "get_main_info",
             "JsHttpRequest": "1-xml",
         }
-        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
+        account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json")
 
         if debugs:
             print("*** account_info ***", account_info)
@@ -419,35 +419,6 @@ class EStalker_Playlists(Screen):
             return expiry, True
 
         return None, False
-
-    def _determine_validity(self, token, blocked, expiry, status, portal, returned_id):
-        """Determine if the playlist entry is valid based on token, blocked, expiry and status."""
-
-        """
-        if debugs:
-            print("*** _determine_validity ***")
-            print("")
-            """
-
-        valid = True
-
-        if not token:
-            valid = False
-
-        if not returned_id:
-            valid = False
-
-        if str(returned_id) == "0":
-            valid = False
-
-        if str(blocked) == "1":
-            valid = False
-
-        if "stalker" not in portal:
-            if not expiry and status != 0:
-                valid = False
-
-        return valid
 
     def _format_expiry(self, expiry):
         """Normalise expiry string."""
@@ -475,8 +446,8 @@ class EStalker_Playlists(Screen):
         timezone = url_info[4]
 
         playlist_info = self.playlists_all[index]["playlist_info"]
-        portal = playlist_info.get("portal", None)
-        path_prefix = playlist_info.get("path_prefix", None)
+        portal = playlist_info.get("portal", "")
+        path_prefix = playlist_info.get("path_prefix", "")
         portal_version = playlist_info.get("version", "")
         original_url = playlist_info.get("url", "")
         port = playlist_info.get("port", "")
@@ -492,61 +463,101 @@ class EStalker_Playlists(Screen):
             # Stage 1
             path_prefix = self._get_path_prefix(http, host, headers, path_prefix)
 
+            """
             if path_prefix is None:
                 return index, {"valid": False, "expiry": _("Invalid Domain")}
 
             # Add this — if we got no useful path back, the server is dead
             if not path_prefix:
                 return index, {"valid": False, "expiry": _("Invalid Domain")}
+                """
 
             """
             if debugs:
                 print("*** path_prefix ***", path_prefix)
                 """
-
+            """
             if path_prefix is None:
                 return index, {"valid": False, "expiry": _("Invalid Domain")}
+                """
 
             # Stage 2
             portal = self._get_portal_url(http, host, headers, path_prefix, portal)
 
-            """
             if debugs:
                 print("*** portal ***", portal)
-                """
 
             # Stage 3
             portal_version = self._get_portal_version(http, host, headers, path_prefix)
 
+            if debugs:
+                print("*** portal_version ***", portal_version)
+
             # Stage 4
             portal, token, token_random, headers = self._do_handshake(portal, host, mac, headers)
 
-            """
             if debugs:
+                print("*** portal ***", portal)
                 print("*** token ***", token)
-                """
+                print("*** token_random ***", token_random)
+                print("*** headers ***", headers)
 
             if not token:
                 return index, {"valid": False}
 
             # Stage 5
             play_token, status, blocked, returned_mac, returned_id = self._get_profile(portal, mac, token, token_random, headers, "full")
-            stored_id = returned_id
+            # stored_id = returned_id
+
+            if debugs:
+                print("*** play_token ***", play_token)
+                print("*** status ***", status)
+                print("*** blocked ***", blocked)
+                print("*** returned_mac ***", returned_mac)
+                print("*** returned_id ***", returned_id)
 
             # Stage 6
             expiry, account_valid = self._get_account_info(portal, mac, token, token_random, headers)
 
             if not account_valid:
-                # print("*** retrying with no params ***")
+                if debugs:
+                    print("*** retrying with no params ***")
                 play_token, status, blocked, returned_mac, returned_id = self._get_profile(portal, mac, token, token_random, headers, "basic")
-                stored_id = returned_id
+                # stored_id = returned_id
                 # print("*** stored_id 2 ***", stored_id)
+
+                if debugs:
+                    print("*** play_token2 ***", play_token)
+                    print("*** status2 ***", status)
+                    print("*** blocked2 ***", blocked)
+                    print("*** returned_mac2 ***", returned_mac)
+                    print("*** returned_id2 ***", returned_id)
+
                 expiry, account_valid = self._get_account_info(portal, mac, token, token_random, headers)
 
             if not account_valid:
                 return index, {"valid": False}
+            else:
 
-            valid = self._determine_validity(token, blocked, expiry, status, portal, stored_id)
+                valid = True
+                if not token:
+                    valid = False
+
+                # if not returned_id:
+                    # valid = False
+
+                # if str(returned_id) == "0":
+                    # valid = False
+
+                if str(blocked) == "1":
+                    valid = False
+
+                # if "stalker" not in portal:
+                #   if not expiry and status != 0:
+                #       valid = False
+
+            if debugs:
+                print("*** valid ***", valid)
 
             expiry = self._format_expiry(expiry)
 
@@ -740,9 +751,10 @@ class EStalker_Playlists(Screen):
             message = _("Active")
             parsed_date = parse_date_safe(expiry)
 
-            if expiry == _("Invalid Domain"):
-                message = _("Invalid Domain")
-            elif parsed_date and parsed_date < datetime.now():
+            # if expiry == _("Invalid Domain"):
+            #     message = _("Invalid Domain")
+
+            if parsed_date and parsed_date < datetime.now():
                 message = _("Expired")
             elif not valid:
                 message = _("Not active")
@@ -985,7 +997,7 @@ class EStalker_UserInfo(Screen):
             "X-User-Agent": "Model: MAG250; Link: WiFi",
             "Connection": "Close",
             "Referer": referer,
-            "Cookie": "mac={}; stb_lang=en; timezone={};".format(encoded_mac, encoded_timezone),
+            "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone),
         }
 
     def _fetch_xtream_creds(self, portal, headers, content_type, domain):

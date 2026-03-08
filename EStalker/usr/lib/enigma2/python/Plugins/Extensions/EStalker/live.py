@@ -508,12 +508,12 @@ class EStalker_Live_Categories(Screen):
             return self.all_data
 
         try:
-            data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+            data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
             if not data and self.retry is False:
                 self.retry = True
                 self.reauthorize()
-                data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
             if data:
                 if pythonVer == 3 and glob.hassuperscript:
@@ -561,7 +561,7 @@ class EStalker_Live_Categories(Screen):
         if debugs:
             print("*** createLink ***", url)
 
-        response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
+        response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
 
         if debugs:
             print("*** createlink response ***", response)
@@ -569,7 +569,7 @@ class EStalker_Live_Categories(Screen):
         if not response and self.retry is False:
             self.retry = True
             self.reauthorize()
-            response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
+            response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
             if debugs:
                 print("*** createlink response 2 ***", response)
 
@@ -585,7 +585,7 @@ class EStalker_Live_Categories(Screen):
             "action": "get_main_info",
             "JsHttpRequest": "1-xml",
         }
-        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
+        account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json")
 
         if debugs:
             print("*** account_info ***", account_info)
@@ -1330,7 +1330,7 @@ class EStalker_Live_Categories(Screen):
                         print("*** original command **", command)
 
                     if isinstance(command, str):
-                        if "localhost" in command or "http" not in command or "///" in command:
+                        if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
                             url = "{0}?type=itv&action=create_link&cmd={1}&series=0&forced_storage=0&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
                             self.retry = False
                             response = self.createLink(url)
@@ -1499,8 +1499,6 @@ class EStalker_Live_Categories(Screen):
             self["category_actions"].setEnabled(True)
             self["channel_actions"].setEnabled(False)
             self.sortText = _("Sort: A-Z")
-            print("*** self.sortText 13 ***", self.sortText)
-
             self.buildLists()
 
     def showHiddenList(self):
@@ -1708,7 +1706,7 @@ class EStalker_Live_Categories(Screen):
                         stream_id = self["main_list"].getCurrent()[4]
                         url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&limit=10&size=10".format(stream_id)
 
-                        response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
+                        response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
 
                         listings = []
 
@@ -1763,7 +1761,6 @@ class EStalker_Live_Categories(Screen):
 
                             self["progress"].hide()
                             self["key_yellow"].setText("")
-                            print("*** yellow 12 ***", self["key_yellow"].getText())
                             self["key_blue"].setText("")
                             self["key_epg"].setText("")
 

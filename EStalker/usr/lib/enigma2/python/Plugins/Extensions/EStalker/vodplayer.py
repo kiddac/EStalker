@@ -9,6 +9,8 @@ import json
 import hashlib
 import os
 import re
+import tempfile
+import unicodedata
 from itertools import cycle, islice
 
 try:
@@ -412,8 +414,8 @@ class EStalker_VodPlayer(
 
         self.streamurl = streamurl
         self.servicetype = servicetype
-        self.stream_id = stream_id
         self.originalservicetype = self.servicetype
+        self.stream_id = stream_id
 
         skin_path = os.path.join(skin_directory, cfg.skin.value)
         skin = os.path.join(skin_path, "vodplayer.xml")
@@ -486,21 +488,123 @@ class EStalker_VodPlayer(
 
         self.headers["Authorization"] = "Bearer " + self.token
 
+        # Precompiled regex (stripjunk)
+        self._re_has_ascii = re.compile(r'[\x00-\x7F]')
+        self._re_has_non_ascii = re.compile(r'[^\x00-\x7F]')
+
+        self._re_remove_non_ascii = re.compile(r'[^\x00-\x7F]+')
+
+        self._re_end_the = re.compile(r'\s*the$', re.IGNORECASE)
+        self._re_prefix_xx_colon = re.compile(r'^\w{2}:', re.IGNORECASE)
+        self._re_prefix_xx_pipe_xx = re.compile(r'^\w{2}\|\w{2}\s', re.IGNORECASE)
+
+        self._re_leading_doublepipes = re.compile(r'^\|\|.*?\|\|')
+        self._re_leading_singlepipe_block = re.compile(r'^\|.*?\|')
+        self._re_any_pipe_block = re.compile(r'\|.*?\|')
+
+        self._re_leading_doublebars = re.compile(r'^┃┃.*?┃┃')
+        self._re_leading_singlebar_block = re.compile(r'^┃.*?┃')
+        self._re_any_bar_block = re.compile(r'┃.*?┃')
+
+        self._re_parens = re.compile(r'\(\(.*?\)\)|\([^()]*\)')
+        self._re_brackets = re.compile(r'\[\[.*?\]\]|\[.*?\]')
+
+        self._re_is_year_only = re.compile(r'^\d{4}$')
+        self._re_trailing_year = re.compile(r'[\s\-]*(?:[\(\[\"]?\d{4}[\)\]\"]?)$')
+
+        self._re_lang_dash_prefix = re.compile(r'^[A-Za-z0-9\-]{1,7}\s*-\s*', re.IGNORECASE)
+
+        # Bad substrings
+        bad_strings = [
+            "ae|", "al|", "ar|", "at|", "ba|", "be|", "bg|", "br|", "cg|", "ch|", "cz|", "da|", "de|", "dk|",
+            "ee|", "en|", "es|", "eu|", "ex-yu|", "fi|", "fr|", "gr|", "hr|", "hu|", "in|", "ir|", "it|", "lt|",
+            "mk|", "mx|", "nl|", "no|", "pl|", "pt|", "ro|", "rs|", "ru|", "se|", "si|", "sk|", "sp|", "tr|",
+            "uk|", "us|", "yu|",
+            "1080p", "1080p-dual-lat-cine-calidad.com", "1080p-dual-lat-cine-calidad.com-1",
+            "1080p-dual-lat-cinecalidad.mx", "1080p-lat-cine-calidad.com", "1080p-lat-cine-calidad.com-1",
+            "1080p-lat-cinecalidad.mx", "1080p.dual.lat.cine-calidad.com", "3d", "'", "#", "(", ")", "-", "[]", "/",
+            "4k", "720p", "aac", "blueray", "ex-yu:", "fhd", "hd", "hdrip", "hindi", "imdb", "multi:", "multi-audio",
+            "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264",
+            "amz", "dolby", "audio", "8k", "3840p", "50fps", "60fps", "hevc", "raw ", "vip ", "NF", "d+", "a+", "vp", "prmt", "mrvl"
+        ]
+        self._re_bad_strings = re.compile('|'.join(map(re.escape, bad_strings)), re.IGNORECASE)
+
+        # Bad suffixes
+        bad_suffix = [
+            " al", " ar", " ba", " da", " de", " en", " es", " eu", " ex-yu", " fi", " fr", " gr", " hr", " mk",
+            " nl", " no", " pl", " pt", " ro", " rs", " ru", " si", " swe", " sw", " tr", " uk", " yu"
+        ]
+        self._re_bad_suffix = re.compile(r'(' + '|'.join(map(re.escape, bad_suffix)) + r')$', re.IGNORECASE)
+
+        self._re_dots_underscores = re.compile(r"[._'\*]")
+
+        self.adult_keywords = set([
+            "adult", "+18", "18+", "18 rated", "xxx", "sex", "porn",
+            "voksen", "volwassen", "aikuinen", "Erwachsene", "dorosly",
+            "взрослый", "vuxen", "£дорослий"
+        ])
+
         self["actions"] = ActionMap(["EStalkerActions"], {
             "cancel": self.back,
             "stop": self.back,
             "red": self.back,
-            "tv": self.toggleStreamType,
-            "info": self.toggleStreamType,
-            "green": self.nextAR,
-            "ok": self.refreshInfobar,
             "channelUp": self.__next__,
             "down": self.__next__,
             "channelDown": self.prev,
             "up": self.prev,
+            "tv": self.toggleStreamType,
+            "info": self.toggleStreamType,
+            "green": self.nextAR,
+            "ok": self.refreshInfobar,
         }, -2)
 
+        self.timerWatched = eTimer()
+        try:
+            self.timerWatched.callback.append(self.addWatchedList)
+        except:
+            self.timerWatched_conn = self.timerWatched.timeout.connect(self.addWatchedList)
+
+        self.timerWatchdog = eTimer()
+        try:
+            self.timerWatchdog.callback.append(self.sendWatchdog)
+        except:
+            self.timerWatchdog_conn = self.timerWatchdog.timeout.connect(self.sendWatchdog)
+
         self.onFirstExecBegin.append(boundFunction(self.playStream, self.servicetype, self.streamurl))
+
+    def sendWatchdog(self):
+        if glob.categoryname == "series":
+            play_type = 2
+        else:
+            play_type = 1
+
+        watchdog_url = "{0}?type=watchdog&action=get_events&cur_play_type={1}&event_active_id=0&init=0&JsHttpRequest=1-xml".format(self.portal, play_type)
+        make_request(watchdog_url, method="GET", headers=self.headers, params=None, response_type="json")
+        self.timerWatchdog.start(30000, True)
+
+    def _stopTimer(self, name):
+        t = getattr(self, name, None)
+        if t:
+            try:
+                t.stop()
+            except:
+                pass
+
+    def _cleanupTimer(self, name):
+        t = getattr(self, name, None)
+        if t:
+            try:
+                t.stop()
+            except:
+                pass
+            try:
+                t.callback[:] = []
+            except:
+                pass
+        try:
+            setattr(self, name, None)
+        except:
+            pass
 
     def refreshInfobar(self):
         IPTVInfoBarShowHide.OkPressed(self)
@@ -516,11 +620,17 @@ class EStalker_VodPlayer(
             if stream_id not in glob.active_playlist["player_info"]["serieswatched"]:
                 glob.active_playlist["player_info"]["serieswatched"].append(stream_id)
 
-        with open(playlists_json, "r") as f:
+        self.playlists_all = []
+        if os.path.exists(playlists_json):
             try:
-                self.playlists_all = json.load(f)
+                with open(playlists_json, "r") as f:
+                    self.playlists_all = json.load(f) or []
             except:
-                os.remove(playlists_json)
+                try:
+                    os.remove(playlists_json)
+                except:
+                    pass
+                self.playlists_all = []
 
         if self.playlists_all:
             for i, playlist in enumerate(self.playlists_all):
@@ -532,15 +642,32 @@ class EStalker_VodPlayer(
                     break
 
         with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f)
+            json.dump(self.playlists_all, f, indent=4)
 
     def strip_foreign_mixed(self, text):
-        has_ascii = bool(re.search(r'[\x00-\x7F]', text))
-        has_non_ascii = bool(re.search(r'[^\x00-\x7F]', text))
+        has_ascii = bool(self._re_has_ascii.search(text))
+        has_non_ascii = bool(self._re_has_non_ascii.search(text))
 
         if has_ascii and has_non_ascii:
-            # Remove only non-ASCII characters
-            text = re.sub(r'[^\x00-\x7F]+', '', text)
+            text = self._re_remove_non_ascii.sub('', text)
+
+        return text
+
+    def normalize_text(self, text):
+
+        has_ascii = bool(self._re_has_ascii.search(text))
+        has_non_ascii = bool(self._re_has_non_ascii.search(text))
+
+        if has_ascii and has_non_ascii:
+
+            if pythonVer == 2:
+                if isinstance(text, str):
+                    text = text.decode("utf-8", "ignore")
+
+                text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore")
+
+            else:
+                text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
         return text
 
@@ -548,74 +675,52 @@ class EStalker_VodPlayer(
         searchtitle = text
 
         # Move "the" from the end to the beginning (case-insensitive)
-        if searchtitle.strip().lower().endswith("the"):
+        if self._re_end_the.search(searchtitle.strip().lower()):
             searchtitle = "The " + searchtitle[:-3].strip()
 
         # remove xx: at start (case-insensitive)
-        searchtitle = re.sub(r'^\w{2}:', '', searchtitle, flags=re.IGNORECASE)
+        searchtitle = self._re_prefix_xx_colon.sub('', searchtitle)
 
         # remove xx|xx at start (case-insensitive)
-        searchtitle = re.sub(r'^\w{2}\|\w{2}\s', '', searchtitle, flags=re.IGNORECASE)
-
-        # remove xx - at start (case-insensitive)
-        # searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle, flags=re.IGNORECASE)
+        searchtitle = self._re_prefix_xx_pipe_xx.sub('', searchtitle)
 
         # remove all leading content between and including || or |
-        searchtitle = re.sub(r'^\|\|.*?\|\|', '', searchtitle)
-        searchtitle = re.sub(r'^\|.*?\|', '', searchtitle)
-        searchtitle = re.sub(r'\|.*?\|', '', searchtitle)
+        searchtitle = self._re_leading_doublepipes.sub('', searchtitle)
+        searchtitle = self._re_leading_singlepipe_block.sub('', searchtitle)
+        searchtitle = self._re_any_pipe_block.sub('', searchtitle)
 
         # remove all leading content between and including ┃┃ or ┃
-        searchtitle = re.sub(r'^┃┃.*?┃┃', '', searchtitle)
-        searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
-        searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
-        searchtitle = re.sub(r'┃.*?┃', '', searchtitle)
+        searchtitle = self._re_leading_doublebars.sub('', searchtitle)
+        searchtitle = self._re_leading_singlebar_block.sub('', searchtitle)
+        searchtitle = self._re_any_bar_block.sub('', searchtitle)
 
         # remove all content between and including () unless it's all digits
-        # searchtitle = re.sub(r'\((?!\d+\))[^()]*\)', '', searchtitle)
-        searchtitle = re.sub(r'\(\(.*?\)\)|\([^()]*\)', '', searchtitle)
+        searchtitle = self._re_parens.sub('', searchtitle)
 
         # remove all content between and including []
-        searchtitle = re.sub(r'\[\[.*?\]\]|\[.*?\]', '', searchtitle)
+        searchtitle = self._re_brackets.sub('', searchtitle)
 
         # remove trailing year (but not if the whole title *is* a year)
-        if not re.match(r'^\d{4}$', searchtitle.strip()):
-            searchtitle = re.sub(r'[\s\-]*(?:[\(\[\"]?\d{4}[\)\]\"]?)$', '', searchtitle)
+        if not self._re_is_year_only.match(searchtitle.strip()):
+            searchtitle = self._re_trailing_year.sub('', searchtitle)
 
         # remove up to 6 characters followed by space and dash at start (e.g. "EN -", "BE-NL -")
-        searchtitle = re.sub(r'^[A-Za-z0-9\-]{1,7}\s*-\s*', '', searchtitle, flags=re.IGNORECASE)
+        searchtitle = self._re_lang_dash_prefix.sub('', searchtitle)
 
-        # Strip foreign / non-ASCII characters
+        # normalise text
+        searchtitle = self.normalize_text(searchtitle)
+
+        # Strip foreign / non-ASCII characters (only when mixed)
         searchtitle = self.strip_foreign_mixed(searchtitle)
 
         # Bad substrings to strip (case-insensitive)
-        bad_strings = [
-            "ae|", "al|", "ar|", "at|", "ba|", "be|", "bg|", "br|", "cg|", "ch|", "cz|", "da|", "de|", "dk|",
-            "ee|", "en|", "es|", "eu|", "ex-yu|", "fi|", "fr|", "gr|", "hr|", "hu|", "in|", "ir|", "it|", "lt|",
-            "mk|", "mx|", "nl|", "no|", "pl|", "pt|", "ro|", "rs|", "ru|", "se|", "si|", "sk|", "sp|", "tr|",
-            "uk|", "us|", "yu|",
-            "1080p", "1080p-dual-lat-cine-calidad.com", "1080p-dual-lat-cine-calidad.com-1",
-            "1080p-dual-lat-cinecalidad.mx", "1080p-lat-cine-calidad.com", "1080p-lat-cine-calidad.com-1",
-            "1080p-lat-cinecalidad.mx", "1080p.dual.lat.cine-calidad.com", "3d", "'", "#", "(", ")", "-", "[]", "/",
-            "4k", "720p", "aac", "blueray", "ex-yu:", "fhd", "hd", "hdrip", "hindi", "imdb", "multi:", "multi-audio",
-            "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264",
-            "amz", "dolby", "audio", "8k", "3840p", "50fps", "60fps", "hevc", "raw ", "vip ", "NF", "d+", "a+", "vp", "prmt", "mrvl"
-        ]
-
-        bad_strings_pattern = re.compile('|'.join(map(re.escape, bad_strings)), flags=re.IGNORECASE)
-        searchtitle = bad_strings_pattern.sub('', searchtitle)
+        searchtitle = self._re_bad_strings.sub('', searchtitle)
 
         # Bad suffixes to remove (case-insensitive, only if at end)
-        bad_suffix = [
-            " al", " ar", " ba", " da", " de", " en", " es", " eu", " ex-yu", " fi", " fr", " gr", " hr", " mk",
-            " nl", " no", " pl", " pt", " ro", " rs", " ru", " si", " swe", " sw", " tr", " uk", " yu"
-        ]
-
-        bad_suffix_pattern = re.compile(r'(' + '|'.join(map(re.escape, bad_suffix)) + r')$', flags=re.IGNORECASE)
-        searchtitle = bad_suffix_pattern.sub('', searchtitle)
+        searchtitle = self._re_bad_suffix.sub('', searchtitle)
 
         # Replace '.', '_', "'", '*' with space
-        searchtitle = re.sub(r'[._\'\*]', ' ', searchtitle)
+        searchtitle = self._re_dots_underscores.sub(' ', searchtitle)
 
         # Trim leading/trailing hyphens and whitespace
         searchtitle = searchtitle.strip(' -').strip()
@@ -623,6 +728,11 @@ class EStalker_VodPlayer(
         return str(searchtitle)
 
     def playStream(self, servicetype, streamurl):
+        self._stopTimer("timerWatched")
+
+        if not streamurl:
+            return
+
         if cfg.infobarcovers.value is True:
             self.downloadImage()
 
@@ -640,9 +750,8 @@ class EStalker_VodPlayer(
         except:
             pass
 
-        name = self.stripjunk(glob.currentchannellist[glob.currentchannellistindex][0])
         self.reference = eServiceReference(int(self.servicetype), 0, streamurl)
-        self.reference.setName(name)
+        self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
         if self.session.nav.getCurrentlyPlayingServiceReference():
             if self.session.nav.getCurrentlyPlayingServiceReference().toString() != self.reference.toString():
@@ -661,84 +770,170 @@ class EStalker_VodPlayer(
             glob.newPlayingServiceRef = self.session.nav.getCurrentlyPlayingServiceReference()
             glob.newPlayingServiceRefString = self.session.nav.getCurrentlyPlayingServiceReference().toString()
 
-            self.timerWatched = eTimer()
-            try:
-                self.timerWatched.callback.append(self.addWatchedList)
-            except:
-                self.timerWatched_conn = self.timerWatched.timeout.connect(self.addWatchedList)
             self.timerWatched.start(15 * 60 * 1000, True)
+            # watchdog
+            self.timerWatchdog.start(30000, True)
+
+    def loadDefaultImage(self, data=None):
+        if self["cover"].instance:
+            self["cover"].instance.setPixmapFromFile(
+                os.path.join(skin_directory, "common/cover.png")
+            )
 
     def downloadImage(self):
         self.loadDefaultImage()
+
         try:
-            os.remove(os.path.join(dir_tmp, "cover.jpg"))
+            self._cover_req_id += 1
         except:
-            pass
+            self._cover_req_id = 1
+
+        req_id = self._cover_req_id
 
         desc_image = ""
         try:
             desc_image = glob.currentchannellist[glob.currentchannellistindex][5]
         except:
-            pass
+            desc_image = ""
 
-        if desc_image and desc_image != "n/A":
-            temp = os.path.join(dir_tmp, "cover.jpg")
+        if not desc_image or desc_image == "n/A":
+            return
+
+        fd = None
+        temp = None
+
+        try:
+            fd, temp = tempfile.mkstemp(prefix="xst_cover_", suffix=".jpg", dir=dir_tmp)
             try:
-                parsed = urlparse(desc_image)
-                domain = parsed.hostname
-                scheme = parsed.scheme
-
-                if pythonVer == 3:
-                    desc_image = desc_image.encode()
-
-                if scheme == "https" and sslverify:
-                    sniFactory = SNIFactory(domain)
-                    downloadPage(desc_image, temp, sniFactory, timeout=5).addCallback(self.resizeImage).addErrback(self.loadDefaultImage)
-                else:
-                    downloadPage(desc_image, temp, timeout=5).addCallback(self.resizeImage).addErrback(self.loadDefaultImage)
+                os.close(fd)
             except:
+                pass
+
+            self._cover_tmp = temp
+
+            parsed = urlparse(desc_image)
+            domain = parsed.hostname
+            scheme = parsed.scheme
+
+            url = desc_image
+            if pythonVer == 3:
+                try:
+                    url = desc_image.encode()
+                except:
+                    url = desc_image
+
+            def _cleanup_temp():
+                try:
+                    if temp and os.path.exists(temp):
+                        os.remove(temp)
+                except:
+                    pass
+
+            def _ok(_data=None):
+                if getattr(self, "_cover_req_id", 0) != req_id:
+                    _cleanup_temp()
+                    return
+
+                self.resizeImage(temp, req_id=req_id)
+
+            def _err(_failure=None):
+                if getattr(self, "_cover_req_id", 0) != req_id:
+                    _cleanup_temp()
+                    return
+
+                _cleanup_temp()
                 self.loadDefaultImage()
-        else:
+
+            if scheme == "https" and sslverify:
+                sniFactory = SNIFactory(domain)
+                d = downloadPage(url, temp, sniFactory, timeout=5)
+            else:
+                d = downloadPage(url, temp, timeout=5)
+
+            d.addCallback(_ok)
+            d.addErrback(_err)
+
+        except:
+            try:
+                if fd:
+                    os.close(fd)
+            except:
+                pass
+
+            try:
+                if temp and os.path.exists(temp):
+                    os.remove(temp)
+            except:
+                pass
+
             self.loadDefaultImage()
 
-    def loadDefaultImage(self, data=None):
-        if self["cover"].instance:
-            self["cover"].instance.setPixmapFromFile(os.path.join(skin_directory, "common/cover.png"))
+    def resizeImage(self, preview, req_id=None, data=None):
+        if not self["cover"].instance:
+            return
 
-    def resizeImage(self, data=None):
-        if self["cover"].instance:
-            preview = os.path.join(dir_tmp, "cover.jpg")
+        self._cover_preview = preview
+        self._cover_preview_req_id = req_id
 
-            if screenwidth.width() == 2560:
-                width = 293
-                height = 440
-            elif screenwidth.width() > 1280:
-                width = 220
-                height = 330
-            else:
-                width = 147
-                height = 220
+        if screenwidth.width() == 2560:
+            width = 293
+            height = 440
+        elif screenwidth.width() > 1280:
+            width = 220
+            height = 330
+        else:
+            width = 147
+            height = 220
+
+        self.PicLoad.setPara([width, height, 1, 1, 0, 1, "FF000000"])
+
+        if self.PicLoad.startDecode(preview):
+            self.PicLoad = ePicLoad()
+            try:
+                self.PicLoad.PictureData.get().append(self.DecodePicture)
+            except:
+                self.PicLoad_conn = self.PicLoad.PictureData.connect(self.DecodePicture)
 
             self.PicLoad.setPara([width, height, 1, 1, 0, 1, "FF000000"])
-
-            if self.PicLoad.startDecode(preview):
-                # if this has failed, then another decode is probably already in progress
-                # throw away the old picload and try again immediately
-                self.PicLoad = ePicLoad()
-                try:
-                    self.PicLoad.PictureData.get().append(self.DecodePicture)
-                except:
-                    self.PicLoad_conn = self.PicLoad.PictureData.connect(self.DecodePicture)
-                self.PicLoad.setPara([width, height, 1, 1, 0, 1, "FF000000"])
-                self.PicLoad.startDecode(preview)
+            self.PicLoad.startDecode(preview)
 
     def DecodePicture(self, PicInfo=None):
+        preview = getattr(self, "_cover_preview", None)
+        preview_req_id = getattr(self, "_cover_preview_req_id", None)
+        current_req_id = getattr(self, "_cover_req_id", None)
+
         ptr = self.PicLoad.getData()
-        if ptr is not None:
+        if (ptr is not None and self["cover"].instance and
+                preview_req_id == current_req_id):
             self["cover"].instance.setPixmap(ptr)
             self["cover"].instance.show()
 
+        try:
+            if preview and os.path.exists(preview):
+                os.remove(preview)
+        except:
+            pass
+
+        try:
+            if getattr(self, "_cover_tmp", None) == preview:
+                self._cover_tmp = None
+        except:
+            pass
+
+        try:
+            self._cover_preview = None
+            self._cover_preview_req_id = None
+        except:
+            pass
+
     def back(self):
+        try:
+            self.timerWatchdog.stop()
+        except:
+            pass
+
+        self._cleanupTimer("timerWatched")
+
         glob.nextlist[-1]["index"] = glob.currentchannellistindex
         try:
             setResumePoint(self.session)
@@ -752,6 +947,13 @@ class EStalker_VodPlayer(
 
         try:
             self.session.nav.playService(eServiceReference(glob.currentPlayingServiceRefString))
+        except:
+            pass
+
+        try:
+            tmp = getattr(self, "_cover_tmp", None)
+            if tmp and os.path.exists(tmp):
+                os.remove(tmp)
         except:
             pass
 
@@ -771,71 +973,6 @@ class EStalker_VodPlayer(
             pass
 
         self.playStream(self.servicetype, self.streamurl)
-
-    def nextARfunction(self):
-        self.ar_id_player += 1
-        if self.ar_id_player > 6:
-            self.ar_id_player = 0
-        try:
-            eAVSwitch.getInstance().setAspectRatio(self.ar_id_player)
-            return VIDEO_ASPECT_RATIO_MAP[self.ar_id_player]
-        except Exception as e:
-            print(e)
-            return _("Resolution Change Failed")
-
-    def nextAR(self):
-        message = self.nextARfunction()
-        self.session.open(MessageBox, message, type=MessageBox.TYPE_INFO, timeout=1)
-
-    def createLink(self, url):
-        response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
-
-        if not response and self.retry is False:
-            self.retry = True
-            self.reauthorize()
-            response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
-
-        return response
-
-    def _get_profile(self, portal, mac, token, token_random, headers, param_mode):
-        return get_profile_data(portal, mac, token, token_random, headers, param_mode)
-
-    def _get_account_info(self, portal, mac, token, token_random, headers):
-        account_info_url = "{}?".format(portal)
-        account_info_params = {
-            "type": "account_info",
-            "action": "get_main_info",
-            "JsHttpRequest": "1-xml",
-        }
-        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
-
-        if account_info and isinstance(account_info, dict):
-            js_data = account_info.get("js") or {}
-            expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
-            return expiry, True
-
-        return None, False
-
-    def reauthorize(self):
-        self.portal, self.token, self.token_random, self.headers = perform_handshake(portal=self.portal, host=self.host, mac=self.mac, headers=self.headers)
-
-        if not self.token:
-            return
-
-        play_token, status, blocked, returned_mac, returned_id = self._get_profile(
-            self.portal, self.mac, self.token, self.token_random, self.headers, param_mode="full"
-        )
-
-        expiry, account_valid = self._get_account_info(self.portal, self.mac, self.token, self.token_random, self.headers)
-
-        if not account_valid:
-            play_token, status, blocked, returned_mac, returned_id = self._get_profile(self.portal, self.mac, self.token, self.token_random, self.headers, "basic")
-
-        glob.active_playlist["playlist_info"]["token"] = self.token
-        glob.active_playlist["playlist_info"]["token_random"] = self.token_random
-        glob.active_playlist["playlist_info"]["play_token"] = play_token
-        glob.active_playlist["playlist_info"]["status"] = status
-        glob.active_playlist["playlist_info"]["blocked"] = blocked
 
     def __next__(self):
         if glob.categoryname == "series":
@@ -859,7 +996,7 @@ class EStalker_VodPlayer(
                 if str(command).startswith("/media/"):
                     pre_vod_url = (str(self.portal) + "?type=series&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&sortby=&p=1&JsHttpRequest=1-xml").format(self.stream_id)
 
-                    pre_response = make_request(pre_vod_url, method="POST", headers=self.headers, params=None, response_type="json")
+                    pre_response = make_request(pre_vod_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                     movie_id = None
 
@@ -876,7 +1013,7 @@ class EStalker_VodPlayer(
                         command = "/media/file_{}{}".format(movie_id, ext)
 
                 if isinstance(command, str):
-                    if "localhost" in command or "http" not in command or "///" in command:
+                    if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
                         url = "{0}?type=vod&action=create_link&cmd={1}&series={2}&forced_storage=&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command, episode_id)
                         self.retry = False
                         response = self.createLink(url)
@@ -910,7 +1047,6 @@ class EStalker_VodPlayer(
                 self.playStream(str_servicetype, next_url)
 
     def prev(self):
-
         if glob.categoryname == "series":
             self.servicetype = self.originalservicetype
 
@@ -932,7 +1068,7 @@ class EStalker_VodPlayer(
                 if str(command).startswith("/media/"):
                     pre_vod_url = (str(self.portal) + "?type=series&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&sortby=&p=1&JsHttpRequest=1-xml").format(self.stream_id)
 
-                    pre_response = make_request(pre_vod_url, method="POST", headers=self.headers, params=None, response_type="json")
+                    pre_response = make_request(pre_vod_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                     movie_id = None
 
@@ -981,3 +1117,68 @@ class EStalker_VodPlayer(
                 next_url = str(next_url) if next_url else ""
 
                 self.playStream(str_servicetype, next_url)
+
+    def nextARfunction(self):
+        self.ar_id_player += 1
+        if self.ar_id_player > 6:
+            self.ar_id_player = 0
+        try:
+            eAVSwitch.getInstance().setAspectRatio(self.ar_id_player)
+            return VIDEO_ASPECT_RATIO_MAP[self.ar_id_player]
+        except Exception as e:
+            print(e)
+            return _("Resolution Change Failed")
+
+    def nextAR(self):
+        message = self.nextARfunction()
+        self.session.open(MessageBox, message, type=MessageBox.TYPE_INFO, timeout=1)
+
+    def createLink(self, url):
+        response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+
+        if not response and self.retry is False:
+            self.retry = True
+            self.reauthorize()
+            response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+
+        return response
+
+    def _get_profile(self, portal, mac, token, token_random, headers, param_mode):
+        return get_profile_data(portal, mac, token, token_random, headers, param_mode)
+
+    def _get_account_info(self, portal, mac, token, token_random, headers):
+        account_info_url = "{}?".format(portal)
+        account_info_params = {
+            "type": "account_info",
+            "action": "get_main_info",
+            "JsHttpRequest": "1-xml",
+        }
+        account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json")
+
+        if account_info and isinstance(account_info, dict):
+            js_data = account_info.get("js") or {}
+            expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
+            return expiry, True
+
+        return None, False
+
+    def reauthorize(self):
+        self.portal, self.token, self.token_random, self.headers = perform_handshake(portal=self.portal, host=self.host, mac=self.mac, headers=self.headers)
+
+        if not self.token:
+            return
+
+        play_token, status, blocked, returned_mac, returned_id = self._get_profile(
+            self.portal, self.mac, self.token, self.token_random, self.headers, param_mode="full"
+        )
+
+        expiry, account_valid = self._get_account_info(self.portal, self.mac, self.token, self.token_random, self.headers)
+
+        if not account_valid:
+            play_token, status, blocked, returned_mac, returned_id = self._get_profile(self.portal, self.mac, self.token, self.token_random, self.headers, "basic")
+
+        glob.active_playlist["playlist_info"]["token"] = self.token
+        glob.active_playlist["playlist_info"]["token_random"] = self.token_random
+        glob.active_playlist["playlist_info"]["play_token"] = play_token
+        glob.active_playlist["playlist_info"]["status"] = status
+        glob.active_playlist["playlist_info"]["blocked"] = blocked

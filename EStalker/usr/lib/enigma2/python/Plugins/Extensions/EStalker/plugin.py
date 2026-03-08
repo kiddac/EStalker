@@ -34,7 +34,7 @@ isDreambox = os.path.exists("/usr/bin/apt-get")
 
 isVTI = os.path.exists("/etc/vtiversion.info")
 
-debugs = True
+debugs = False
 
 with open("/usr/lib/enigma2/python/Plugins/Extensions/EStalker/version.txt", "r") as f:
     version = f.readline()

@@ -202,7 +202,7 @@ class EStalker_Menu(Screen):
         self.headers["Authorization"] = "Bearer " + self.token
 
         category = url[1]
-        response = make_request(url[0], method="POST", headers=self.headers, params=None, response_type="json")
+        response = make_request(url[0], method="GET", headers=self.headers, params=None, response_type="json")
 
         if pythonVer == 3:
             response = clean_names(response)
@@ -387,7 +387,7 @@ class EStalker_Menu(Screen):
             "action": "get_main_info",
             "JsHttpRequest": "1-xml",
         }
-        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
+        account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json")
 
         if debugs:
             print("*** account_info ***", account_info)

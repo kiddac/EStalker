@@ -446,6 +446,12 @@ class EStalker_StreamPlayer(
         except:
             self.timerRecent_conn = self.timerRecent.timeout.connect(self.addRecentLiveList)
 
+        self.timerWatchdog = eTimer()
+        try:
+            self.timerWatchdog.callback.append(self.sendWatchdog)
+        except:
+            self.timerWatchdog_conn = self.timerWatchdog.timeout.connect(self.sendWatchdog)
+
         # Pagination variables - add these
         self.all_data = []
         self.pages_downloaded = set()
@@ -457,6 +463,16 @@ class EStalker_StreamPlayer(
         self.short_epg_results = {}
 
         self.onFirstExecBegin.append(boundFunction(self.playStream, self.servicetype, self.streamurl))
+
+    def sendWatchdog(self):
+        if debugs:
+            print("*** sendWatchdog ***")
+
+        watchdog_url = "{0}?type=watchdog&action=get_events&cur_play_type=0&event_active_id=0&init=0&JsHttpRequest=1-xml".format(self.portal)
+        make_request(watchdog_url, method="GET", headers=self.headers, params=None, response_type="json")
+
+        # restart timer for next ping
+        self.timerWatchdog.start(30000, True)
 
     def _stopTimer(self, name):
         t = getattr(self, name, None)
@@ -664,6 +680,10 @@ class EStalker_StreamPlayer(
         # add to recently watched
         self.timerRecent.start(5 * 60 * 1000, True)
 
+        # start watchdog
+        self._stopTimer("timerWatchdog")
+        self.timerWatchdog.start(30000, True)
+
         self.originalservicetype = self.servicetype
 
         self.refreshInfobar()
@@ -674,6 +694,7 @@ class EStalker_StreamPlayer(
 
         self._cleanupTimer("timerImage")
         self._cleanupTimer("timerRecent")
+        self._cleanupTimer("timerWatchdog")
 
         glob.nextlist[-1]["index"] = glob.currentchannellistindex
 
@@ -842,7 +863,7 @@ class EStalker_StreamPlayer(
         if debugs:
             print("*** createLink ***", url)
 
-        response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
+        response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
 
         if debugs:
             print("*** createlink response ***", response)
@@ -850,7 +871,7 @@ class EStalker_StreamPlayer(
         if not response and self.retry is False:
             self.retry = True
             self.reauthorize()
-            response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
+            response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
             if debugs:
                 print("*** createlink response 2 ***", response)
 
@@ -866,7 +887,7 @@ class EStalker_StreamPlayer(
             "action": "get_main_info",
             "JsHttpRequest": "1-xml",
         }
-        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
+        account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json")
 
         if debugs:
             print("*** account_info ***", account_info)
@@ -922,7 +943,7 @@ class EStalker_StreamPlayer(
                 command = str(glob.currentchannellist[glob.currentchannellistindex][7])
 
             if isinstance(command, str):
-                if "localhost" in command or "http" not in command or "///" in command:
+                if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
                     url = "{0}?type=itv&action=create_link&cmd={1}&series=0&forced_storage=0&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
                     self.retry = False
                     response = self.createLink(url)
@@ -970,7 +991,7 @@ class EStalker_StreamPlayer(
                 command = str(glob.currentchannellist[glob.currentchannellistindex][7])
 
             if isinstance(command, str):
-                if "localhost" in command or "http" not in command or "///" in command:
+                if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
                     url = "{0}?type=itv&action=create_link&cmd={1}&series=0&forced_storage=0&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
                     self.retry = False
                     response = self.createLink(url)
@@ -1049,12 +1070,12 @@ class EStalker_StreamPlayer(
             return self.all_data
 
         try:
-            data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+            data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
             if not data and self.retry is False:
                 self.retry = True
                 self.reauthorize()
-                data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
             if data:
                 if pythonVer == 3 and glob.hassuperscript:

@@ -27,7 +27,7 @@ try:
 except ImportError:
     from urllib.parse import urlparse, parse_qsl, urlunparse
 
-from .plugin import cfg, pythonVer
+from .plugin import cfg, pythonVer, debugs
 
 playlist_file = cfg.playlist_file.value
 playlists_json = cfg.playlists_json.value
@@ -156,7 +156,7 @@ def perform_handshake(portal, host, mac, headers):
         "JsHttpRequest": "1-xml"
     }
 
-    response = make_request(handshake_url, method="POST", headers=headers, params=body_params, response_type="json")
+    response = make_request(handshake_url, method="GET", headers=headers, params=body_params, response_type="json")
 
     if not response:
         handshake_url = "{}?".format(portal)
@@ -197,7 +197,7 @@ def perform_handshake(portal, host, mac, headers):
                 "prehash": prehash
             }
 
-            response = make_request(handshake_url, method="POST", headers=headers, params=prehash_params, response_type="json")
+            response = make_request(handshake_url, method="GET", headers=headers, params=prehash_params, response_type="json")
             js_data = response.get("js", {}) if response else {}
 
         token = js_data.get("token")
@@ -207,6 +207,7 @@ def perform_handshake(portal, host, mac, headers):
             return portal, None, None, headers
 
         headers["Authorization"] = "Bearer " + token
+        headers["Cookie"] = headers.get("Cookie", "") + "; token=" + token
 
     """
     else:
@@ -338,9 +339,9 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
 
         if param_mode == "basic":
             host_params = OrderedDict([
-                ('sn', sn),
-                ('device_id', ''),
-                ('timestamp', str(int(timestamp))),
+                # ('sn', sn),
+                # ('device_id', ''),
+                # ('timestamp', str(int(timestamp))),
             ])
 
         profile_params = host_params
@@ -351,9 +352,10 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
     base_profile_params.update(profile_params)
     profile_params = base_profile_params
 
-    profile_data = make_request(profile_url, method="POST", headers=headers, params=profile_params, response_type="json")
+    profile_data = make_request(profile_url, method="GET", headers=headers, params=profile_params, response_type="json")
 
-    # print("*** profile_data ***", portal, mac, json.dumps(profile_data))
+    if debugs:
+        print("*** profile_data ***", portal, mac, json.dumps(profile_data))
 
     js_data = {}
     play_token = None
@@ -394,7 +396,7 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
             ('timestamp', str(int(timestamp))),
         ])
 
-        profile_data = make_request(profile_url, method="POST", headers=headers, params=fallback_params, response_type="json")
+        profile_data = make_request(profile_url, method="GET", headers=headers, params=fallback_params, response_type="json")
 
         # print("*** profile_data 2 ***", portal, mac, json.dumps(profile_data))
         if profile_data:

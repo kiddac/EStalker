@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from itertools import cycle, islice
 import zlib
 import hashlib
+import unicodedata
 
 try:
     from http.client import HTTPConnection
@@ -829,11 +830,11 @@ class EStalker_Series_Categories(Screen):
                 return self.all_series_data
 
             try:
-                data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
                 if not data and self.retry is False:
                     self.retry = True
                     self.reauthorize()
-                    data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                    data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                 if data:
 
@@ -878,12 +879,12 @@ class EStalker_Series_Categories(Screen):
                 return self.all_seasons_data
 
             try:
-                data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                 if not data and self.retry is False:
                     self.retry = True
                     self.reauthorize()
-                    data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                    data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                 if data:
                     if pythonVer == 3 and glob.hassuperscript:
@@ -927,12 +928,12 @@ class EStalker_Series_Categories(Screen):
                 return self.all_episodes_data
 
             try:
-                data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                 if not data and self.retry is False:
                     self.retry = True
                     self.reauthorize()
-                    data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                    data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                 if data:
 
@@ -982,12 +983,12 @@ class EStalker_Series_Categories(Screen):
                 return self.all_series_data
 
             try:
-                data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                 if not data and self.retry is False:
                     self.retry = True
                     self.reauthorize()
-                    data = make_request(paged_url, method="POST", headers=self.headers, params=None, response_type="json")
+                    data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                 if data:
 
@@ -1035,7 +1036,7 @@ class EStalker_Series_Categories(Screen):
         if debugs:
             print("*** createLink ***", url)
 
-        response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
+        response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
 
         if debugs:
             print("*** createlink response ***", response)
@@ -1043,7 +1044,7 @@ class EStalker_Series_Categories(Screen):
         if not response and self.retry is False:
             self.retry = True
             self.reauthorize()
-            response = make_request(url, method="POST", headers=self.headers, params=None, response_type="json")
+            response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
             if debugs:
                 print("*** createlink response 2 ***", response)
 
@@ -1059,7 +1060,7 @@ class EStalker_Series_Categories(Screen):
             "action": "get_main_info",
             "JsHttpRequest": "1-xml",
         }
-        account_info = make_request(account_info_url, method="POST", headers=headers, params=account_info_params, response_type="json")
+        account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json")
 
         if debugs:
             print("*** account_info ***", account_info)
@@ -1410,8 +1411,11 @@ class EStalker_Series_Categories(Screen):
         if debugs:
             print("*** failed ***")
 
+        """
         if data:
             print(data)
+            """
+
         return
 
     def processTMDB(self, result=None):
@@ -1497,7 +1501,7 @@ class EStalker_Series_Categories(Screen):
             print("*** failed 2 ***")
 
         if data:
-            print(data)
+            # print(data)
             if self.level == 2:
                 self.tmdbValid = False
                 if self.repeatcount == 0:
@@ -2588,7 +2592,7 @@ class EStalker_Series_Categories(Screen):
                     if str(command).startswith("/media/"):
                         pre_vod_url = (str(self.portal) + "?type=series&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&sortby=&p=1&JsHttpRequest=1-xml").format(stream_id)
 
-                        pre_response = make_request(pre_vod_url, method="POST", headers=self.headers, params=None, response_type="json")
+                        pre_response = make_request(pre_vod_url, method="GET", headers=self.headers, params=None, response_type="json")
 
                         movie_id = None
 
@@ -2605,7 +2609,7 @@ class EStalker_Series_Categories(Screen):
                             command = "/media/file_{}{}".format(movie_id, ext)
 
                     if isinstance(command, str):
-                        if "localhost" in command or "http" not in command or "///" in command:
+                        if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
 
                             # must be type=vod for create_link in series
                             url = "{0}?type=vod&action=create_link&cmd={1}&series={2}&forced_storage=&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command, episode_id)
