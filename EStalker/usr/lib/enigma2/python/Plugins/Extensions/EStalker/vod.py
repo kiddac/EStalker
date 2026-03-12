@@ -186,12 +186,12 @@ class EStalker_Vod_Categories(Screen):
 
         self.sortindex = 0
         self.sortText = _("Sort: A-Z")
+        self.do_sort = False
 
         self.level = 1
 
         self.showfav = False
         self.firstlist = True
-        self.do_sort = False
 
         self.timezone = get_local_timezone()
         self.token = glob.active_playlist["playlist_info"]["token"]
@@ -443,11 +443,11 @@ class EStalker_Vod_Categories(Screen):
         except:
             self.coverLoad_conn = self.coverLoad.PictureData.connect(self.DecodeCover)
 
-        self.timerVOD = eTimer()
+        self.timerVod = eTimer()
         try:
-            self.timerVOD.callback.append(self.downloadVodInfo)
+            self.timerVod.callback.append(self.downloadVodInfo)
         except:
-            self.timerVOD_conn = self.timerVOD.timeout.connect(self.downloadVodInfo)
+            self.timerVod_conn = self.timerVod.timeout.connect(self.downloadVodInfo)
 
         self.onFirstExecBegin.append(self.createSetup)
         self.onLayoutFinish.append(self.__layoutFinished)
@@ -491,8 +491,8 @@ class EStalker_Vod_Categories(Screen):
     def _stopTimerVod(self):
         # Stop any scheduled timer fire
         try:
-            if self.timerVOD:
-                self.timerVOD.stop()
+            if self.timerVod:
+                self.timerVod.stop()
         except:
             pass
 
@@ -603,6 +603,7 @@ class EStalker_Vod_Categories(Screen):
                 response = self.downloadApiData(glob.nextlist[-1]["next_url"])
             else:
                 response = ""
+
             self.firstlist = True
             self.getVodCategoryStreams(response)
 
@@ -629,7 +630,6 @@ class EStalker_Vod_Categories(Screen):
 
         index = 0
         self.list1 = []
-        self.prelist = []
 
         self["key_epg"].setText("")
 
@@ -639,7 +639,7 @@ class EStalker_Vod_Categories(Screen):
 
         hidden = "0" in currentHidden
 
-        for index, item in enumerate(currentCategoryList, start=len(self.prelist)):
+        for index, item in enumerate(currentCategoryList):
             if not isinstance(item, dict):
                 continue
 
@@ -916,21 +916,13 @@ class EStalker_Vod_Categories(Screen):
 
         self.hideVod()
 
-        if self["key_blue"].getText() != _("Reset Search"):
-            self.pre_list = [
-                buildCategoryList(x[0], x[1], x[2], x[3], self._px_more)
-                for x in self.prelist if not x[3]
-            ]
-        else:
-            self.pre_list = []
-
         if self.list1:
             self.main_list = [
                 buildCategoryList(x[0], x[1], x[2], x[3], self._px_more)
                 for x in self.list1 if not x[3]
             ]
 
-            self["main_list"].setList(self.pre_list + self.main_list)
+            self["main_list"].setList(self.main_list)
 
             if self["main_list"].getCurrent():
                 self["main_list"].setIndex(glob.nextlist[-1]["index"])
@@ -960,27 +952,6 @@ class EStalker_Vod_Categories(Screen):
             # self.showVod()
             self["main_list"].setIndex(glob.nextlist[-1]["index"])
 
-    def updateList2(self):
-        if debugs:
-            print("*** updateList2 ***")
-
-        watched_set = set(str(x) for x in glob.active_playlist["player_info"].get("vodwatched", []))
-
-        if self.chosen_category == "favourites":
-            filtered_list = [x for x in self.list2 if x[7]]
-        else:
-            filtered_list = [x for x in self.list2 if not x[10]]
-
-        self.main_list = [
-            buildVodStreamList(
-                x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14],
-                watched_set, self._px_play, self._px_play2, self._px_fav, self._px_watched
-            )
-            for x in filtered_list
-        ]
-
-        self["main_list"].setList(self.main_list)
-
     def downloadVodInfo(self):
         if debugs:
             print("*** downloadVodInfo ***")
@@ -1007,9 +978,13 @@ class EStalker_Vod_Categories(Screen):
             glob.nextlist[-1]["index"] = current_index
 
             position = current_index + 1
-            position_all = len(self.pre_list) + len(self.main_list) if self.level == 1 else len(self.main_list)
+            position_all = len(self.main_list)
             page = (position - 1) // self.itemsperpage + 1
             page_all = (position_all + self.itemsperpage - 1) // self.itemsperpage
+
+            if self.level == 2 and self["key_blue"].getText() != _("Reset Search") and self.chosen_category != "favourites":
+                position_all = int(self.total_items)
+                page_all = (position_all + self.itemsperpage - 1) // self.itemsperpage
 
             self["page"].setText(_("Page: ") + "{}/{}".format(page, page_all))
             self["listposition"].setText("{}/{}".format(position, position_all))
@@ -1029,11 +1004,7 @@ class EStalker_Vod_Categories(Screen):
 
             if self.level == 2:
                 self._stopTimerVod()
-                self.timerVOD.start(300, True)
-
-                if self["key_blue"].getText() != _("Reset Search") and self.chosen_category != "favourites":
-                    position_all = int(self.total_items)
-                    page_all = (position_all + self.itemsperpage - 1) // self.itemsperpage
+                self.timerVod.start(300, True)
 
                 if not hasattr(self, 'current_page') or page != self.current_page:
                     self.current_page = page
@@ -1133,15 +1104,6 @@ class EStalker_Vod_Categories(Screen):
         if self["main_list"].getCurrent() and glob.nextlist[-1]["index"] != 0:
             self["main_list"].setIndex(glob.nextlist[-1]["index"])
 
-    def strip_foreign_mixed(self, text):
-        has_ascii = bool(self._re_has_ascii.search(text))
-        has_non_ascii = bool(self._re_has_non_ascii.search(text))
-
-        if has_ascii and has_non_ascii:
-            text = self._re_remove_non_ascii.sub('', text)
-
-        return text
-
     def normalize_text(self, text):
 
         has_ascii = bool(self._re_has_ascii.search(text))
@@ -1198,9 +1160,6 @@ class EStalker_Vod_Categories(Screen):
 
         # normalise text
         searchtitle = self.normalize_text(searchtitle)
-
-        # Strip foreign / non-ASCII characters (only when mixed)
-        searchtitle = self.strip_foreign_mixed(searchtitle)
 
         # Bad substrings to strip (case-insensitive)
         searchtitle = self._re_bad_strings.sub('', searchtitle)
@@ -2567,7 +2526,7 @@ class EStalker_Vod_Categories(Screen):
 
         if self["key_menu"].getText() and self["main_list"].getCurrent():
             from . import hidden
-            current_list = self.prelist + self.list1 if self.level == 1 else self.list2
+            current_list = self.list1 if self.level == 1 else self.list2
             if self.level == 1 or (self.level == 2 and self.chosen_category != "favourites"):
                 self.do_sort = True
                 self.session.openWithCallback(self.setIndex, hidden.EStalker_HiddenCategories, "vod", current_list, self.level)

@@ -13,6 +13,7 @@ import time
 from datetime import datetime, timedelta
 from itertools import cycle, islice
 import zlib
+import tempfile
 import hashlib
 import unicodedata
 
@@ -24,9 +25,9 @@ except ImportError:
     HTTPConnection.debuglevel = 0
 
 try:
-    from urllib import quote
+    from urllib import quote, quote_plus
 except ImportError:
-    from urllib.parse import quote
+    from urllib.parse import quote, quote_plus
 
 try:
     from urlparse import urlparse
@@ -40,6 +41,12 @@ from twisted.internet import reactor
 from twisted.web.client import Agent, downloadPage, readBody
 from twisted.web.http_headers import Headers
 
+try:
+    from twisted.web.client import BrowserLikePolicyForHTTPS
+    contextFactory = BrowserLikePolicyForHTTPS()
+except ImportError:
+    from twisted.web.client import WebClientContextFactory
+    contextFactory = WebClientContextFactory()
 
 # Enigma2 components
 from Components.ActionMap import ActionMap
@@ -55,24 +62,9 @@ from enigma import ePicLoad, eServiceReference, eTimer
 # Local imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory, debugs, isDreambox
+from .plugin import (cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory, debugs, isDreambox)
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request,  perform_handshake, get_profile_data
-
-try:
-    from twisted.web.client import BrowserLikePolicyForHTTPS
-    contextFactory = BrowserLikePolicyForHTTPS()
-except ImportError:
-    from twisted.web.client import WebClientContextFactory
-    contextFactory = WebClientContextFactory()
-
-try:
-    from urllib import quote_plus
-except ImportError:
-    from urllib.parse import quote_plus
-
-
-playlists_json = cfg.playlists_json.value
 
 
 if pythonVer == 3:
@@ -124,10 +116,16 @@ class EStalker_Series_Categories(Screen):
         with codecs.open(skin, "r", encoding="utf-8") as f:
             self.skin = f.read()
 
-        self.setup_title = _("Series Categories")
-        self.main_title = _("TV Series")
+        self.playlists_json = cfg.playlists_json.value
 
+        self.setup_title = _("Series Categories")
+
+        self.main_title = _("TV Series")
         self["main_title"] = StaticText(self.main_title)
+
+        self.group_title = ""
+        self.series_group_title = ""
+
         self.main_list = []
         self["main_list"] = List(self.main_list, enableWrapAround=True)
 
@@ -160,13 +158,26 @@ class EStalker_Series_Categories(Screen):
         self["listposition"] = StaticText("")
         self.itemsperpage = 14
 
+        self.searchString = ""
         self.filterresult = ""
+
         self.chosen_category = ""
 
         self.pin = False
-
         self.tmdbresults = {}
 
+        self.sortindex = 0
+        self.sortText = _("Sort: A-Z")
+        self.sort_check = False
+        self.do_sort = False
+
+        self.level = 1
+
+        self.showfav = False
+
+        self.seriesfirstlist = True
+        self.seasonsfirstlist = True
+        self.episodesfirstlist = True
         self.storedtitle = ""
         self.storedseason = ""
         self.storedepisode = ""
@@ -183,20 +194,6 @@ class EStalker_Series_Categories(Screen):
         self.storedrating = ""
 
         self.repeatcount = 0
-
-        self.sort_check = False
-        self.showfav = False
-
-        self.seriesfirstlist = True
-        self.seasonsfirstlist = True
-        self.episodesfirstlist = True
-        self.do_sort = False
-
-        self.sortindex = 0
-        self.sortText = _("Sort: A-Z")
-        self.tmdbresults = ""
-
-        self.level = 1
 
         self.timezone = get_local_timezone()
         self.token = glob.active_playlist["playlist_info"]["token"]
@@ -250,6 +247,143 @@ class EStalker_Series_Categories(Screen):
         self.level1_sortby = "number"
         self.level2_sortby = "number"
 
+        self._vod_req_id = 0
+
+        self._tmp_cover = None
+        self._tmp_logo = None
+        self._tmp_backdrop = None
+        self._tmp_backdrop_src = None
+        self._tmp_backdrop_out = None
+
+        self._mask2 = None
+        self._mask2_alpha = None
+        self._mask2_cache = OrderedDict()
+        self._mask2_cache_max = 5
+        self._mask2_size = None
+        self._backdrop_target_size = None
+
+        try:
+            mask_path = os.path.join(skin_directory, "common/mask2.png")
+            if os.path.exists(mask_path):
+                self._mask2 = Image.open(mask_path)
+                self._mask2.load()  # Force load the image data
+                self._mask2_size = self._mask2.size
+
+                # Always create a reliable L alpha mask once:
+                try:
+                    if self._mask2.mode in ("RGBA", "LA"):
+                        # For RGBA/LA, extract the alpha channel
+                        if hasattr(self._mask2, 'split'):
+                            bands = self._mask2.split()
+                            if bands:
+                                self._mask2_alpha = bands[-1]
+                            else:
+                                raise ValueError("split() returned empty")
+                        else:
+                            # Old PIL without proper split
+                            self._mask2_alpha = self._mask2.convert("L")
+                    else:
+                        # Greyscale (or RGB etc) -> treat brightness as alpha
+                        self._mask2_alpha = self._mask2.convert("L")
+                except Exception as e:
+                    print("Error extracting alpha, using greyscale fallback:", e)
+                    self._mask2_alpha = self._mask2.convert("L")
+
+        except Exception as e:
+            print("Error loading mask2:", e)
+            self._mask2 = None
+            self._mask2_alpha = None
+            self._mask2_size = None
+
+        # tmdb image sizes (set once)
+        self._tmdb_coversize = "w200"
+        self._tmdb_backdropsize = "w1280"
+        self._tmdb_logosize = "w200"
+        self._cover_target_size = None
+        self._logo_target_size = None
+
+        try:
+            width = screenwidth.width()
+
+            if width <= 1280:
+                self._tmdb_coversize = "w200"
+                self._tmdb_backdropsize = "w1280"
+                self._tmdb_logosize = "w300"
+
+            elif width <= 1920:
+                self._tmdb_coversize = "w300"
+                self._tmdb_backdropsize = "w1280"
+                self._tmdb_logosize = "w300"
+
+            else:
+                self._tmdb_coversize = "w400"
+                self._tmdb_backdropsize = "w1280"
+                self._tmdb_logosize = "w500"
+        except:
+            pass
+
+        self._px_play = LoadPixmap(os.path.join(common_path, "play.png"))
+        self._px_play2 = LoadPixmap(os.path.join(common_path, "play2.png"))
+        self._px_fav = LoadPixmap(os.path.join(common_path, "favourite.png"))
+        self._px_watched = LoadPixmap(os.path.join(common_path, "watched.png"))
+        self._px_more = LoadPixmap(os.path.join(common_path, "more.png"))
+
+        # Precompiled regex (stripjunk)
+        self._re_has_ascii = re.compile(r'[\x00-\x7F]')
+        self._re_has_non_ascii = re.compile(r'[^\x00-\x7F]')
+
+        self._re_remove_non_ascii = re.compile(r'[^\x00-\x7F]+')
+
+        self._re_end_the = re.compile(r'\s*the$', re.IGNORECASE)
+        self._re_prefix_xx_colon = re.compile(r'^\w{2}:', re.IGNORECASE)
+        self._re_prefix_xx_pipe_xx = re.compile(r'^\w{2}\|\w{2}\s', re.IGNORECASE)
+
+        self._re_leading_doublepipes = re.compile(r'^\|\|.*?\|\|')
+        self._re_leading_singlepipe_block = re.compile(r'^\|.*?\|')
+        self._re_any_pipe_block = re.compile(r'\|.*?\|')
+
+        self._re_leading_doublebars = re.compile(r'^┃┃.*?┃┃')
+        self._re_leading_singlebar_block = re.compile(r'^┃.*?┃')
+        self._re_any_bar_block = re.compile(r'┃.*?┃')
+
+        self._re_parens = re.compile(r'\(\(.*?\)\)|\([^()]*\)')
+        self._re_brackets = re.compile(r'\[\[.*?\]\]|\[.*?\]')
+
+        self._re_is_year_only = re.compile(r'^\d{4}$')
+        self._re_trailing_year = re.compile(r'[\s\-]*(?:[\(\[\"]?\d{4}[\)\]\"]?)$')
+
+        self._re_lang_dash_prefix = re.compile(r'^[A-Za-z0-9\-]{1,7}\s*-\s*', re.IGNORECASE)
+
+        # Bad substrings
+        bad_strings = [
+            "ae|", "al|", "ar|", "at|", "ba|", "be|", "bg|", "br|", "cg|", "ch|", "cz|", "da|", "de|", "dk|",
+            "ee|", "en|", "es|", "eu|", "ex-yu|", "fi|", "fr|", "gr|", "hr|", "hu|", "in|", "ir|", "it|", "lt|",
+            "mk|", "mx|", "nl|", "no|", "pl|", "pt|", "ro|", "rs|", "ru|", "se|", "si|", "sk|", "sp|", "tr|",
+            "uk|", "us|", "yu|",
+            "1080p", "1080p-dual-lat-cine-calidad.com", "1080p-dual-lat-cine-calidad.com-1",
+            "1080p-dual-lat-cinecalidad.mx", "1080p-lat-cine-calidad.com", "1080p-lat-cine-calidad.com-1",
+            "1080p-lat-cinecalidad.mx", "1080p.dual.lat.cine-calidad.com", "3d", "'", "#", "(", ")", "-", "[]", "/",
+            "4k", "720p", "aac", "blueray", "ex-yu:", "fhd", "hd", "hdrip", "hindi", "imdb", "multi:", "multi-audio",
+            "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264",
+            "amz", "dolby", "audio", "8k", "3840p", "50fps", "60fps", "hevc", "raw ", "vip ", "NF", "d+", "a+", "vp", "prmt", "mrvl"
+        ]
+        self._re_bad_strings = re.compile('|'.join(map(re.escape, bad_strings)), re.IGNORECASE)
+
+        # Bad suffixes
+        bad_suffix = [
+            " al", " ar", " ba", " da", " de", " en", " es", " eu", " ex-yu", " fi", " fr", " gr", " hr", " mk",
+            " nl", " no", " pl", " pt", " ro", " rs", " ru", " si", " swe", " sw", " tr", " uk", " yu"
+        ]
+        self._re_bad_suffix = re.compile(r'(' + '|'.join(map(re.escape, bad_suffix)) + r')$', re.IGNORECASE)
+
+        self._re_dots_underscores = re.compile(r"[._'\*]")
+
+        self.adult_keywords = set([
+            "adult", "+18", "18+", "18 rated", "xxx", "sex", "porn",
+            "voksen", "volwassen", "aikuinen", "Erwachsene", "dorosly",
+            "взрослый", "vuxen", "£дорослий"
+        ])
+
         # buttons / keys
         self["key_red"] = StaticText(_("Back"))
         self["key_green"] = StaticText(_("OK"))
@@ -290,10 +424,10 @@ class EStalker_Series_Categories(Screen):
             "down": self.goDown,
             "channelUp": self.pageUp,
             "channelDown": self.pageDown,
-            "0": self.reset,
-            "1": self.clearWatched,
             "tv": self.favourite,
             "stop": self.favourite,
+            "0": self.reset,
+            "1": self.clearWatched,
         }, -2)
 
         self["channel_actions"].setEnabled(False)
@@ -302,31 +436,125 @@ class EStalker_Series_Categories(Screen):
         glob.nextlist.append({"next_url": next_url, "index": 0, "level": self.level, "sort": self.sortText, "filter": ""})
 
         self.coverLoad = ePicLoad()
+
         try:
             self.coverLoad.PictureData.get().append(self.DecodeCover)
         except:
             self.coverLoad_conn = self.coverLoad.PictureData.connect(self.DecodeCover)
 
-        self.backdropLoad = ePicLoad()
+        self.timerVod = eTimer()
         try:
-            self.backdropLoad.PictureData.get().append(self.DecodeBackdrop)
+            self.timerVod.callback.append(self.displaySeriesData)
         except:
-            self.backdropLoad_conn = self.backdropLoad.PictureData.connect(self.DecodeBackdrop)
-
-        self.logoLoad = ePicLoad()
-        try:
-            self.logoLoad.PictureData.get().append(self.DecodeLogo)
-        except:
-            self.logoLoad_conn = self.logoLoad.PictureData.connect(self.DecodeLogo)
+            self.timerVod_conn = self.timerVod.timeout.connect(self.displaySeriesData)
 
         self.onFirstExecBegin.append(self.createSetup)
         self.onLayoutFinish.append(self.__layoutFinished)
 
     def __layoutFinished(self):
-        if debugs:
-            print("*** __layoutFinished ***")
-
         self.setTitle(self.setup_title)
+
+        # cache cover target size
+        try:
+            if self["vod_cover"].instance:
+                self._cover_target_size = (
+                    self["vod_cover"].instance.size().width(),
+                    self["vod_cover"].instance.size().height()
+                )
+        except:
+            self._cover_target_size = None
+
+        # cache logo target size
+        try:
+            if self["vod_logo"].instance:
+                self._logo_target_size = (
+                    self["vod_logo"].instance.size().width(),
+                    self["vod_logo"].instance.size().height()
+                )
+        except:
+            self._logo_target_size = None
+
+        # cache backdrop target size (your existing code)
+        try:
+            if self["vod_backdrop"].instance:
+                self._backdrop_target_size = (
+                    self["vod_backdrop"].instance.size().width(),
+                    self["vod_backdrop"].instance.size().height()
+                )
+        except:
+            self._backdrop_target_size = None
+
+        if not self._backdrop_target_size and self._mask2_size:
+            self._backdrop_target_size = self._mask2_size
+
+    def _stopTimerVod(self):
+        # Stop any scheduled timer fire
+        try:
+            if self.timerVod:
+                self.timerVod.stop()
+        except:
+            pass
+
+        # Invalidate any in-flight downloadPage callbacks (zap protection)
+        try:
+            self._vod_req_id += 1
+        except:
+            self._vod_req_id = 1
+
+    def _new_tmp_file(self, prefix, suffix):
+        fd = None
+        path = None
+
+        try:
+            fd, path = tempfile.mkstemp(prefix=prefix, suffix=suffix, dir=dir_tmp)
+        except:
+            fd, path = tempfile.mkstemp(prefix=prefix, suffix=suffix)
+
+        try:
+            os.close(fd)
+        except:
+            pass
+
+        return path
+
+    def _safe_unlink(self, path):
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except:
+            pass
+
+    def _cleanup_vod_assets(self):
+        self._safe_unlink(self._tmp_cover)
+        self._safe_unlink(self._tmp_logo)
+        self._safe_unlink(self._tmp_backdrop_src)
+        self._safe_unlink(self._tmp_backdrop_out)
+
+        self._tmp_cover = None
+        self._tmp_logo = None
+        self._tmp_backdrop_src = None
+        self._tmp_backdrop_out = None
+
+        if self.cover_download_deferred:
+            try:
+                self.cover_download_deferred.cancel()
+            except:
+                pass
+            self.cover_download_deferred = None
+
+        if self.logo_download_deferred:
+            try:
+                self.logo_download_deferred.cancel()
+            except:
+                pass
+            self.logo_download_deferred = None
+
+        if self.backdrop_download_deferred:
+            try:
+                self.backdrop_download_deferred.cancel()
+            except:
+                pass
+            self.backdrop_download_deferred = None
 
     def goUp(self):
         instance = self["main_list"].master.master.instance
@@ -363,13 +591,12 @@ class EStalker_Series_Categories(Screen):
         self["x_description"].setText("")
 
         if self.level == 1:
-            # self.sortby = "number"
             self.getCategories()
 
         elif self.level == 2:
-            self.all_series_data = []
-            self.series_pages_downloaded = set()
-            self.series_current_page = 1
+            self.all_data = []
+            self.pages_downloaded = set()
+            self.current_page = 1
 
             if self.chosen_category != "favourites":
                 response = self.downloadApiData(glob.nextlist[-1]["next_url"])
@@ -426,8 +653,8 @@ class EStalker_Series_Categories(Screen):
         if debugs:
             print("*** getCategories **")
 
+        index = 0
         self.list1 = []
-        self.prelist = []
 
         self["key_epg"].setText("")
 
@@ -438,7 +665,7 @@ class EStalker_Series_Categories(Screen):
 
         hidden = "0" in currentHidden
 
-        for index, item in enumerate(currentCategoryList, start=len(self.prelist)):
+        for index, item in enumerate(currentCategoryList):
             if not isinstance(item, dict):
                 continue
 
@@ -448,7 +675,6 @@ class EStalker_Series_Categories(Screen):
             self.list1.append([index, str(category_name), str(category_id), hidden])
 
         glob.originalChannelList1 = self.list1[:]
-
         self.buildLists()
 
     def getSeries(self, response):
@@ -484,7 +710,6 @@ class EStalker_Series_Categories(Screen):
                 if not isinstance(channel, dict) or not channel:
                     self.list2.append([index, "", "", "", "", "", "", "", "", "", "", "", "", False, "", "", False, ""])
                     # 0 index, 1 name, 2 series_id, 3 cover, 4 plot, 5 cast, 6 director, 7 genre, 8 releaseDate, 9 rating, 10 last_modified, 11 next_url, 12 tmdb, 13 hidden, 14 year, 15 backdrop, 16 favourite, 17 category_id
-
                     continue
 
                 series_id = str(channel.get("id", ""))
@@ -806,8 +1031,7 @@ class EStalker_Series_Categories(Screen):
                     str(category_id),
                     str(season_number),
                     str(episode_id),
-                    str(cmd),
-
+                    str(cmd)
                 ])
 
         if self.episodesfirstlist:
@@ -821,13 +1045,13 @@ class EStalker_Series_Categories(Screen):
             print("*** downloadApiData ***", url)
 
         if self.level == 2:
-            if not hasattr(self, 'all_series_data') or not isinstance(self.all_series_data, list):
-                self.all_series_data = []
+            if not hasattr(self, 'all_data') or not isinstance(self.all_data, list):
+                self.all_data = []
 
-            paged_url = self._updateUrlPage(url, self.series_current_page)
+            paged_url = self._updateUrlPage(url, self.current_page)
 
-            if paged_url in self.series_pages_downloaded:
-                return self.all_series_data
+            if paged_url in self.pages_downloaded:
+                return self.all_data
 
             try:
                 data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
@@ -843,32 +1067,32 @@ class EStalker_Series_Categories(Screen):
 
                     js = data.get("js", {})
                     try:
-                        self.series_total_items = int(js.get("total_items", 0))
+                        self.total_items = int(js.get("total_items", 0))
                     except (ValueError, TypeError):
-                        self.series_total_items = 0
+                        self.total_items = 0
                     current_page_data = js.get("data", [])
 
-                    if not hasattr(self, 'all_series_data') or not isinstance(self.all_series_data, list) or not self.all_series_data:
-                        self.all_series_data = [{} for _ in range(self.series_total_items)]
+                    if not hasattr(self, 'all_data') or not isinstance(self.all_data, list) or not self.all_data:
+                        self.all_data = [{} for _ in range(self.total_items)]
 
                     self.sort_check = False
 
                     # Calculate the position where this page's data should be stored
-                    start_index = (self.series_current_page - 1) * 14
+                    start_index = (self.current_page - 1) * 14
 
                     # Insert the new data at the correct positions
                     for i, item in enumerate(current_page_data):
-                        self.all_series_data[start_index + i] = item
-                        self.series_pages_downloaded.add(paged_url)
+                        self.all_data[start_index + i] = item
+                        self.pages_downloaded.add(paged_url)
 
-                    return self.all_series_data
+                    return self.all_data
 
             except Exception as e:
-                print("Error downloading API data for page {}: {}".format(self.series_current_page, e))
-                return self.all_series_data
+                print("Error downloading API data for page {}: {}".format(self.current_page, e))
+                return self.all_data
 
             self.session.openWithCallback(self.back, MessageBox, _("Server error or invalid link."), MessageBox.TYPE_ERROR, timeout=3)
-            return self.all_series_data
+            return self.all_data
 
         elif self.level == 3:
             self.all_seasons_data = []
@@ -974,13 +1198,13 @@ class EStalker_Series_Categories(Screen):
             print("*** downloadSearchData ***", url)
 
         if self.level == 2:
-            if not hasattr(self, 'all_series_data') or not isinstance(self.all_series_data, list):
-                self.all_series_data = []
+            if not hasattr(self, 'all_data') or not isinstance(self.all_data, list):
+                self.all_data = []
 
-            paged_url = self._updateUrlPage(url, self.series_current_page)
+            paged_url = self._updateUrlPage(url, self.current_page)
 
-            if paged_url in self.series_pages_downloaded:
-                return self.all_series_data
+            if paged_url in self.pages_downloaded:
+                return self.all_data
 
             try:
                 data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
@@ -997,30 +1221,30 @@ class EStalker_Series_Categories(Screen):
 
                     js = data.get("js", {})
                     try:
-                        self.series_total_items = int(js.get("total_items", 0))
+                        self.total_items = int(js.get("total_items", 0))
                     except (ValueError, TypeError):
-                        self.series_total_items = 0
+                        self.total_items = 0
                     current_page_data = js.get("data", [])
 
-                    if not hasattr(self, 'all_series_data') or not isinstance(self.all_series_data, list) or not self.all_series_data:
-                        self.all_series_data = [{} for _ in range(self.series_total_items)]
+                    if not hasattr(self, 'all_data') or not isinstance(self.all_data, list) or not self.all_data:
+                        self.all_data = [{} for _ in range(self.total_items)]
 
                     self.sort_check = False
 
-                    start_index = (self.series_current_page - 1) * 14
+                    start_index = (self.current_page - 1) * 14
 
                     for i, item in enumerate(current_page_data):
-                        self.all_series_data[start_index + i] = item
-                        self.series_pages_downloaded.add(paged_url)
+                        self.all_data[start_index + i] = item
+                        self.pages_downloaded.add(paged_url)
 
-                    return self.all_series_data
+                    return self.all_data
 
             except Exception as e:
-                print("Error downloading API data for page {}: {}".format(self.series_current_page, e))
-                return self.all_series_data
+                print("Error downloading API data for page {}: {}".format(self.current_page, e))
+                return self.all_data
 
             self.session.openWithCallback(self.back, MessageBox, _("Server error or invalid link."), MessageBox.TYPE_ERROR, timeout=3)
-            return self.all_series_data
+            return self.all_data
 
     def _updateUrlPage(self, url, page):
         if debugs:
@@ -1102,15 +1326,13 @@ class EStalker_Series_Categories(Screen):
 
         self.hideVod()
 
-        if self["key_blue"].getText() != _("Reset Search"):
-            self.pre_list = [buildCategoryList(x[0], x[1], x[2], x[3]) for x in self.prelist if not x[3]]
-        else:
-            self.pre_list = []
-
         if self.list1:
-            self.main_list = [buildCategoryList(x[0], x[1], x[2], x[3]) for x in self.list1 if not x[3]]
+            self.main_list = [
+                buildCategoryList(x[0], x[1], x[2], x[3], self._px_more)
+                for x in self.list1 if not x[3]
+            ]
 
-            self["main_list"].setList(self.pre_list + self.main_list)
+            self["main_list"].setList(self.main_list)
 
             if self["main_list"].getCurrent():
                 self["main_list"].setIndex(glob.nextlist[-1]["index"])
@@ -1119,13 +1341,17 @@ class EStalker_Series_Categories(Screen):
         if debugs:
             print("*** buildSeries ***")
 
-        self.main_list = []
+        if self.chosen_category == "favourites":
+            filtered_list = [x for x in self.list2 if x[16]]
+        else:
+            filtered_list = [x for x in self.list2 if not x[13]]
 
-        # 0 index, 1 name, 2 series_id, 3 cover, 4 plot, 5 cast, 6 director, 7 genre, 8 releaseDate, 9 rating, 10 last_modified, 11 next_url, 12 tmdb, 13 hidden, 14 year, 15 backdrop, 16 favourite, 17 category_id
-        self.main_list = [buildSeriesTitlesList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17]) for x in self.list2 if not x[13]]
+        self.main_list = [
+            buildSeriesTitlesList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], self._px_more, self._px_fav)
+            for x in filtered_list
+        ]
+
         self["main_list"].setList(self.main_list)
-
-        self.showVod()
 
         if self["main_list"].getCurrent():
             self["main_list"].setIndex(glob.nextlist[-1]["index"])
@@ -1134,57 +1360,56 @@ class EStalker_Series_Categories(Screen):
         if debugs:
             print("*** buildSeasons ***")
 
-        self.main_list = []
+        # self.main_list = [buildSeriesSeasonsList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18]) for x in self.list3 if not x[13]]
 
-        # 0 index, 1 name, 2 series_id, 3 cover, 4 plot, 5 cast, 6 director, 7 genre, 8 releaseDate, 9 rating, 10 last_modified, 11 next_url, 12 tmdb, 13 hidden, 14 year, 15 backdrop, 16 favourite, 17 category_id, 18 season_number
-        self.main_list = [buildSeriesSeasonsList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18]) for x in self.list3 if not x[13]]
-        self["main_list"].setList(self.main_list)
+        if self.list3:
+            self.main_list = [
+                buildSeriesSeasonsList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18], self._px_more)
+                for x in self.list3 if not x[13]
+            ]
 
-        self.showVod()
+            self["main_list"].setList(self.main_list)
 
-        if self["main_list"].getCurrent():
-            self["main_list"].setIndex(glob.nextlist[-1]["index"])
+            if self["main_list"].getCurrent():
+                self["main_list"].setIndex(glob.nextlist[-1]["index"])
 
     def buildEpisodes(self):
         if debugs:
             print("*** buildEpsiodes ***")
 
-        self.main_list = []
+        # self.main_list = [buildSeriesEpisodesList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18], x[19], x[20]) for x in self.list4 if not x[13]]
 
-        # 0 index, 1 name, 2 series_id, 3 cover, 4 plot, 5 cast, 6 director, 7 genre, 8 releaseDate, 9 rating, 10 last_modified, 11 next_url, 12 tmdb, 13 hidden, 14 year, 15 backdrop, 16 favourite, 17 category_id, 18 season_number, 19 epsiode_id, 20 cmd
-        self.main_list = [buildSeriesEpisodesList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18], x[19], x[20]) for x in self.list4 if not x[13]]
-        self["main_list"].setList(self.main_list)
+        if self.list4:
+            self.main_list = [
+                buildSeriesEpisodesList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18], x[19], x[20], self._px_more)
+                for x in self.list4 if not x[13]
+            ]
 
-        self.showVod()
+            self["main_list"].setList(self.main_list)
 
-        if self["main_list"].getCurrent():
-            self["main_list"].setIndex(glob.nextlist[-1]["index"])
+            if self["main_list"].getCurrent():
+                self["main_list"].setIndex(glob.nextlist[-1]["index"])
 
     def displaySeriesData(self):
         if debugs:
             print("*** displaySeriesData ***")
 
+        self._cleanup_vod_assets()
+
         if self["main_list"].getCurrent():
             if self.level != 1:
                 self.tmdbValid = True
                 self.tmdbfailedcount = 0
+                # might need to delete below line
+                self.tmdbresults = {}
                 self.getTMDB()
 
     def selectionChanged(self):
         if debugs:
             print("*** selectionChanged ***")
 
-        self.tmdbresults = ""
+        self.tmdbresults = {}
         self.tmdbretry = 0
-
-        if self.cover_download_deferred:
-            self.cover_download_deferred.cancel()
-
-        if self.logo_download_deferred:
-            self.logo_download_deferred.cancel()
-
-        if self.backdrop_download_deferred:
-            self.backdrop_download_deferred.cancel()
 
         current_item = self["main_list"].getCurrent()
 
@@ -1195,19 +1420,37 @@ class EStalker_Series_Categories(Screen):
             glob.nextlist[-1]["index"] = current_index
 
             position = current_index + 1
-            position_all = len(self.pre_list) + len(self.main_list) if self.level == 1 else len(self.main_list)
+            position_all = len(self.main_list)
             page = (position - 1) // self.itemsperpage + 1
             page_all = (position_all + self.itemsperpage - 1) // self.itemsperpage
 
             if self.level == 2 and self["key_blue"].getText() != _("Reset Search") and self.chosen_category != "favourites":
-                position_all = int(self.series_total_items)
+                position_all = int(self.total_items)
                 page_all = (position_all + self.itemsperpage - 1) // self.itemsperpage
 
             self["page"].setText(_("Page: ") + "{}/{}".format(page, page_all))
             self["listposition"].setText("{}/{}".format(position, position_all))
-            self["main_title"].setText("{}: {}".format(self.main_title, channel_title))
+
+            parts = []
+
+            if self.main_title:
+                parts.append(self.main_title)
+
+            if self.group_title:
+                parts.append(self.group_title)
+
+            if self.series_group_title:
+                parts.append(self.series_group_title)
+
+            if channel_title:
+                parts.append(channel_title)
+
+            self["main_title"].setText(": ".join(parts))
 
             if self.level == 2:
+                self._stopTimerVod()
+                self.timerVod.start(300, True)
+
                 self.loadDefaultCover()
                 self.loadDefaultBackdrop()
 
@@ -1215,8 +1458,8 @@ class EStalker_Series_Categories(Screen):
                 self["vod_logo"].hide()
                 self["vod_backdrop"].hide()
 
-                if not hasattr(self, 'series_current_page') or page != self.series_current_page:
-                    self.series_current_page = page
+                if not hasattr(self, 'current_page') or page != self.current_page:
+                    self.current_page = page
 
                     if self["key_blue"].getText() == _("Reset Search"):
                         search_url = "{0}?type=series&action=get_ordered_list&search={1}&genre=*&sortby=number&JsHttpRequest=1-xml".format(self.portal, self.query)
@@ -1232,12 +1475,7 @@ class EStalker_Series_Categories(Screen):
 
             if self.level != 1:
                 self.clearVod()
-                self.timerSeries = eTimer()
-                try:
-                    self.timerSeries.callback.append(self.displaySeriesData)
-                except:
-                    self.timerSeries_conn = self.timerSeries.timeout.connect(self.displaySeriesData)
-                self.timerSeries.start(300, True)
+                self.timerVod.start(300, True)
 
         else:
             position = 0
@@ -1251,13 +1489,100 @@ class EStalker_Series_Categories(Screen):
             self["key_blue"].setText("")
             self.hideVod()
 
-    def strip_foreign_mixed(self, text):
-        has_ascii = bool(re.search(r'[\x00-\x7F]', text))
-        has_non_ascii = bool(re.search(r'[^\x00-\x7F]', text))
+    def applyPreviousSort(self):
+        if debugs:
+            print("*** applyPreviousSort ***")
+
+        if self.level == 1:
+            sortlist = [_("Sort: A-Z"), _("Sort: Z-A"), _("Sort: Original")]
+
+            # Determine the previous sort in the cycle
+            prev_sort = sortlist[0]  # default
+            for index, item in enumerate(sortlist):
+                if str(item) == str(self.sortText):
+                    prev_sort = sortlist[index - 1]  # previous in cycle (wraps around automatically)
+                    break
+
+            # Apply sort to list1
+            activelist = self.list1[:]
+
+            if prev_sort == _("Sort: A-Z"):
+                activelist.sort(key=lambda x: x[1].lower(), reverse=False)
+            elif prev_sort == _("Sort: Z-A"):
+                activelist.sort(key=lambda x: x[1].lower(), reverse=True)
+            elif prev_sort == _("Sort: Original"):
+                activelist.sort(key=lambda x: x[0], reverse=False)
+
+            # Always move "All" category to first position if present
+            for i, item in enumerate(activelist):
+                if item[1].lower() == _("all").lower():
+                    activelist.insert(0, activelist.pop(i))
+                    break
+
+            self.list1 = activelist
+            self.buildLists()
+
+        elif self.level == 2:
+            sortlist = [_("Sort: A-Z"), _("Sort: Added"), _("Sort: Original")]
+
+            prev_sort = sortlist[0]
+            for index, item in enumerate(sortlist):
+                if str(item) == str(self.sortText):
+                    prev_sort = sortlist[index - 1]
+                    break
+
+            # Determine sort type for VOD
+            if prev_sort == _("Sort: A-Z"):
+                self.sortby = "name"
+            elif prev_sort == _("Sort: Added"):
+                self.sortby = "added"
+            elif prev_sort == _("Sort: Original"):
+                self.sortby = "number"
+
+            # Reset pagination and data
+            self.pages_downloaded = set()
+            self.current_page = 1
+            self.all_data = []
+
+            # Reset UI indexes
+            if self["main_list"].getCurrent():
+                self["main_list"].setIndex(0)
+
+            glob.nextlist[-1]["index"] = 0
+            glob.nextlist[-1]["sort"] = self["key_yellow"].getText()
+
+            # Trigger reload of VOD list
+            self.selectionChanged()
+            self.current_page = 1
+
+            if self.list2:
+                glob.nextlist[-1]["next_url"] = (
+                    "{0}?type=series&action=get_ordered_list&movie_id=0&season_id=0&episode_id=0&"
+                    "category={1}&sortby={2}&p=1&JsHttpRequest=1-xml"
+                ).format(self.portal, self.current_category, self.sortby)
+
+                response = self.downloadApiData(glob.nextlist[-1]["next_url"])
+                self.getSeries(response)
+
+        # Keep previous selection if possible
+        if self["main_list"].getCurrent() and glob.nextlist[-1]["index"] != 0:
+            self["main_list"].setIndex(glob.nextlist[-1]["index"])
+
+    def normalize_text(self, text):
+
+        has_ascii = bool(self._re_has_ascii.search(text))
+        has_non_ascii = bool(self._re_has_non_ascii.search(text))
 
         if has_ascii and has_non_ascii:
-            # Remove only non-ASCII characters
-            text = re.sub(r'[^\x00-\x7F]+', '', text)
+
+            if pythonVer == 2:
+                if isinstance(text, str):
+                    text = text.decode("utf-8", "ignore")
+
+                text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore")
+
+            else:
+                text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
         return text
 
@@ -1265,74 +1590,49 @@ class EStalker_Series_Categories(Screen):
         searchtitle = text
 
         # Move "the" from the end to the beginning (case-insensitive)
-        if searchtitle.strip().lower().endswith("the"):
+        if self._re_end_the.search(searchtitle.strip().lower()):
             searchtitle = "The " + searchtitle[:-3].strip()
 
         # remove xx: at start (case-insensitive)
-        searchtitle = re.sub(r'^\w{2}:', '', searchtitle, flags=re.IGNORECASE)
+        searchtitle = self._re_prefix_xx_colon.sub('', searchtitle)
 
         # remove xx|xx at start (case-insensitive)
-        searchtitle = re.sub(r'^\w{2}\|\w{2}\s', '', searchtitle, flags=re.IGNORECASE)
-
-        # remove xx - at start (case-insensitive)
-        # searchtitle = re.sub(r'^.{2}\+? ?- ?', '', searchtitle, flags=re.IGNORECASE)
+        searchtitle = self._re_prefix_xx_pipe_xx.sub('', searchtitle)
 
         # remove all leading content between and including || or |
-        searchtitle = re.sub(r'^\|\|.*?\|\|', '', searchtitle)
-        searchtitle = re.sub(r'^\|.*?\|', '', searchtitle)
-        searchtitle = re.sub(r'\|.*?\|', '', searchtitle)
+        searchtitle = self._re_leading_doublepipes.sub('', searchtitle)
+        searchtitle = self._re_leading_singlepipe_block.sub('', searchtitle)
+        searchtitle = self._re_any_pipe_block.sub('', searchtitle)
 
         # remove all leading content between and including ┃┃ or ┃
-        searchtitle = re.sub(r'^┃┃.*?┃┃', '', searchtitle)
-        searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
-        searchtitle = re.sub(r'^┃.*?┃', '', searchtitle)
-        searchtitle = re.sub(r'┃.*?┃', '', searchtitle)
+        searchtitle = self._re_leading_doublebars.sub('', searchtitle)
+        searchtitle = self._re_leading_singlebar_block.sub('', searchtitle)
+        searchtitle = self._re_any_bar_block.sub('', searchtitle)
 
         # remove all content between and including () unless it's all digits
-        # searchtitle = re.sub(r'\((?!\d+\))[^()]*\)', '', searchtitle)
-        searchtitle = re.sub(r'\(\(.*?\)\)|\([^()]*\)', '', searchtitle)
+        searchtitle = self._re_parens.sub('', searchtitle)
 
         # remove all content between and including []
-        searchtitle = re.sub(r'\[\[.*?\]\]|\[.*?\]', '', searchtitle)
+        searchtitle = self._re_brackets.sub('', searchtitle)
 
         # remove trailing year (but not if the whole title *is* a year)
-        if not re.match(r'^\d{4}$', searchtitle.strip()):
-            searchtitle = re.sub(r'[\s\-]*(?:[\(\[\"]?\d{4}[\)\]\"]?)$', '', searchtitle)
+        if not self._re_is_year_only.match(searchtitle.strip()):
+            searchtitle = self._re_trailing_year.sub('', searchtitle)
 
         # remove up to 6 characters followed by space and dash at start (e.g. "EN -", "BE-NL -")
-        searchtitle = re.sub(r'^[A-Za-z0-9\-]{1,7}\s*-\s*', '', searchtitle, flags=re.IGNORECASE)
+        searchtitle = self._re_lang_dash_prefix.sub('', searchtitle)
 
-        # Strip foreign / non-ASCII characters
-        searchtitle = self.strip_foreign_mixed(searchtitle)
+        # normalise text
+        searchtitle = self.normalize_text(searchtitle)
 
         # Bad substrings to strip (case-insensitive)
-        bad_strings = [
-            "ae|", "al|", "ar|", "at|", "ba|", "be|", "bg|", "br|", "cg|", "ch|", "cz|", "da|", "de|", "dk|",
-            "ee|", "en|", "es|", "eu|", "ex-yu|", "fi|", "fr|", "gr|", "hr|", "hu|", "in|", "ir|", "it|", "lt|",
-            "mk|", "mx|", "nl|", "no|", "pl|", "pt|", "ro|", "rs|", "ru|", "se|", "si|", "sk|", "sp|", "tr|",
-            "uk|", "us|", "yu|",
-            "1080p", "1080p-dual-lat-cine-calidad.com", "1080p-dual-lat-cine-calidad.com-1",
-            "1080p-dual-lat-cinecalidad.mx", "1080p-lat-cine-calidad.com", "1080p-lat-cine-calidad.com-1",
-            "1080p-lat-cinecalidad.mx", "1080p.dual.lat.cine-calidad.com", "3d", "'", "#", "(", ")", "-", "[]", "/",
-            "4k", "720p", "aac", "blueray", "ex-yu:", "fhd", "hd", "hdrip", "hindi", "imdb", "multi:", "multi-audio",
-            "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264",
-            "amz", "dolby", "audio", "8k", "3840p", "50fps", "60fps", "hevc", "raw ", "vip ", "NF", "d+", "a+", "vp", "prmt", "mrvl"
-        ]
-
-        bad_strings_pattern = re.compile('|'.join(map(re.escape, bad_strings)), flags=re.IGNORECASE)
-        searchtitle = bad_strings_pattern.sub('', searchtitle)
+        searchtitle = self._re_bad_strings.sub('', searchtitle)
 
         # Bad suffixes to remove (case-insensitive, only if at end)
-        bad_suffix = [
-            " al", " ar", " ba", " da", " de", " en", " es", " eu", " ex-yu", " fi", " fr", " gr", " hr", " mk",
-            " nl", " no", " pl", " pt", " ro", " rs", " ru", " si", " swe", " sw", " tr", " uk", " yu"
-        ]
-
-        bad_suffix_pattern = re.compile(r'(' + '|'.join(map(re.escape, bad_suffix)) + r')$', flags=re.IGNORECASE)
-        searchtitle = bad_suffix_pattern.sub('', searchtitle)
+        searchtitle = self._re_bad_suffix.sub('', searchtitle)
 
         # Replace '.', '_', "'", '*' with space
-        searchtitle = re.sub(r'[._\'\*]', ' ', searchtitle)
+        searchtitle = self._re_dots_underscores.sub(' ', searchtitle)
 
         # Trim leading/trailing hyphens and whitespace
         searchtitle = searchtitle.strip(' -').strip()
@@ -1457,14 +1757,14 @@ class EStalker_Series_Categories(Screen):
             print(" *** getTMDBDetails ***")
 
         detailsurl = ""
+        languagestr = ""
 
         try:
             os.remove(os.path.join(dir_tmp, "search.txt"))
-        except OSError:
+        except:
             pass
 
         language = cfg.TMDBLanguage2.value
-        languagestr = ""
 
         if language:
             languagestr = "&language=" + str(language)
@@ -1490,7 +1790,6 @@ class EStalker_Series_Categories(Screen):
             detailsurl = detailsurl.encode()
 
         filepath = os.path.join(dir_tmp, "search.txt")
-
         try:
             downloadPage(detailsurl, filepath, timeout=10).addCallback(self.processTMDBDetails).addErrback(self.failed2)
         except Exception as e:
@@ -1517,12 +1816,8 @@ class EStalker_Series_Categories(Screen):
             print("*** processTMDBDetails ***")
 
         response = ""
-
-        self.tmdbresults = {}
         self.tmdbdetails = []
-        director = []
-        country = []
-
+        self.tmdbresults = {}
         logos = []
 
         try:
@@ -1530,171 +1825,195 @@ class EStalker_Series_Categories(Screen):
                 response = f.read()
         except Exception as e:
             print("Error reading TMDB response:", e)
+            return
 
-        if response:
-            try:
-                self.tmdbdetails = json.loads(response, object_pairs_hook=OrderedDict)
-            except Exception as e:
-                print("Error parsing TMDB response:", e)
+        if not response:
+            return
+
+        try:
+            self.tmdbdetails = json.loads(response, object_pairs_hook=OrderedDict)
+        except Exception as e:
+            print("Error parsing TMDB response:", e)
+            return
+
+        if not self.tmdbdetails:
+            return
+
+        if "name" in self.tmdbdetails and self.tmdbdetails["name"]:
+            self.tmdbresults["name"] = str(self.tmdbdetails["name"])
+
+        if self.level == 2:
+            if "original_name" in self.tmdbdetails and self.tmdbdetails["original_name"]:
+                self.tmdbresults["o_name"] = str(self.tmdbdetails["original_name"])
+
+            if "episode_run_time" in self.tmdbdetails and self.tmdbdetails["episode_run_time"]:
+                runtime = self.tmdbdetails["episode_run_time"][0]
+            elif "runtime" in self.tmdbdetails:
+                runtime = self.tmdbdetails["runtime"]
             else:
-                if self.tmdbdetails:
-                    if "name" in self.tmdbdetails and self.tmdbdetails["name"]:
-                        self.tmdbresults["name"] = str(self.tmdbdetails["name"])
+                runtime = 0
 
-                    if "overview" in self.tmdbdetails and self.tmdbdetails["overview"]:
-                        self.tmdbresults["description"] = str(self.tmdbdetails["overview"])
+            if runtime and runtime != 0:
+                duration_timedelta = timedelta(minutes=runtime)
+                formatted_time = "{:0d}h {:02d}m".format(duration_timedelta.seconds // 3600, (duration_timedelta.seconds % 3600) // 60)
+                self.tmdbresults["duration"] = str(formatted_time)
 
-                    if "vote_average" in self.tmdbdetails and self.tmdbdetails["vote_average"]:
-                        rating_str = str(self.tmdbdetails["vote_average"])
+        if self.level == 4:
+            if "run_time" in self.tmdbdetails and self.tmdbdetails["run_time"]:
+                runtime = self.tmdbdetails["run_time"][0]
+            elif "runtime" in self.tmdbdetails:
+                runtime = self.tmdbdetails["runtime"]
 
-                        if rating_str not in [None, 0, 0.0, "0", "0.0"]:
-                            try:
-                                rating = float(rating_str)
-                                rounded_rating = round(rating, 1)
-                                self.tmdbresults["rating"] = "{:.1f}".format(rounded_rating)
-                            except ValueError:
-                                self.tmdbresults["rating"] = rating_str
-                        else:
-                            self.tmdbresults["rating"] = 0
+            if runtime and runtime != 0:
+                duration_timedelta = timedelta(minutes=runtime)
+                formatted_time = "{:0d}h {:02d}m".format(duration_timedelta.seconds // 3600, (duration_timedelta.seconds % 3600) // 60)
+                self.tmdbresults["duration"] = str(formatted_time)
 
-                    if self.level == 2:
-                        if "original_name" in self.tmdbdetails and self.tmdbdetails["original_name"]:
-                            self.tmdbresults["o_name"] = str(self.tmdbdetails["original_name"])
+        if self.level == 2:
 
-                        if "episode_run_time" in self.tmdbdetails and self.tmdbdetails["episode_run_time"]:
-                            runtime = self.tmdbdetails["episode_run_time"][0]
-                        elif "runtime" in self.tmdbdetails:
-                            runtime = self.tmdbdetails["runtime"]
-                        else:
-                            runtime = 0
+            country = None
+            origin_country = self.tmdbdetails.get("origin_country")
+            if origin_country:
+                try:
+                    country = origin_country[0]
+                    self.tmdbresults["country"] = country
+                except (IndexError, TypeError):
+                    pass
 
-                        if runtime and runtime != 0:
-                            duration_timedelta = timedelta(minutes=runtime)
-                            formatted_time = "{:0d}h {:02d}m".format(duration_timedelta.seconds // 3600, (duration_timedelta.seconds % 3600) // 60)
-                            self.tmdbresults["duration"] = str(formatted_time)
+            if not country:
+                production_countries = self.tmdbdetails.get("production_countries")
+                if production_countries:
+                    try:
+                        country = ", ".join(str(pc["name"]) for pc in production_countries)
+                        self.tmdbresults["country"] = country
+                    except (KeyError, TypeError):
+                        pass
 
-                        if "first_air_date" in self.tmdbdetails and self.tmdbdetails["first_air_date"]:
-                            self.tmdbresults["releaseDate"] = str(self.tmdbdetails["first_air_date"])
+            first_air_date = self.tmdbdetails.get("first_air_date")
+            if first_air_date:
+                self.tmdbresults["releaseDate"] = str(first_air_date).strip()
 
-                        if "genres" in self.tmdbdetails and self.tmdbdetails["genres"]:
-                            genre = []
-                            for genreitem in self.tmdbdetails["genres"]:
-                                genre.append(str(genreitem["name"]))
-                            genre = " / ".join(map(str, genre))
-                            self.tmdbresults["genre"] = genre
+        if self.level != 2:
+            air_date = self.tmdbdetails.get("air_date")
+            if air_date:
+                self.tmdbresults["releaseDate"] = str(air_date).strip()
 
-                        if "origin_country" in self.tmdbdetails and self.tmdbdetails["origin_country"]:
-                            try:
-                                country = self.tmdbdetails["origin_country"][0]
-                                self.tmdbresults["country"] = country
-                            except:
-                                pass
+        if self.level != 4:
+            # Handle images - single lookups
+            poster_path = self.tmdbdetails.get("poster_path", "")
+            backdrop_path = self.tmdbdetails.get("backdrop_path", "")
 
-                        if not country and "production_countries" in self.tmdbdetails and self.tmdbdetails["production_countries"]:
-                            country = ", ".join(str(pcountry["name"]) for pcountry in self.tmdbdetails["production_countries"])
-                            self.tmdbresults["country"] = country
+            logo_path = ""
+            images = self.tmdbdetails.get("images")
+            if images:
+                logos = images.get("logos")
+                if logos:
+                    logo_path = logos[0].get("file_path", "")
 
-                    if self.level != 4:
-                        if "credits" in self.tmdbdetails:
-                            if "cast" in self.tmdbdetails["credits"] and self.tmdbdetails["credits"]["cast"]:
-                                cast = []
-                                for actor in self.tmdbdetails["credits"]["cast"]:
-                                    if "character" in actor and "name" in actor:
-                                        cast.append(str(actor["name"]))
-                                cast = ", ".join(map(str, cast[:10]))
-                                self.tmdbresults["cast"] = cast
+            # Build image URLs only if paths exist
+            if poster_path:
+                self.tmdbresults["cover_big"] = "http://image.tmdb.org/t/p/{}/{}".format(
+                    self._tmdb_coversize, poster_path
+                )
+                self.storedcover = self.tmdbresults["cover_big"]
 
-                            if "crew" in self.tmdbdetails["credits"] and self.tmdbdetails["credits"]["crew"]:
-                                directortext = False
-                                for actor in self.tmdbdetails["credits"]["crew"]:
-                                    if "job" in actor and actor["job"] == "Director":
-                                        director.append(str(actor["name"]))
-                                        directortext = True
-                                if directortext:
-                                    director = ", ".join(map(str, director))
-                                    self.tmdbresults["director"] = director
+            if backdrop_path:
+                self.tmdbresults["backdrop_path"] = "http://image.tmdb.org/t/p/{}/{}".format(
+                    self._tmdb_backdropsize, backdrop_path
+                )
+                self.storedbackdrop = self.tmdbresults["backdrop_path"]
 
-                        if "poster_path" in self.tmdbdetails and self.tmdbdetails["poster_path"]:
-                            if screenwidth.width() <= 1280:
-                                self.tmdbresults["cover_big"] = "http://image.tmdb.org/t/p/w200" + str(self.tmdbdetails["poster_path"])
-                            elif screenwidth.width() <= 1920:
-                                self.tmdbresults["cover_big"] = "http://image.tmdb.org/t/p/w300" + str(self.tmdbdetails["poster_path"])
-                            else:
-                                self.tmdbresults["cover_big"] = "http://image.tmdb.org/t/p/w400" + str(self.tmdbdetails["poster_path"])
+            if logo_path:
+                self.tmdbresults["logo"] = "http://image.tmdb.org/t/p/{}/{}".format(
+                    self._tmdb_logosize, logo_path
+                )
+                self.storedlogo = self.tmdbresults["logo"]
 
-                        if "cover_big" in self.tmdbresults and self.tmdbresults["cover_big"]:
-                            self.storedcover = self.tmdbresults["cover_big"]
+        overview = self.tmdbdetails.get("overview")
+        if overview:
+            self.tmdbresults["description"] = str(overview).strip()
 
-                        if "backdrop_path" in self.tmdbdetails and self.tmdbdetails["backdrop_path"]:
-                            self.tmdbresults["backdrop_path"] = "http://image.tmdb.org/t/p/w1280" + str(self.tmdbdetails["backdrop_path"])
-                            self.storedbackdrop = self.tmdbresults["backdrop_path"]
+        tagline = self.tmdbdetails.get("tagline")
+        if tagline:
+            self.tmdbresults["tagline"] = str(tagline).strip()
 
-                        if "images" in self.tmdbdetails and "logos" in self.tmdbdetails["images"]:
-                            logos = self.tmdbdetails["images"]["logos"]
-                            if logos:
-                                logo_path = logos[0].get("file_path")
+        # Handle rating
+        vote_average = self.tmdbdetails.get("vote_average")
+        if vote_average not in (None, 0, 0.0, "0", "0.0"):
+            try:
+                rating = float(vote_average)
+                self.tmdbresults["rating"] = "{:.1f}".format(round(rating, 1))
+            except (ValueError, TypeError) as e:
+                print("*** rating error ***", e)
+                self.tmdbresults["rating"] = "0.0"
+        else:
+            self.tmdbresults["rating"] = "0.0"
 
-                                if screenwidth.width() <= 1280:
-                                    self.tmdbresults["logo"] = "http://image.tmdb.org/t/p/w300" + str(logo_path)
-                                elif screenwidth.width() <= 1920:
-                                    self.tmdbresults["logo"] = "http://image.tmdb.org/t/p/w300" + str(logo_path)
-                                else:
-                                    self.tmdbresults["logo"] = "http://image.tmdb.org/t/p/w500" + str(logo_path)
-                                self.storedlogo = self.tmdbresults["logo"]
-                            else:
-                                self.storedlogo = ""
+        if self.level == 2:
+            # Handle genres
+            genres = self.tmdbdetails.get("genres")
+            if genres:
+                try:
+                    genre = " / ".join(str(g["name"]) for g in genres[:4])
+                    self.tmdbresults["genre"] = genre
+                except (KeyError, TypeError):
+                    pass
 
-                    if self.level != 2:
-                        if "air_date" in self.tmdbdetails and self.tmdbdetails["air_date"]:
-                            self.tmdbresults["releaseDate"] = str(self.tmdbdetails["air_date"])
+        if self.level != 4:
+            # Handle credits
+            credits = self.tmdbdetails.get("credits")
+            if credits:
+                cast_list = credits.get("cast")
+                if cast_list:
+                    try:
+                        cast = ", ".join(actor["name"] for actor in cast_list[:10])
+                        self.tmdbresults["cast"] = cast
+                    except (KeyError, TypeError):
+                        pass
 
-                    if self.level == 4:
-                        if "run_time" in self.tmdbdetails and self.tmdbdetails["run_time"]:
-                            runtime = self.tmdbdetails["run_time"][0]
-                        elif "runtime" in self.tmdbdetails:
-                            runtime = self.tmdbdetails["runtime"]
+                crew_list = credits.get("crew")
+                if crew_list:
+                    try:
+                        directors = [
+                            actor["name"] for actor in crew_list
+                            if actor.get("job") == "Director"
+                        ]
+                        if directors:
+                            self.tmdbresults["director"] = ", ".join(directors)
+                    except (KeyError, TypeError):
+                        pass
 
-                        if runtime and runtime != 0:
-                            duration_timedelta = timedelta(minutes=runtime)
-                            formatted_time = "{:0d}h {:02d}m".format(duration_timedelta.seconds // 3600, (duration_timedelta.seconds % 3600) // 60)
-                            self.tmdbresults["duration"] = str(formatted_time)
+        # Handle certification
+        def get_certification(data, language_code):
+            fallback_codes = ["GB", "US"]
 
-                    def get_certification(data, language_code):
-                        fallback_codes = ["GB", "US"]
+            # First attempt to find the certification with the specified language code
+            if "content_ratings" in data and "results" in data["content_ratings"]:
+                for result in data["content_ratings"]["results"]:
+                    if "iso_3166_1" in result and "rating" in result:
+                        if result["iso_3166_1"] == language_code:
+                            return result["rating"]
 
-                        # First attempt to find the certification with the specified language code
-                        if "content_ratings" in data and "results" in data["content_ratings"]:
-                            for result in data["content_ratings"]["results"]:
-                                if "iso_3166_1" in result and "rating" in result:
-                                    if result["iso_3166_1"] == language_code:
-                                        return result["rating"]
+                # If no match found or language_code is blank, try the fallback codes
+                for fallback_code in fallback_codes:
+                    for result in data["content_ratings"]["results"]:
+                        if "iso_3166_1" in result and "rating" in result:
+                            if result["iso_3166_1"] == fallback_code:
+                                return result["rating"]
 
-                            # If no match found or language_code is blank, try the fallback codes
-                            for fallback_code in fallback_codes:
-                                for result in data["content_ratings"]["results"]:
-                                    if "iso_3166_1" in result and "rating" in result:
-                                        if result["iso_3166_1"] == fallback_code:
-                                            return result["rating"]
+                # If no match found in fallback codes, return None or an appropriate default value
+            return None
 
-                            # If no match found in fallback codes, return None or an appropriate default value
-                        return None
+        # Get language and certification
+        language = cfg.TMDBLanguage2.value or "en-GB"
+        language_code = language.split("-")[-1]  # Get country code
 
-                    language = cfg.TMDBLanguage2.value
-                    if not language:
-                        language = "en-GB"
+        certification = get_certification(self.tmdbdetails, language_code)
+        if certification:
+            self.tmdbresults["certification"] = str(certification)
 
-                    language = language.split("-")[1]
-
-                    certification = get_certification(self.tmdbdetails, language)
-
-                    if certification:
-                        self.tmdbresults["certification"] = str(certification)
-
-                    if "tagline" in self.tmdbdetails and self.tmdbdetails["tagline"].strip():
-                        self.tmdbresults["tagline"] = str(self.tmdbdetails["tagline"])
-
-                    self.repeatcount = 0
-                    self.displayTMDB()
+        self.repeatcount = 0
+        self.displayTMDB()
 
     def displayTMDB(self):
         if debugs:
@@ -1756,6 +2075,7 @@ class EStalker_Series_Categories(Screen):
             tagline = str(info.get("tagline") or "").strip()
             duration = str(info.get("duration") or duration).strip()
             genre = str(info.get("genre") or genre).strip()
+
             country = str(info.get("country") or country).strip()
             director = str(info.get("director") or director).strip()
             cast = str(info.get("cast") or info.get("actors") or cast).strip()
@@ -1798,46 +2118,53 @@ class EStalker_Series_Categories(Screen):
             if rating_range[0] <= rating <= rating_range[1]:
                 text = rating_text
                 break
-            else:
-                text = ""
-
+        # percent dial
         self["rating_percent"].setText(str(text))
+
         try:
             rounded_rating = round(rating, 1)
-            rating = "{:.1f}".format(rounded_rating)
-            if self.tmdbresults:
-                self.tmdbresults["rating"] = rating
-        except:
-            if self.tmdbresults:
-                self.tmdbresults["rating"] = str(rating)
+            rating_str = "{:.1f}".format(rounded_rating)
+        except Exception:
+            rating_str = str(rating)
 
-        self["rating_text"].setText(str(rating).strip())
+        self["rating_text"].setText(rating_str)
 
-        # Facts section
+        # Release date
         release_date_str = str(release_date).strip()
         try:
             release_date_str = datetime.strptime(release_date_str, "%Y-%m-%d").strftime("%d-%m-%Y")
         except:
             pass
 
-        facts = self.buildFacts(str(certification), str(release_date_str), str(genre), str(duration), str(stream_format))
-        self["facts"].setText(str(facts))
-
-        # UI fields
-        self["tagline"].setText(str(tagline).strip())
-        self["vod_cast"].setText(str(cast).strip())
-        self["vod_director"].setText(str(director).strip())
-        self["vod_country"].setText(str(country).strip())
-
-        self["vod_cast_label"].setText(_("Cast:") if cast else "")
-        self["vod_director_label"].setText(_("Director:") if director else "")
-        self["vod_country_label"].setText(_("Country:") if country else "")
+        # Description / overview
         self["overview"].setText(_("Overview") if self["x_description"].getText() else "")
+
+        # Director
+        self["vod_director"].setText(str(director).strip())
+        self["vod_director_label"].setText(_("Director:") if director else "")
+
+        # Country
+        self["vod_country"].setText(str(country).strip())
+        self["vod_country_label"].setText(_("Country:") if country else "")
+
+        # Cast
+        self["vod_cast"].setText(str(cast).strip())
+        self["vod_cast_label"].setText(_("Cast:") if cast else "")
+
+        # Tagline
+        self["tagline"].setText(str(tagline).strip())
+
+        # Facts
+        try:
+            facts = self.buildFacts(str(certification), str(release_date_str), str(genre), str(duration), str(stream_format))
+            self["facts"].setText(str(facts))
+        except Exception as e:
+            print(e)
 
         # Covers and images
         if (self.level in [2, 3, 4]) and cfg.channelcovers.value:
-            self.downloadCover()
             self.downloadBackdrop()
+            self.downloadCover()
             self.downloadLogo()
 
     def resetButtons(self):
@@ -1873,384 +2200,464 @@ class EStalker_Series_Categories(Screen):
                 self["key_blue"].setText("")
                 self["key_menu"].setText("")
 
+    def stopStream(self):
+        if debugs:
+            print("*** stopStream ***")
+
+        if glob.currentPlayingServiceRefString != glob.newPlayingServiceRefString:
+            if glob.newPlayingServiceRefString != "":
+                if self.session.nav.getCurrentlyPlayingServiceReference():
+                    self.session.nav.stopService()
+                self.session.nav.playService(eServiceReference(glob.currentPlayingServiceRefString))
+                glob.newPlayingServiceRefString = glob.currentPlayingServiceRefString
+
     def downloadCover(self):
+        if debugs:
+            print("*** downloadCover ***")
+
         if cfg.channelcovers.value is False:
             return
 
-        if self["main_list"].getCurrent():
-            try:
-                os.remove(os.path.join(dir_tmp, "cover.jpg"))
-            except:
-                pass
-
-            desc_image = ""
-            try:
-                desc_image = self["main_list"].getCurrent()[5]
-            except:
-                pass
-
-            if self.cover_download_deferred and not self.cover_download_deferred.called:
-                self.cover_download_deferred.cancel()
-
-            if self.tmdbresults:
-                desc_image = (str(self.tmdbresults.get("cover_big") or "").strip() or str(self.tmdbresults.get("movie_image") or "").strip() or self.storedcover or "")
-
-            if "http" in desc_image:
-                self.redirect_count = 0
-                self.cover_download_deferred = self.agent.request(b'GET', desc_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]}))
-                self.cover_download_deferred.addCallback(self.handleCoverResponse)
-                self.cover_download_deferred.addErrback(self.handleCoverError)
-            else:
-                self.loadDefaultCover()
-
-    def downloadLogo(self):
-        if cfg.channelcovers.value is False:
+        if not self["main_list"].getCurrent():
             return
 
-        if self["main_list"].getCurrent():
-            try:
-                os.remove(os.path.join(dir_tmp, "logo.png"))
-            except:
-                pass
+        self._safe_unlink(self._tmp_cover)
+        self._tmp_cover = None
 
-            logo_image = ""
+        desc_image = ""
+        try:
+            desc_image = self["main_list"].getCurrent()[5]
+        except:
+            pass
 
-            if self.logo_download_deferred and not self.logo_download_deferred.called:
-                self.logo_download_deferred.cancel()
+        if self.tmdbresults:
+            desc_image = str(self.tmdbresults.get("cover_big") or "").strip() or self.storedcover or ""
 
-            if self.tmdbresults:
-                logo_image = str(self.tmdbresults.get("logo") or "").strip() or self.storedlogo or ""
-
-            if "http" in logo_image:
-                self.logo_download_deferred = self.agent.request(b'GET', logo_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]}))
-                self.logo_download_deferred.addCallback(self.handleLogoResponse)
-                self.logo_download_deferred.addErrback(self.handleLogoError)
-            else:
-                self.loadDefaultLogo()
-
-    def downloadBackdrop(self):
-        if cfg.channelcovers.value is False:
+        if not (desc_image and "http" in desc_image):
+            self.loadDefaultCover()
             return
 
-        if self["main_list"].getCurrent():
-            try:
-                os.remove(os.path.join(dir_tmp, "backdrop.jpg"))
-            except:
-                pass
+        req_id = self._vod_req_id
+        # self.redirect_count = 0
 
-            backdrop_image = ""
+        if self.cover_download_deferred and not self.cover_download_deferred.called:
+            self.cover_download_deferred.cancel()
 
-            if self.level == 2 or self.level == 3:
-                try:
-                    backdrop_image = self["main_list"].getCurrent()[15]
-                except:
-                    pass
+        self.cover_download_deferred = self.agent.request(
+            b'GET',
+            desc_image.encode(),
+            Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]})
+        )
 
-            if self.backdrop_download_deferred and not self.backdrop_download_deferred.called:
-                self.backdrop_download_deferred.cancel()
-
-            if self.tmdbresults:
-                # Check if "backdrop_path" exists and is not None
-                backdrop_path = self.tmdbresults.get("backdrop_path")
-                if backdrop_path:
-                    backdrop_image = str(backdrop_path[0] if isinstance(backdrop_path, list) else backdrop_path).strip() or self.storedbackdrop or ""
-                else:
-                    backdrop_image = self.storedbackdrop or ""
-
-            if "http" in backdrop_image:
-                self.backdrop_download_deferred = self.agent.request(b'GET', backdrop_image.encode(), Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]}))
-                self.backdrop_download_deferred.addCallback(self.handleBackdropResponse)
-                self.backdrop_download_deferred.addErrback(self.handleBackdropError)
-            else:
-                self.loadDefaultBackdrop()
+        self.cover_download_deferred.addCallback(self.coverResponse, req_id)
+        self.cover_download_deferred.addErrback(self.coverError, req_id)
 
     def downloadCoverFromUrl(self, url):
+        if debugs:
+            print("*** downloadCoverFromUrl ***")
+
+        req_id = self._vod_req_id
+
         self.cover_download_deferred = self.agent.request(
             b'GET',
             url.encode(),
             Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]})
         )
-        self.cover_download_deferred.addCallback(self.handleCoverResponse)
-        self.cover_download_deferred.addErrback(self.handleCoverError)
+        self.cover_download_deferred.addCallback(self.coverFromUrlResponse, req_id)
+        self.cover_download_deferred.addErrback(self.coverError, req_id)
 
-    def handleCoverResponse(self, response):
+    def coverResponse(self, response, req_id):
+        if debugs:
+            print("*** coverresponse ***")
+
+        if req_id != self._vod_req_id:
+            return
+
         if response.code == 200:
             d = readBody(response)
-            d.addCallback(self.handleCoverBody)
+            d.addCallback(self.coverBody, req_id)
             return d
+
         elif response.code in (301, 302):
-            if self.redirect_count < 2:
-                self.redirect_count += 1
-                location = response.headers.getRawHeaders('location')[0]
-                self.downloadCoverFromUrl(location)
+            location = response.headers.getRawHeaders('location')[0]
+            self.downloadCoverFromUrl(location)
         else:
-            self.handleCoverError("HTTP error code: %s" % response.code)
+            self.coverError("HTTP error code: %s" % response.code)
 
-    def handleLogoResponse(self, response):
+    def coverFromUrlResponse(self, response, req_id):
+        if req_id != self._vod_req_id:
+            return
+
         if response.code == 200:
             d = readBody(response)
-            d.addCallback(self.handleLogoBody)
+            d.addCallback(self.coverBody, req_id)
             return d
 
-    def handleBackdropResponse(self, response):
-        if response.code == 200:
-            d = readBody(response)
-            d.addCallback(self.handleBackdropBody)
-            return d
+        self.coverError("HTTP error code: %s" % response.code)
 
-    def handleCoverBody(self, body):
-        temp = os.path.join(dir_tmp, "cover.jpg")
-        with open(temp, 'wb') as f:
-            f.write(body)
+    def coverBody(self, body, req_id):
+        if debugs:
+            print("*** coverbody ***")
+
+        if req_id != self._vod_req_id:
+            return
+
+        temp = self._new_tmp_file("xst_vod_cover_", ".jpg")
+        self._tmp_cover = temp
+
+        try:
+            with open(temp, 'wb') as f:
+                f.write(body)
+        except:
+            self._safe_unlink(temp)
+            self._tmp_cover = None
+            self.loadDefaultCover()
+            return
+
         self.resizeCover(temp)
 
-    def handleLogoBody(self, body):
-        temp = os.path.join(dir_tmp, "logo.png")
-        with open(temp, 'wb') as f:
-            f.write(body)
-        self.resizeLogo(temp)
+    def coverError(self, error, req_id=None):
+        if debugs:
+            print("*** handle error ***")
 
-    def handleBackdropBody(self, body):
-        temp = os.path.join(dir_tmp, "backdrop.jpg")
-        with open(temp, 'wb') as f:
-            f.write(body)
-        self.resizeBackdrop(temp)
-
-    def handleCoverError(self, error):
         print(error)
         self.loadDefaultCover()
 
-    def handleLogoError(self, error):
-        print(error)
-        self.loadDefaultLogo()
-
-    def handleBackdropError(self, error):
-        print(error)
-        self.loadDefaultBackdrop()
-
     def loadDefaultCover(self, data=None):
+        if debugs:
+            print("*** loadDefaultCover ***")
+
         if self["vod_cover"].instance:
             self["vod_cover"].instance.setPixmapFromFile(os.path.join(skin_directory, "common/blank.png"))
 
-    def loadDefaultLogo(self, data=None):
-        if self["vod_logo"].instance:
-            self["vod_logo"].instance.setPixmapFromFile(os.path.join(skin_directory, "common/blank.png"))
-
-    def loadDefaultBackdrop(self, data=None):
-        if self["vod_backdrop"].instance:
-            self["vod_backdrop"].instance.setPixmapFromFile(os.path.join(skin_directory, "common/blank.png"))
-
-    def resizeCover(self, data=None):
-        if self["main_list"].getCurrent() and self["vod_cover"].instance:
-            preview = os.path.join(dir_tmp, "cover.jpg")
-            if os.path.isfile(preview):
-                try:
-                    self.coverLoad.setPara([self["vod_cover"].instance.size().width(), self["vod_cover"].instance.size().height(), 1, 1, 0, 1, "FF000000"])
-                    self.coverLoad.startDecode(preview)
-                except Exception as e:
-                    print(e)
-
-    def resizeLogo(self, data=None):
-        if self["main_list"].getCurrent() and self["vod_logo"].instance:
-            preview = os.path.join(dir_tmp, "logo.png")
-            if os.path.isfile(preview):
-                width = self["vod_logo"].instance.size().width()
-                height = self["vod_logo"].instance.size().height()
-                size = [width, height]
-
-                try:
-                    im = Image.open(preview)
-                    if im.mode != "RGBA":
-                        im = im.convert("RGBA")
-
-                    try:
-                        im.thumbnail(size, Image.Resampling.LANCZOS)
-                    except:
-                        im.thumbnail(size, Image.ANTIALIAS)
-
-                    bg = Image.new("RGBA", size, (255, 255, 255, 0))
-
-                    left = (size[0] - im.size[0])
-
-                    bg.paste(im, (left, 0), mask=im)
-
-                    bg.save(preview, "PNG")
-
-                    if self["vod_logo"].instance:
-                        self["vod_logo"].instance.setPixmapFromFile(preview)
-                        self["vod_logo"].show()
-                except Exception as e:
-                    print("Error resizing logo:", e)
-                    self["vod_logo"].hide()
-
-    def resizeBackdrop(self, data=None):
+    def resizeCover(self, preview):
         if debugs:
-            print("*** resizeBackdrop ***")
+            print("*** resizeCover ***")
 
-        if not (self["main_list"].getCurrent() and self["vod_backdrop"].instance):
+        if not (self["main_list"].getCurrent() and self["vod_cover"].instance):
+            self._safe_unlink(preview)
             return
 
-        preview = os.path.join(dir_tmp, "backdrop.jpg")
         if not os.path.isfile(preview):
             return
 
         try:
-            # Get final size from vod_backdrop instance
-            bd_width, bd_height = self["vod_backdrop"].instance.size().width(), self["vod_backdrop"].instance.size().height()
-            bd_size = (bd_width, bd_height)
+            if self._cover_target_size:
+                width, height = self._cover_target_size
+            else:
+                width = self["vod_cover"].instance.size().width()
+                height = self["vod_cover"].instance.size().height()
 
-            # Load and process the source image
-            im = Image.open(preview)
-            if im.mode != "RGBA":
-                im = im.convert("RGBA")
-
-            try:
-                resample_method = Image.Resampling.LANCZOS
-            except:
-                resample_method = Image.ANTIALIAS
-
-            # Resize image
-            im.thumbnail(bd_size, resample_method)
-
-            # Load and resize mask with same resampling method
-            mask = Image.open(os.path.join(skin_directory, "common/mask2.png"))
-            if mask.mode != "RGBA":
-                mask = mask.convert("RGBA")
-            mask = mask.resize(im.size, resample_method)
-
-            # Create transparent background
-            background = Image.new('RGBA', bd_size, (0, 0, 0, 0))
-
-            # Calculate position (center horizontally)
-
-            # Get actual resized image dimensions (fallback for older Pillow)
-            try:
-                im_w, im_h = im.width, im.height
-            except AttributeError:
-                im_w, im_h = im.size
-
-            # Calculate position (center horizontally)
-            x_offset = (bd_width - im_w) // 2
-            y_offset = 0
-
-            # Paste with mask for gradient transparency
-            background.paste(im, (x_offset, y_offset), mask)
-
-            # Save result
-            output = os.path.join(dir_tmp, "background.png")
-            background.save(output, "PNG")
-
-            # Update backdrop
-            if self["vod_backdrop"].instance:
-                self["vod_backdrop"].instance.setPixmapFromFile(output)
-                self["vod_backdrop"].show()
-
-        except Exception as e:
-            print("Error resizing backdrop:", e)
-            self["vod_backdrop"].hide()
+            self.coverLoad.setPara([width, height, 1, 1, 0, 1, "FF000000"])
+            self.coverLoad.startDecode(preview)
+        except:
+            self._safe_unlink(preview)
 
     def DecodeCover(self, PicInfo=None):
+        if debugs:
+            print("*** decodecover ***")
+
         ptr = self.coverLoad.getData()
+
         if ptr is not None and self.level != 1:
             self["vod_cover"].instance.setPixmap(ptr)
             self["vod_cover"].show()
         else:
             self["vod_cover"].hide()
 
-    def DecodeLogo(self, PicInfo=None):
-        ptr = self.logoLoad.getData()
-        if ptr is not None and self.level != 2:
-            self["vod_logo"].instance.setPixmap(ptr)
-            self["vod_logo"].show()
+        self._safe_unlink(self._tmp_cover)
+        self._tmp_cover = None
+
+    def downloadLogo(self):
+        if debugs:
+            print("*** downloadLogo ***")
+
+        if cfg.channelcovers.value is False:
+            return
+
+        if not self["main_list"].getCurrent():
+            return
+
+        self._safe_unlink(self._tmp_logo)
+        self._tmp_logo = None
+
+        logo_image = ""
+
+        if self.tmdbresults:  # tmbdb
+            logo_image = str(self.tmdbresults.get("logo") or "").strip() or self.storedlogo or ""
+
+        if not (logo_image and "http" in logo_image):
+            self.loadDefaultLogo()
+            return
+
+        req_id = self._vod_req_id
+
+        if self.logo_download_deferred and not self.logo_download_deferred.called:
+            self.logo_download_deferred.cancel()
+
+        self.logo_download_deferred = self.agent.request(
+            b'GET',
+            logo_image.encode(),
+            Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]})
+        )
+        self.logo_download_deferred.addCallback(self.logoResponse, req_id)
+        self.logo_download_deferred.addErrback(self.logoError, req_id)
+
+    def logoResponse(self, response, req_id):
+        if debugs:
+            print("*** logoresponse ***")
+
+        if req_id != self._vod_req_id:
+            return
+
+        if response.code == 200:
+            d = readBody(response)
+            d.addCallback(self.logoBody, req_id)
+            return d
+
+    def logoBody(self, body, req_id):
+        if debugs:
+            print("*** logobody ***")
+
+        if req_id != self._vod_req_id:
+            return
+
+        temp = self._new_tmp_file("xst_vod_logo_", ".png")
+        self._tmp_logo = temp
+
+        try:
+            with open(temp, 'wb') as f:
+                f.write(body)
+        except:
+            self._safe_unlink(temp)
+            self._tmp_logo = None
+            self.loadDefaultLogo()
+            return
+
+        self.resizeLogo(temp)
+
+    def logoError(self, error, req_id=None):
+        if debugs:
+            print("*** handle error ***")
+
+        print(error)
+        self.loadDefaultLogo()
+
+    def loadDefaultLogo(self, data=None):
+        if debugs:
+            print("*** loadDefaultLogo ***")
+
+        if self["vod_logo"].instance:
+            self["vod_logo"].instance.setPixmapFromFile(os.path.join(skin_directory, "common/blank.png"))
+
+    def resizeLogo(self, preview):
+        if debugs:
+            print("*** resizeLogo ***")
+
+        if not (self["main_list"].getCurrent() and self["vod_logo"].instance):
+            self._safe_unlink(preview)
+            return
+
+        if self._logo_target_size:
+            size = self._logo_target_size
         else:
+            size = (
+                self["vod_logo"].instance.size().width(),
+                self["vod_logo"].instance.size().height()
+            )
+
+        try:
+            im = Image.open(preview)
+
+            if im.mode != "RGBA":
+                im = im.convert("RGBA")
+
+            # Only thumbnail if image is bigger than target
+            if im.size[0] > size[0] or im.size[1] > size[1]:
+                try:
+                    im.thumbnail(size, Image.Resampling.LANCZOS)
+                except:
+                    im.thumbnail(size, Image.ANTIALIAS)
+
+            bg = Image.new("RGBA", size, (255, 255, 255, 0))
+
+            # right-aligned logo (same as your original)
+            left = size[0] - im.size[0]
+            top = 0
+
+            bg.paste(im, (left, top), mask=im)
+
+            bg.save(preview, "PNG", compress_level=0)
+
+            self["vod_logo"].instance.setPixmapFromFile(preview)
+            self["vod_logo"].show()
+
+        except Exception as e:
+            print("Error resizing logo:", e)
             self["vod_logo"].hide()
 
-    def DecodeBackdrop(self, PicInfo=None):
-        ptr = self.backdropLoad.getData()
-        if ptr is not None and self.level != 2:
-            self["vod_backdrop"].instance.setPixmap(ptr)
+        # cleanup tempfile
+        self._safe_unlink(preview)
+        self._tmp_logo = None
+
+    def downloadBackdrop(self):
+        if debugs:
+            print("*** downloadBackdrop ***")
+
+        if cfg.channelcovers.value is False:
+            return
+
+        if not self["main_list"].getCurrent():
+            return
+
+        self._safe_unlink(self._tmp_backdrop_src)
+        self._tmp_backdrop_src = None
+
+        backdrop_image = ""
+
+        if self.level == 2 or self.level == 3:
+            try:
+                backdrop_image = self["main_list"].getCurrent()[15]
+            except:
+                pass
+
+        if self.tmdbresults:  # tmbdb
+            backdrop_image = str(self.tmdbresults.get("backdrop_path") or "").strip() or self.storedbackdrop or ""
+
+        if not (backdrop_image and "http" in backdrop_image):
+            self.loadDefaultBackdrop()
+            return
+
+        req_id = self._vod_req_id
+
+        if self.backdrop_download_deferred and not self.backdrop_download_deferred.called:
+            self.backdrop_download_deferred.cancel()
+
+        self.backdrop_download_deferred = self.agent.request(
+            b'GET',
+            backdrop_image.encode(),
+            Headers({'User-Agent': [b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"]})
+        )
+
+        self.backdrop_download_deferred.addCallback(self.backdropResponse, req_id)
+        self.backdrop_download_deferred.addErrback(self.backdropError, req_id)
+
+    def backdropResponse(self, response, req_id):
+        if debugs:
+            print("*** backdropresponse ***")
+
+        if req_id != self._vod_req_id:
+            return
+
+        if response.code == 200:
+            d = readBody(response)
+            d.addCallback(self.backdropBody, req_id)
+            return d
+
+    def backdropBody(self, body, req_id):
+        if debugs:
+            print("*** backdropbody ***")
+
+        if req_id != self._vod_req_id:
+            return
+
+        temp = self._new_tmp_file("xst_vod_backdrop_", ".jpg")
+        self._tmp_backdrop_src = temp
+
+        try:
+            with open(temp, 'wb') as f:
+                f.write(body)
+        except:
+            self._safe_unlink(temp)
+            self._tmp_backdrop_src = None
+            self.loadDefaultBackdrop()
+            return
+
+        self.resizeBackdrop(temp)
+
+    def backdropError(self, error, req_id=None):
+        if debugs:
+            print("*** handle error ***")
+
+        print(error)
+        self.loadDefaultBackdrop()
+
+    def loadDefaultBackdrop(self, data=None):
+        if debugs:
+            print("*** loadDefaultBackdrop ***")
+
+        if self["vod_backdrop"].instance:
+            self["vod_backdrop"].instance.setPixmapFromFile(os.path.join(skin_directory, "common/blank.png"))
+
+    def resizeBackdrop(self, preview):
+        if debugs:
+            print("*** resizeBackdrop ***")
+
+        if not (self["main_list"].getCurrent() and self["vod_backdrop"].instance):
+            self._safe_unlink(preview)
+            return
+
+        try:
+            if not self._mask2_alpha or not self._mask2_size:
+                self.loadDefaultBackdrop()
+                self._safe_unlink(preview)
+                return
+
+            bd_size = self._mask2_size
+            bd_width, bd_height = bd_size
+
+            im = Image.open(preview)
+            if im.mode != "RGBA":
+                im = im.convert("RGBA")
+
+            try:
+                resample = Image.Resampling.LANCZOS
+            except:
+                resample = Image.ANTIALIAS
+
+            # Fit inside mask size (no crop)
+            if im.size != bd_size:
+                im.thumbnail(bd_size, resample)
+
+            im_w, im_h = im.size
+            x_offset = (bd_width - im_w) // 2
+            y_offset = 0
+
+            # paste() mask must match im.size
+            key = "%dx%d" % (im_w, im_h)
+            if key in self._mask2_cache:
+                alpha = self._mask2_cache[key]
+            else:
+                alpha = self._mask2_alpha
+                if alpha.size != im.size:
+                    alpha = alpha.resize(im.size, resample)
+
+                self._mask2_cache[key] = alpha
+
+                try:
+                    while len(self._mask2_cache) > self._mask2_cache_max:
+                        self._mask2_cache.popitem(last=False)
+                except Exception as e:
+                    print(e)
+
+            background = Image.new("RGBA", bd_size, (0, 0, 0, 0))
+            background.paste(im, (x_offset, y_offset), alpha)
+
+            output = self._new_tmp_file("xst_vod_backdrop_out_", ".png")
+            self._tmp_backdrop_out = output
+
+            background.save(output, "PNG", compress_level=0)
+            self["vod_backdrop"].instance.setPixmapFromFile(output)
             self["vod_backdrop"].show()
-        else:
+
+        except Exception as e:
+            print("Error resizing backdrop:", e)
             self["vod_backdrop"].hide()
 
-    def applyPreviousSort(self):
-        if debugs:
-            print("*** applyPreviousSort ***")
-
-        if self.level == 1:
-            sortlist = [_("Sort: A-Z"), _("Sort: Z-A"), _("Sort: Original")]
-
-            # Determine the previous sort in the cycle
-            prev_sort = sortlist[0]  # default
-            for index, item in enumerate(sortlist):
-                if str(item) == str(self.sortText):
-                    prev_sort = sortlist[index - 1]  # previous in cycle (wraps around automatically)
-                    break
-
-            # Apply sort to list1
-            activelist = self.list1[:]
-
-            if prev_sort == _("Sort: A-Z"):
-                activelist.sort(key=lambda x: x[1].lower(), reverse=False)
-            elif prev_sort == _("Sort: Z-A"):
-                activelist.sort(key=lambda x: x[1].lower(), reverse=True)
-            elif prev_sort == _("Sort: Original"):
-                activelist.sort(key=lambda x: x[0], reverse=False)
-
-            # Always move "All" category to first position if present
-            for i, item in enumerate(activelist):
-                if item[1].lower() == _("all").lower():
-                    activelist.insert(0, activelist.pop(i))
-                    break
-
-            self.list1 = activelist
-            self.buildLists()
-
-        elif self.level == 2:
-            sortlist = [_("Sort: A-Z"), _("Sort: Added"), _("Sort: Original")]
-
-            prev_sort = sortlist[0]
-            for index, item in enumerate(sortlist):
-                if str(item) == str(self.sortText):
-                    prev_sort = sortlist[index - 1]
-                    break
-
-            # Determine sort type for VOD
-            if prev_sort == _("Sort: A-Z"):
-                self.sortby = "name"
-            elif prev_sort == _("Sort: Added"):
-                self.sortby = "added"
-            elif prev_sort == _("Sort: Original"):
-                self.sortby = "number"
-
-            # Reset pagination and data
-            self.series_pages_downloaded = set()
-            self.series_current_page = 1
-            self.all_series_data = []
-
-            # Reset UI indexes
-            if self["main_list"].getCurrent():
-                self["main_list"].setIndex(0)
-
-            glob.nextlist[-1]["index"] = 0
-            glob.nextlist[-1]["sort"] = self["key_yellow"].getText()
-
-            # Trigger reload of VOD list
-            self.selectionChanged()
-            self.series_current_page = 1
-
-            if self.list2:
-                glob.nextlist[-1]["next_url"] = (
-                    "{0}?type=series&action=get_ordered_list&movie_id=0&season_id=0&episode_id=0&"
-                    "category={1}&sortby={2}&p=1&JsHttpRequest=1-xml"
-                ).format(self.portal, self.current_category, self.sortby)
-
-                response = self.downloadApiData(glob.nextlist[-1]["next_url"])
-                self.getSeries(response)
-
-        # Keep previous selection if possible
-        if self["main_list"].getCurrent() and glob.nextlist[-1]["index"] != 0:
-            self["main_list"].setIndex(glob.nextlist[-1]["index"])
+        self._safe_unlink(preview)
+        self._safe_unlink(self._tmp_backdrop_out)
+        self._tmp_backdrop_src = None
+        self._tmp_backdrop_out = None
 
     def sort(self):
         if debugs:
@@ -2298,6 +2705,7 @@ class EStalker_Series_Categories(Screen):
             self.buildLists()
 
         if self.level == 2:
+
             sortlist = [_("Sort: A-Z"), _("Sort: Added"), _("Sort: Original")]
 
             for index, item in enumerate(sortlist):
@@ -2312,9 +2720,9 @@ class EStalker_Series_Categories(Screen):
             elif current_sort == _("Sort: Original"):
                 self.sortby = "number"
 
-            self.series_pages_downloaded = set()
-            self.series_current_page = 1
-            self.all_series_data = []
+            self.pages_downloaded = set()
+            self.current_page = 1
+            self.all_data = []
 
             if self["main_list"].getCurrent():
                 self["main_list"].setIndex(0)
@@ -2329,7 +2737,7 @@ class EStalker_Series_Categories(Screen):
 
             self.selectionChanged()
 
-            self.series_current_page = 1
+            self.current_page = 1
 
             if self.list2:
                 # category_id = self.list2[0][17]
@@ -2378,10 +2786,11 @@ class EStalker_Series_Categories(Screen):
 
                     self["key_blue"].setText(_("Reset Search"))
                     self["key_yellow"].setText("")
+                    self.hideVod()
                     self.buildLists()
 
             if self.level == 2 and self.list2:
-                self.all_series_data = []
+                self.all_data = []
 
                 if self["main_list"].getCurrent():
                     self["main_list"].setIndex(0)
@@ -2455,12 +2864,6 @@ class EStalker_Series_Categories(Screen):
         nowtime = int(time.mktime(datetime.now().timetuple())) if pythonVer == 2 else int(datetime.timestamp(datetime.now()))
 
         if self.level == 1 and self["main_list"].getCurrent():
-            adult_keywords = {
-                "adult", "+18", "18+", "18 rated", "xxx", "sex", "porn",
-                "voksen", "volwassen", "aikuinen", "Erwachsene", "dorosly",
-                "взрослый", "vuxen", "£дорослий"
-            }
-
             current_title = str(self["main_list"].getCurrent()[0])
 
             if current_title == "ALL" or current_title == _("ALL") or current_title == "All" or current_title == _("All"):
@@ -2469,7 +2872,7 @@ class EStalker_Series_Categories(Screen):
             elif "sport" in current_title.lower():
                 glob.adultChannel = False
 
-            elif any(keyword in current_title.lower() for keyword in adult_keywords):
+            elif any(keyword in current_title.lower() for keyword in self.adult_keywords):
                 glob.adultChannel = True
 
             else:
@@ -2495,16 +2898,16 @@ class EStalker_Series_Categories(Screen):
             print("*** next ***")
 
         if self["main_list"].getCurrent():
-
             current_index = self["main_list"].getIndex()
             glob.nextlist[-1]["index"] = current_index
             glob.currentchannellist = self.main_list[:]
             glob.currentchannellistindex = current_index
 
             if self.level == 1:
-                # self.list2 = []
                 if self.list1:
                     category_id = self["main_list"].getCurrent()[3]
+                    self.group_title = self["main_list"].getCurrent()[0]
+                    self.sortby = "number"
                     self.current_category = category_id
 
                     next_url = "{0}?type=series&action=get_ordered_list&movie_id=0&season_id=0&episode_id=0&category={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(self.portal, category_id, self.sortby)
@@ -2517,8 +2920,6 @@ class EStalker_Series_Categories(Screen):
                     self["main_list"].setIndex(0)
                     self["category_actions"].setEnabled(False)
                     self["channel_actions"].setEnabled(True)
-                    # self["key_yellow"].setText(_("Sort: A-Z"))
-                    # self.sortText = _("Sort: A-Z")
 
                     glob.nextlist.append({"next_url": next_url, "index": 0, "level": self.level, "sort": self["key_yellow"].getText(), "filter": ""})
 
@@ -2528,6 +2929,7 @@ class EStalker_Series_Categories(Screen):
 
             elif self.level == 2:
                 if self.list2:
+                    self.series_group_title = self["main_list"].getCurrent()[0]
                     self.title2 = self["main_list"].getCurrent()[0]
                     self.cover2 = self["main_list"].getCurrent()[5]
                     self.plot2 = self["main_list"].getCurrent()[6]
@@ -2580,8 +2982,8 @@ class EStalker_Series_Categories(Screen):
                 if self.list4:
                     from . import vodplayer
 
-                    stream_id = self["main_list"].getCurrent()[4]
                     streamtype = glob.active_playlist["player_info"]["vodtype"]
+                    stream_id = self["main_list"].getCurrent()[4]
                     command = self["main_list"].getCurrent()[21]
                     episode_id = self["main_list"].getCurrent()[20]
                     next_url = command
@@ -2640,8 +3042,8 @@ class EStalker_Series_Categories(Screen):
 
                     self.reference = eServiceReference(int(streamtype), 0, str(next_url))
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
-
                     self.session.openWithCallback(self.setIndex, vodplayer.EStalker_VodPlayer, str(next_url), str(streamtype), stream_id)
+
                 else:
                     self.createSetup()
 
@@ -2653,20 +3055,17 @@ class EStalker_Series_Categories(Screen):
         if debugs:
             print("*** back ***")
 
+        self.chosen_category = ""
         if self.level != 1:
-            try:
-                self.timerSeries.stop()
-            except:
-                pass
+            self._stopTimerVod()
+            self._cleanup_vod_assets()
 
-            if self.cover_download_deferred:
-                self.cover_download_deferred.cancel()
+        if self.level == 2:
+            self.group_title = ""
 
-            if self.logo_download_deferred:
-                self.logo_download_deferred.cancel()
-
-            if self.backdrop_download_deferred:
-                self.backdrop_download_deferred.cancel()
+        if self.level == 3:
+            self.series_info = ""
+            self.series_group_title = ""
 
         try:
             del glob.nextlist[-1]
@@ -2674,21 +3073,21 @@ class EStalker_Series_Categories(Screen):
             print(e)
             self.close()
 
-        if self.level == 3:
-            self.series_info = ""
-
         if not glob.nextlist:
             self.close()
         else:
             self["x_title"].setText("")
             self["x_description"].setText("")
+
+            if cfg.stopstream.value:
+                self.stopStream()
+
             self["key_epg"].setText("")
             self.level -= 1
             if self.level == 1:
                 self["category_actions"].setEnabled(True)
                 self["channel_actions"].setEnabled(False)
                 self.showfav = False
-                self.chosen_category = ""
 
             self.buildLists()
 
@@ -2702,7 +3101,7 @@ class EStalker_Series_Categories(Screen):
 
         if self["key_menu"].getText() and self["main_list"].getCurrent():
             from . import hidden
-            current_list = self.prelist + self.list1 if self.level == 1 else self.list2
+            current_list = self.list1 if self.level == 1 else self.list2
             if self.level == 1 or (self.level == 2 and self.chosen_category != "favourites"):
                 self.do_sort = True
                 self.session.openWithCallback(self.createSetup, hidden.EStalker_HiddenCategories, "series", current_list, self.level)
@@ -2718,12 +3117,14 @@ class EStalker_Series_Categories(Screen):
         watched_list = glob.active_playlist["player_info"].get("serieswatched", [])
         if current_id in watched_list:
             watched_list.remove(current_id)
+        else:
+            watched_list.append(current_id)
 
-        with open(playlists_json, "r") as f:
+        with open(self.playlists_json, "r") as f:
             try:
                 self.playlists_all = json.load(f)
             except:
-                os.remove(playlists_json)
+                os.remove(self.playlists_json)
                 return
 
             for i, playlist in enumerate(self.playlists_all):
@@ -2734,14 +3135,15 @@ class EStalker_Series_Categories(Screen):
                     self.playlists_all[i] = glob.active_playlist
                     break
 
-        with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f)
+        with open(self.playlists_json, "w") as f:
+            json.dump(self.playlists_all, f, indent=4)
 
         self.buildLists()
 
     def showfavourites(self):
         if debugs:
             print("*** show favourites ***")
+
         self.showfav = True
         self.parentalCheck()
 
@@ -2758,21 +3160,21 @@ class EStalker_Series_Categories(Screen):
         current_index = self["main_list"].getIndex()
         favExists = False
         favStream_id = ""
-
-        if self.level == 2:
-            series_id = str(self["main_list"].getCurrent()[4])
-            current_index = self["main_list"].getIndex()
-
-        try:
-            self.list2[current_index][16] = not self.list2[current_index][16]
-        except:
-            pass
+        series_id = str(self["main_list"].getCurrent()[4])
 
         for fav in glob.active_playlist["player_info"]["seriesfavourites"]:
             if str(series_id) == str(fav["id"]):
                 favExists = True
                 favStream_id = str(fav["id"])
                 break
+
+        if self.level == 2:
+            current_index = self["main_list"].getIndex()
+
+        try:
+            self.list2[current_index][16] = not self.list2[current_index][16]
+        except:
+            pass
 
         if favExists:
             if self.level == 2:
@@ -2796,12 +3198,12 @@ class EStalker_Series_Categories(Screen):
 
             glob.active_playlist["player_info"]["seriesfavourites"].insert(0, newfavourite)
 
-        with open(playlists_json, "r") as f:
+        with open(self.playlists_json, "r") as f:
             try:
                 self.playlists_all = json.load(f)
             except Exception as e:
                 print("Error loading playlists JSON:", e)
-                os.remove(playlists_json)
+                os.remove(self.playlists_json)
                 self.playlists_all = []
 
         if self.playlists_all:
@@ -2811,8 +3213,8 @@ class EStalker_Series_Categories(Screen):
                     playlists.update(glob.active_playlist)
                     break
 
-        with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f)
+        with open(self.playlists_json, "w") as f:
+            json.dump(self.playlists_all, f, indent=4)
 
         if self.chosen_category == "favourites":
             del self.list2[current_index]
@@ -2842,8 +3244,9 @@ class EStalker_Series_Categories(Screen):
         # self["vod_cover"].hide()
         # self["vod_logo"].hide()
         # self["vod_backdrop"].hide()
-        if self.level == 3 or self.level == 4:
-            self["main_title"].setText("")
+
+        # if self.level == 3 or self.level == 4:
+        #    self["main_title"].setText("")
 
         self["x_title"].setText("")
         self["x_description"].setText("")
@@ -2894,23 +3297,33 @@ class EStalker_Series_Categories(Screen):
         return " • ".join(facts)
 
 
-def buildCategoryList(index, title, category_id, hidden):
-    png = LoadPixmap(os.path.join(common_path, "more.png"))
-    return (title, png, index, category_id, hidden)
+def buildCategoryList(index, title, category_id, hidden, px_more=None):
+    return (title, px_more, index, category_id, hidden)
 
 
-def buildSeriesTitlesList(index, title, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, next_url, tmdb, hidden, year, backdrop_path, favourite, category_id):
-    png = LoadPixmap(os.path.join(common_path, "more.png"))
+def buildSeriesTitlesList(index, title, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, next_url, tmdb, hidden, year, backdrop_path, favourite, category_id, px_more=None, px_fav=None):
+    png = px_more
     if favourite:
-        png = LoadPixmap(os.path.join(common_path, "favourite.png"))
+        png = px_fav
+
     return (title, png, index, next_url, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, year, tmdb, backdrop_path, hidden, favourite, category_id)
 
 
-def buildSeriesSeasonsList(index, title, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, next_url, tmdb, hidden, year, backdrop_path, favourite, category_id, season_number):
-    png = LoadPixmap(os.path.join(common_path, "more.png"))
-    return (title, png, index, next_url, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, year, tmdb, backdrop_path, hidden, favourite, category_id, season_number)
+def buildSeriesSeasonsList(index, title, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, next_url, tmdb, hidden, year, backdrop_path, favourite, category_id, season_number, px_more=None):
+    return (title, px_more, index, next_url, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, year, tmdb, backdrop_path, hidden, favourite, category_id, season_number)
 
 
-def buildSeriesEpisodesList(index, title, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, next_url, tmdb, hidden, year, backdrop_path, favourite, category_id, season_number, episode_id, cmd):
-    png = LoadPixmap(os.path.join(common_path, "play.png"))
+def buildSeriesEpisodesList(index, title, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, next_url, tmdb, hidden, year, backdrop_path, favourite, category_id, season_number, episode_id, cmd, watched_set, px_play=None, px_fav=None, px_watched=None):
+    is_watched = False
+    try:
+        is_watched = str(series_id) in watched_set
+    except Exception:
+        is_watched = False
+    png = px_play
+    if favourite:
+        png = px_fav
+
+    if is_watched:
+        png = px_watched
+
     return (title, png, index, next_url, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, year, tmdb, backdrop_path, hidden, favourite, category_id, season_number, episode_id, cmd)

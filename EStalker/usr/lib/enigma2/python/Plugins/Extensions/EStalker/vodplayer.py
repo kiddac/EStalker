@@ -644,15 +644,6 @@ class EStalker_VodPlayer(
         with open(playlists_json, "w") as f:
             json.dump(self.playlists_all, f, indent=4)
 
-    def strip_foreign_mixed(self, text):
-        has_ascii = bool(self._re_has_ascii.search(text))
-        has_non_ascii = bool(self._re_has_non_ascii.search(text))
-
-        if has_ascii and has_non_ascii:
-            text = self._re_remove_non_ascii.sub('', text)
-
-        return text
-
     def normalize_text(self, text):
 
         has_ascii = bool(self._re_has_ascii.search(text))
@@ -709,9 +700,6 @@ class EStalker_VodPlayer(
 
         # normalise text
         searchtitle = self.normalize_text(searchtitle)
-
-        # Strip foreign / non-ASCII characters (only when mixed)
-        searchtitle = self.strip_foreign_mixed(searchtitle)
 
         # Bad substrings to strip (case-insensitive)
         searchtitle = self._re_bad_strings.sub('', searchtitle)
