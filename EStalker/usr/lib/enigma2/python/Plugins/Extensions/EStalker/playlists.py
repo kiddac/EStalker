@@ -209,7 +209,7 @@ class EStalker_Playlists(Screen):
             self.session.openWithCallback(self.quit, MessageBox, _("No internet."), type=MessageBox.TYPE_ERROR, timeout=5)
             return
 
-        self.playlists_all = []
+        self.playlists_all = {}
 
         # check if playlists.json file exists in specified location
         if os.path.isfile(playlists_json):
@@ -838,6 +838,17 @@ class EStalker_Playlists(Screen):
                 del self.playlists_all[i]
                 break
 
+        # After the loop, re-index the remaining entries
+        for idx, playlist in enumerate(self.playlists_all):
+            playlist["playlist_info"]["index"] = idx
+
+        glob.current_selection = min(glob.current_selection, len(self.playlists_all) - 1)
+        if glob.current_selection >= 0:
+            glob.active_playlist = self.playlists_all[glob.current_selection]
+        else:
+            glob.current_selection = 0
+            glob.active_playlist = {}
+
         self.writeJsonFile()
         self.createSetup()
 
@@ -861,6 +872,8 @@ class EStalker_Playlists(Screen):
 
     def getStreamTypes(self):
         if glob.active_playlist["playlist_info"]["valid"] is True:
+            glob.current_selection = self["playlists"].getIndex()
+            glob.active_playlist = self.playlists_all[glob.current_selection]
             from . import menu
             self.session.openWithCallback(self.checkoneplaylist, menu.EStalker_Menu)
 

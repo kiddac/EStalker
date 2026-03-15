@@ -307,12 +307,12 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
 
         metrics_json = json.dumps(host_metrics, separators=(',', ':'))
 
-        print("*** metrics_json ***",  metrics_json)
+        # print("*** metrics_json ***",  metrics_json)
 
         # url encode metrics
         encoded_once = quote(metrics_json)
 
-        print("*** metrix encoded_once ***", encoded_once)
+        # print("*** metrix encoded_once ***", encoded_once)
 
         if param_mode == "full":
             host_params = OrderedDict([

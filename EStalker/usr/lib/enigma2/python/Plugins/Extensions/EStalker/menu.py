@@ -261,13 +261,8 @@ class EStalker_Menu(Screen):
                     result = self.download_url(url)
                     results.append(result)
 
-            # Check if all URLs downloaded successfully (response is truthy)
-            all_success = all(response for category, response in results)
-
-            if all_success:
-                success = True
-                for category, response in results:
-                    # response = sort_categories(response)
+            for category, response in results:
+                if response:
                     if category == 0:
                         glob.active_playlist["data"]["live_categories"] = response
                     elif category == 1:
@@ -276,7 +271,9 @@ class EStalker_Menu(Screen):
                         glob.active_playlist["data"]["series_categories"] = response
                     elif category == 3:
                         glob.active_playlist["data"]["live_streams"] = response
-            else:
+                    success = True
+
+            if not success:
                 retries += 1
 
         self["splash"].hide()
