@@ -339,6 +339,12 @@ class EStalker_StreamPlayer(
 
         IPTVInfoBarPVRState.__init__(self, PVRState, True)
 
+        self.ar_id_player = 6
+        try:
+            self.ar_id_player = int(cfg.ar_id_player.value)
+        except Exception:
+            self.ar_id_player = 2
+
         self.streamurl = streamurl
         self.servicetype = servicetype
         self.originalservicetype = self.servicetype
@@ -628,6 +634,8 @@ class EStalker_StreamPlayer(
 
         self.reference = eServiceReference(int(servicetype), 0, str(streamurl))
         self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
+
+        self.setAspectRatio(self.ar_id_player)
 
         def strip_query_from_ref(ref):
             if not ref:
@@ -1018,10 +1026,13 @@ class EStalker_StreamPlayer(
 
             self.playStream(str_servicetype, str_streamurl)
 
-    def nextARfunction(self):
-        if debugs:
-            print("*** nextARfunction ***")
+    def setAspectRatio(self, ar_index):
+        try:
+            eAVSwitch.getInstance().setAspectRatio(int(ar_index))
+        except Exception as e:
+            print("[EStallker] setAspectRatio failed: %s" % e)
 
+    def nextARfunction(self):
         self.ar_id_player += 1
         if self.ar_id_player > 6:
             self.ar_id_player = 0
@@ -1033,9 +1044,6 @@ class EStalker_StreamPlayer(
             return _("Resolution Change Failed")
 
     def nextAR(self):
-        if debugs:
-            print("*** nextAR ***")
-
         message = self.nextARfunction()
         self.session.open(MessageBox, message, type=MessageBox.TYPE_INFO, timeout=1)
 

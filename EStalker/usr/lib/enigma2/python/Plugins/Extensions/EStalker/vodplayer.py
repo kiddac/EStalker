@@ -408,6 +408,12 @@ class EStalker_VodPlayer(
 
         IPTVInfoBarPVRState.__init__(self, PVRState, True)
 
+        self.ar_id_player = 6
+        try:
+            self.ar_id_player = int(cfg.ar_id_player.value)
+        except Exception:
+            self.ar_id_player = 2
+
         if cfg.subs.value is True:
             SubsSupport.__init__(self, searchSupport=True, embeddedSupport=True)
             SubsSupportStatus.__init__(self)
@@ -762,6 +768,8 @@ class EStalker_VodPlayer(
             # watchdog
             self.timerWatchdog.start(30000, True)
 
+        self.setAspectRatio(self.ar_id_player)
+
     def loadDefaultImage(self, data=None):
         if self["cover"].instance:
             self["cover"].instance.setPixmapFromFile(
@@ -1105,6 +1113,12 @@ class EStalker_VodPlayer(
                 next_url = str(next_url) if next_url else ""
 
                 self.playStream(str_servicetype, next_url)
+
+    def setAspectRatio(self, ar_index):
+        try:
+            eAVSwitch.getInstance().setAspectRatio(int(ar_index))
+        except Exception as e:
+            print("[EStalker] setAspectRatio failed: %s" % e)
 
     def nextARfunction(self):
         self.ar_id_player += 1
