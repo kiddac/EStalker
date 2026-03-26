@@ -139,6 +139,12 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
 
         self.close()
 
+    def ExecuteRestart(self, result=None):
+        if result:
+            Standby.quitMainloop(3)
+        else:
+            self.close()
+
     def initConfig(self):
         self.cfg_skin = getConfigListEntry(_("Select skin"), cfg.skin)
         self.cfg_location = getConfigListEntry(_("e-portals.txt location") + _(" *Restart GUI Required"), cfg.location)
