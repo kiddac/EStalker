@@ -102,10 +102,10 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
                 x[1].cancel()
 
             self.close()
+        return
 
     def save(self):
-        pin_value = str(cfg.adultpin.value).strip()
-        pin_value = pin_value.zfill(4)
+        pin_value = str(cfg.adultpin.value).strip().zfill(4)
 
         if cfg.adult.value and pin_value in ("0000", "1111", "1234"):
             self.session.open(
@@ -279,5 +279,5 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
     def openDirectoryBrowserCB(self, config_entry):
         def callback(path):
             if path is not None:
-                config_entry.setValue(path)
+                config_entry.setValue(str(path))
         return callback

@@ -445,8 +445,6 @@ class EStalker_VodPlayer(
         except:
             self.PicLoad_conn = self.PicLoad.PictureData.connect(self.DecodePicture)
 
-        self.ar_id_player = 0
-
         self.setup_title = _("VOD")
 
         self.retry = False

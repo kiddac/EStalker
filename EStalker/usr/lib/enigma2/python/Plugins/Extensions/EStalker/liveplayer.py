@@ -376,8 +376,6 @@ class EStalker_StreamPlayer(
         self["speed"] = Label()
         self["statusicon"] = MultiPixmap()
 
-        self.ar_id_player = 0
-
         self.setup_title = _("TV")
 
         self.retry = False
@@ -635,8 +633,6 @@ class EStalker_StreamPlayer(
         self.reference = eServiceReference(int(servicetype), 0, str(streamurl))
         self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
-        self.setAspectRatio(self.ar_id_player)
-
         def strip_query_from_ref(ref):
             if not ref:
                 return ""
@@ -693,6 +689,8 @@ class EStalker_StreamPlayer(
         self.timerWatchdog.start(30000, True)
 
         self.originalservicetype = self.servicetype
+
+        self.setAspectRatio(self.ar_id_player)
 
         self.refreshInfobar()
 
