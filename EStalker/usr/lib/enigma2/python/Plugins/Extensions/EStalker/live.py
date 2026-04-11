@@ -1118,13 +1118,24 @@ class EStalker_Live_Categories(Screen):
         if current_item:
             current_index = self["main_list"].getIndex()
 
-            with open(self.playlists_json, "r") as f:
-                try:
-                    self.playlists_all = json.load(f)
-                except Exception:
-                    os.remove(self.playlists_json)
+            if not os.path.exists(playlists_json):
+                self.playlists_all = []
+            else:
+                with open(playlists_json, "r") as f:
+                    try:
+                        self.playlists_all = json.load(f)
+                    except Exception:
+                        os.remove(playlists_json)
+                        self.playlists_all = []
 
-            del glob.active_playlist["player_info"]['liverecents'][current_index]
+            # safer: delete by stream id
+            stream_id = current_item[4]
+
+            glob.active_playlist["player_info"]['liverecents'] = [
+                x for x in glob.active_playlist["player_info"]['liverecents']
+                if str(x.get("id")) != str(stream_id)
+            ]
+
             self.hideEPG()
 
             if self.playlists_all:
@@ -1133,8 +1144,8 @@ class EStalker_Live_Categories(Screen):
                         self.playlists_all[idx] = glob.active_playlist
                         break
 
-            with open(self.playlists_json, "w") as f:
-                json.dump(self.playlists_all, f)
+            with open(playlists_json, "w") as f:
+                json.dump(self.playlists_all, f, indent=4)
 
             del self.list2[current_index]
             self.buildLists()
@@ -1484,7 +1495,8 @@ class EStalker_Live_Categories(Screen):
             self.shortEPG()
             return
 
-        del glob.nextlist[-1]
+        if glob.nextlist:
+            glob.nextlist.pop()
 
         if not glob.nextlist:
             self.stopStream()
@@ -1575,7 +1587,7 @@ class EStalker_Live_Categories(Screen):
                     break
 
         with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f)
+            json.dump(self.playlists_all, f, indent=4)
 
         if self.chosen_category == "favourites":
             del self.list2[current_index]

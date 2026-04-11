@@ -168,6 +168,8 @@ class EStalker_Playlists(Screen):
 
         self.list = []
         self.drawList = []
+        self.playlists_all = []
+
         self["playlists"] = List(self.drawList, enableWrapAround=True)
         self["playlists"].onSelectionChanged.append(self.getCurrentEntry)
         self["splash"] = Pixmap()
@@ -208,8 +210,6 @@ class EStalker_Playlists(Screen):
         if not check_internet():
             self.session.openWithCallback(self.quit, MessageBox, _("No internet."), type=MessageBox.TYPE_ERROR, timeout=5)
             return
-
-        self.playlists_all = {}
 
         # check if playlists.json file exists in specified location
         if os.path.isfile(playlists_json):
@@ -950,6 +950,7 @@ class EStalker_UserInfo(Screen):
             self.skin = f.read()
 
         self.setup_title = _("User Information")
+        self.playlists_all = []
 
         self["portalversion"] = Label(_("Unavailable"))
         self["portalurl"] = Label(_("Unavailable"))
@@ -1167,7 +1168,7 @@ class EStalker_UserInfo(Screen):
 
         try:
             with open(playlists_json, "w") as f:
-                json.dump(self.playlists_all, f)
+                json.dump(self.playlists_all, f, indent=4)
         except Exception as e:
             print("Error writing JSON:", e)
 

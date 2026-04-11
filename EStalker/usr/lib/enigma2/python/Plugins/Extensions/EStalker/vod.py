@@ -2496,7 +2496,8 @@ class EStalker_Vod_Categories(Screen):
             self._stopTimerVod()
             self._cleanup_vod_assets()
 
-        del glob.nextlist[-1]
+        if glob.nextlist:
+            glob.nextlist.pop()
 
         if not glob.nextlist:
             self.close()

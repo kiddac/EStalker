@@ -65,17 +65,17 @@ from Screens.Screen import Screen
 from Tools.BoundFunction import boundFunction
 from Tools.LoadPixmap import LoadPixmap
 
-try:
-    from enigma import eAVSwitch
-except Exception:
-    from enigma import eAVControl as eAVSwitch
-
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory, debugs
 from .eStaticText import StaticText
-from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data
+from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data, _get_current_aspect_ratio
+
+try:
+    from enigma import eAVSwitch
+except Exception:
+    from enigma import eAVControl as eAVSwitch
 
 playlists_json = cfg.playlists_json.value
 
@@ -339,11 +339,11 @@ class EStalker_StreamPlayer(
 
         IPTVInfoBarPVRState.__init__(self, PVRState, True)
 
-        self.ar_id_player = 6
+        self.ar_id_player = -1
         try:
             self.ar_id_player = int(cfg.ar_id_player.value)
         except Exception:
-            self.ar_id_player = 2
+            self.ar_id_player = -1
 
         self.streamurl = streamurl
         self.servicetype = servicetype
@@ -590,13 +590,9 @@ class EStalker_StreamPlayer(
         if os.path.exists(playlists_json):
             try:
                 with open(playlists_json, "r") as f:
-                    self.playlists_all = json.load(f) or []
+                    self.playlists_all = json.load(f)
             except:
-                try:
-                    os.remove(playlists_json)
-                except:
-                    pass
-            self.playlists_all = []
+                self.playlists_all = []
 
         if self.playlists_all:
             for playlists in self.playlists_all:
@@ -690,9 +686,30 @@ class EStalker_StreamPlayer(
 
         self.originalservicetype = self.servicetype
 
-        self.setAspectRatio(self.ar_id_player)
+        try:
+            self.arTimer.stop()
+        except:
+            pass
+
+        self.arTimer = eTimer()
+
+        try:
+            self.arTimer.callback.append(self.applyAspectRatio)
+        except:
+            self.arTimer_conn = self.arTimer.timeout.connect(self.applyAspectRatio)
+
+        self.arTimer.start(200, True)
 
         self.refreshInfobar()
+
+    def applyAspectRatio(self):
+        print("*** applyAspectRatio ***")
+        current_ar = _get_current_aspect_ratio()
+        try:
+            if self.ar_id_player != -1 and current_ar is not None and int(current_ar) != int(self.ar_id_player):
+                self.setAspectRatio(self.ar_id_player)
+        except Exception:
+            pass
 
     def back(self):
         if debugs:

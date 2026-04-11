@@ -42,11 +42,6 @@ from Screens.Screen import Screen
 from Tools.BoundFunction import boundFunction
 
 try:
-    from enigma import eAVSwitch
-except Exception:
-    from enigma import eAVControl as eAVSwitch
-
-try:
     from .resumepoints import setResumePoint, getResumePoint
 except ImportError as e:
     print(e)
@@ -56,7 +51,12 @@ from . import _
 from . import estalker_globals as glob
 from .plugin import cfg, dir_tmp, pythonVer, screenwidth, skin_directory
 from .eStaticText import StaticText
-from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data
+from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data,  _get_current_aspect_ratio
+
+try:
+    from enigma import eAVSwitch
+except Exception:
+    from enigma import eAVControl as eAVSwitch
 
 if cfg.subs.value is True:
     try:
@@ -408,11 +408,11 @@ class EStalker_VodPlayer(
 
         IPTVInfoBarPVRState.__init__(self, PVRState, True)
 
-        self.ar_id_player = 6
+        self.ar_id_player = -1
         try:
             self.ar_id_player = int(cfg.ar_id_player.value)
         except Exception:
-            self.ar_id_player = 2
+            self.ar_id_player = -1
 
         if cfg.subs.value is True:
             SubsSupport.__init__(self, searchSupport=True, embeddedSupport=True)
@@ -766,7 +766,27 @@ class EStalker_VodPlayer(
             # watchdog
             self.timerWatchdog.start(30000, True)
 
-        self.setAspectRatio(self.ar_id_player)
+        try:
+            self.arTimer.stop()
+        except:
+            pass
+
+        self.arTimer = eTimer()
+
+        try:
+            self.arTimer.callback.append(self.applyAspectRatio)
+        except:
+            self.arTimer_conn = self.arTimer.timeout.connect(self.applyAspectRatio)
+
+        self.arTimer.start(200, True)
+
+    def applyAspectRatio(self):
+        current_ar = _get_current_aspect_ratio()
+        try:
+            if self.ar_id_player != -1 and current_ar is not None and int(current_ar) != int(self.ar_id_player):
+                self.setAspectRatio(self.ar_id_player)
+        except Exception:
+            pass
 
     def loadDefaultImage(self, data=None):
         if self["cover"].instance:

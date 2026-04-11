@@ -17,3 +17,4 @@ pintime = 0
 adultChannel = False
 categoryname = None
 hassuperscript = False
+original_aspect_ratio = None

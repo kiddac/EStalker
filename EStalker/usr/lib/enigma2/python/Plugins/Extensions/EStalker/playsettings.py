@@ -212,7 +212,9 @@ class EStalker_Settings(ConfigListScreen, Screen):
             player_info["vodtype"] = vodtype
             player_info["showadult"] = showadult
 
-        self.getPlaylistUserFile()
+            self.getPlaylistUserFile()
+        else:
+            self.close()
 
     def getPlaylistJson(self):
         playlists_all = []
@@ -220,7 +222,7 @@ class EStalker_Settings(ConfigListScreen, Screen):
             try:
                 with open(playlists_json) as f:
                     playlists_all = json.load(f)
-            except ValueError as e:
+            except Exception as e:
                 print("Error loading playlists:", e)
                 os.remove(playlists_json)
         return playlists_all
@@ -236,5 +238,5 @@ class EStalker_Settings(ConfigListScreen, Screen):
 
     def writeJsonFile(self):
         with open(playlists_json, "w") as f:
-            json.dump(self.playlists_all, f)
+            json.dump(self.playlists_all, f, indent=4)
         self.close()

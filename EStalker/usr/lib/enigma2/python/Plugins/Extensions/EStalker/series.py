@@ -3068,7 +3068,8 @@ class EStalker_Series_Categories(Screen):
             self.series_group_title = ""
 
         try:
-            del glob.nextlist[-1]
+            if glob.nextlist:
+                glob.nextlist.pop()
         except Exception as e:
             print(e)
             self.close()
