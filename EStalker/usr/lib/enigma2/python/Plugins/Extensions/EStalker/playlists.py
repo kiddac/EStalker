@@ -7,6 +7,7 @@ from __future__ import division
 import json
 import os
 import re
+import socket
 import time
 
 try:
@@ -85,11 +86,14 @@ def parse_date_safe(date_str):
 
 
 def check_internet():
-    try:
-        requests.get("https://clients3.google.com/generate_204", timeout=5)
-        return True
-    except requests.exceptions.RequestException:
-        return False
+    for host in ("1.1.1.1", "8.8.8.8"):
+        try:
+            conn = socket.create_connection((host, 53), 2)
+            conn.close()
+            return True
+        except OSError:
+            continue
+    return False
 
 
 def extract_portal_path_from_stream(resp, url):

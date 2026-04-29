@@ -1452,9 +1452,9 @@ class EStalker_Live_Categories(Screen):
                     self.createSetup()
 
     def reload(self):
-        self.setIndex()
         self.selectionChanged()
         self.setWatchingIcon(glob.currentchannellistindex)
+        self.setIndex()
 
     def setWatchingIcon(self, idx):
         if self["main_list"].getCurrent() and self.list2:
