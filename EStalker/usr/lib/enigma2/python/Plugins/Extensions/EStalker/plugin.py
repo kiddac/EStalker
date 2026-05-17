@@ -206,8 +206,10 @@ addFont(os.path.join(font_folder, "classfont2.ttf"), "iconfont", 100, 0)
 if os.path.exists("/tmp/estalker"):
     shutil.rmtree("/tmp/estalker")
 
+"""
 if os.path.exists(dir_tmp):
     shutil.rmtree("/etc/enigma2/estalker/tmp/")
+    """
 
 # create temporary folder for downloaded files
 if not os.path.exists(dir_tmp):

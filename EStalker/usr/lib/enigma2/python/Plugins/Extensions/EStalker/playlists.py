@@ -7,7 +7,6 @@ from __future__ import division
 import json
 import os
 import re
-import socket
 import time
 
 try:
@@ -83,17 +82,6 @@ def parse_date_safe(date_str):
         return datetime.strptime(s, "%B %d, %Y")
     except Exception:
         return None
-
-
-def check_internet():
-    for host in ("1.1.1.1", "8.8.8.8"):
-        try:
-            conn = socket.create_connection((host, 53), 2)
-            conn.close()
-            return True
-        except OSError:
-            continue
-    return False
 
 
 def extract_portal_path_from_stream(resp, url):
@@ -210,10 +198,6 @@ class EStalker_Playlists(Screen):
             """
 
         loadfiles.process_files()
-
-        if not check_internet():
-            self.session.openWithCallback(self.quit, MessageBox, _("No internet."), type=MessageBox.TYPE_ERROR, timeout=5)
-            return
 
         # check if playlists.json file exists in specified location
         if os.path.isfile(playlists_json):
@@ -1015,7 +999,7 @@ class EStalker_UserInfo(Screen):
             "X-User-Agent": "Model: MAG250; Link: WiFi",
             "Connection": "Close",
             "Referer": referer,
-            "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone),
+            "Cookie": "mac={}; stb_lang=en; timezone={}".format(mac, timezone),
         }
 
     def _fetch_xtream_creds(self, portal, headers, content_type, domain):

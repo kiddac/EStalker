@@ -8,13 +8,14 @@ import codecs
 import json
 import os
 import re
+import tempfile
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from itertools import cycle, islice
 
 import hashlib
 
-# Third-party imports
+
 try:
     from http.client import HTTPConnection
     HTTPConnection.debuglevel = 0
@@ -23,10 +24,8 @@ except ImportError:
     HTTPConnection.debuglevel = 0
 
 try:
-    # Python 3
     from urllib.parse import urlparse, parse_qs, urlunparse
-except ImportError:
-    # Python 2.7
+except:
     from urlparse import urlparse, parse_qs, urlunparse
 
 try:
@@ -114,16 +113,17 @@ class EStalker_Live_Categories(Screen):
         self.session = session
         glob.categoryname = "live"
 
-        self.skin_path = os.path.join(skin_directory, cfg.skin.value)
-        skin = os.path.join(self.skin_path, "live_categories.xml")
+        skin_path = os.path.join(skin_directory, cfg.skin.value)
+        skin = os.path.join(skin_path, "live_categories.xml")
         if isDreambox:
-            skin = os.path.join(self.skin_path, "DreamOS/live_categories.xml")
+            skin = os.path.join(skin_path, "DreamOS/live_categories.xml")
 
         with codecs.open(skin, "r", encoding="utf-8") as f:
             self.skin = f.read()
 
         self.setup_title = _("Live Categories")
         self.main_title = _("Live TV")
+        self.group_title = ""
 
         self["main_title"] = StaticText(self.main_title)
         self.main_list = []
@@ -159,10 +159,13 @@ class EStalker_Live_Categories(Screen):
         self["listposition"] = StaticText("")
         self.itemsperpage = 14
 
+        self.searchString = ""
         self.filterresult = ""
-        self.chosen_category = ""
 
         self.showingshortEPG = False
+
+        self.chosen_category = ""
+
         self.pin = False
         # self.sort_check = False
         self.showfav = False
@@ -176,6 +179,32 @@ class EStalker_Live_Categories(Screen):
         self.level = 1
 
         self.selectedlist = self["main_list"]
+
+        self._picon_req_id = 0
+
+        self.liveStreamsData = []
+
+        next_url = ""
+
+        self._px_play = LoadPixmap(os.path.join(common_path, "play.png"))
+        self._px_fav = LoadPixmap(os.path.join(common_path, "favourite.png"))
+        self._px_watching = LoadPixmap(os.path.join(common_path, "watching.png"))
+        self._px_more = LoadPixmap(os.path.join(common_path, "more.png"))
+
+        self._re_bouquet_marker = re.compile(r"[^\w\s()\[\]]", re.U)
+
+        if screenwidth.width() == 2560:
+            self.picon_size = (294, 176)
+        elif screenwidth.width() > 1280:
+            self.picon_size = (220, 130)
+        else:
+            self.picon_size = (147, 88)
+
+        self.adult_keywords = set([
+            "adult", "+18", "18+", "18 rated", "xxx", "sex", "porn",
+            "voksen", "volwassen", "aikuinen", "Erwachsene", "dorosly",
+            "взрослый", "vuxen", "£дорослий"
+        ])
 
         self.timezone = get_local_timezone()
         self.token = glob.active_playlist["playlist_info"]["token"]
@@ -231,9 +260,6 @@ class EStalker_Live_Categories(Screen):
 
         self.retry = False
 
-        self.liveStreamsData = []
-
-        next_url = ""
         self.sortby = "number"
 
         self.epg_downloaded_channels = set()
@@ -294,14 +320,35 @@ class EStalker_Live_Categories(Screen):
         glob.nextlist = []
         glob.nextlist.append({"next_url": next_url, "index": 0, "level": self.level, "sort": self.sortText, "filter": ""})
 
+        self.timer = eTimer()
+
+        self.timerImage = eTimer()
+        try:
+            self.timerImage.callback.append(self.downloadImage)
+        except:
+            self.timerImage_conn = self.timerImage.timeout.connect(self.downloadImage)
+
         self.onFirstExecBegin.append(self.createSetup)
         self.onLayoutFinish.append(self.__layoutFinished)
 
     def __layoutFinished(self):
-        if debugs:
-            print("*** __layoutFinished ***")
-
         self.setTitle(self.setup_title)
+
+    def _stopTimerImage(self):
+        if debugs:
+            print("*** _stopTimerImage ***")
+        # Stop any scheduled timer fire
+        try:
+            if self.timerImage:
+                self.timerImage.stop()
+        except:
+            pass
+
+        # Invalidate any in-flight downloadPage callbacks (zap protection)
+        try:
+            self._picon_req_id += 1
+        except:
+            self._picon_req_id = 1
 
     def createSetup(self, data=None):
         if debugs:
@@ -623,19 +670,19 @@ class EStalker_Live_Categories(Screen):
 
     def buildList1(self):
         if debugs:
-            print("*** buildlist1 ***")
+            print("*** buildList1 ***")
 
         self["key_epg"].setText("")
         self.hideEPG()
         self.xmltvdownloaded = False
 
         if self["key_blue"].getText() != _("Reset Search"):
-            self.pre_list = [buildCategoryList(x[0], x[1], x[2], x[3], x[4]) for x in self.prelist if not x[3]]
+            self.pre_list = [buildCategoryList(x[0], x[1], x[2], x[3], x[4], self._px_more) for x in self.prelist if not x[3]]
         else:
             self.pre_list = []
 
         if self.list1:
-            self.main_list = [buildCategoryList(x[0], x[1], x[2], x[3], x[4]) for x in self.list1 if not x[3]]
+            self.main_list = [buildCategoryList(x[0], x[1], x[2], x[3], x[4], self._px_more) for x in self.list1 if not x[3]]
 
             self["main_list"].setList(self.pre_list + self.main_list)
 
@@ -644,7 +691,7 @@ class EStalker_Live_Categories(Screen):
 
     def buildList2(self):
         if debugs:
-            print("*** buildlist2 ***")
+            print("*** buildList2 ***")
 
         self.main_list = []
         self.epglist = []
@@ -675,10 +722,22 @@ class EStalker_Live_Categories(Screen):
 
         if self.list2:
             if self.chosen_category == "favourites":
-                self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[16] is True]
+                self.main_list = [
+                    buildLiveStreamList(
+                        x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18],
+                        x[6], self._px_play, self._px_fav, self._px_watching
+                    )
+                    for x in self.list2 if x[16] is True]
+
                 self.epglist = [buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20]) for x in self.list2 if x[16] is True]
             else:
-                self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
+                self.main_list = [
+                    buildLiveStreamList(
+                        x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18],
+                        x[6], self._px_play, self._px_fav, self._px_watching
+                    )
+                    for x in self.list2 if x[18] is False]
+
                 self.epglist = [buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20]) for x in self.list2 if x[18] is False]
 
         self["main_list"].setList(self.main_list)
@@ -721,12 +780,25 @@ class EStalker_Live_Categories(Screen):
             if self.chosen_category == "favourites" or self.chosen_category == "recent":
                 self["key_menu"].setText("")
 
+    def stopStream(self):
+        if debugs:
+            print("*** stopStream ***")
+
+        current_playing_ref = glob.currentPlayingServiceRefString
+        new_playing_ref = glob.newPlayingServiceRefString
+
+        if current_playing_ref and new_playing_ref and current_playing_ref != new_playing_ref:
+            currently_playing_service = self.session.nav.getCurrentlyPlayingServiceReference()
+            if currently_playing_service:
+                self.session.nav.stopService()
+            self.session.nav.playService(eServiceReference(current_playing_ref))
+            glob.newPlayingServiceRefString = current_playing_ref
+
     def selectionChanged(self):
         if debugs:
             print("*** selectionChanged ***")
 
         current_item = self["main_list"].getCurrent()
-
         if current_item:
             channel_title = current_item[0]
             current_index = self["main_list"].getIndex()
@@ -734,7 +806,6 @@ class EStalker_Live_Categories(Screen):
             glob.nextlist[-1]["index"] = current_index
 
             position = current_index + 1
-
             position_all = len(self.pre_list) + len(self.main_list) if self.level == 1 else len(self.main_list)
             page = (position - 1) // self.itemsperpage + 1
             page_all = (position_all + self.itemsperpage - 1) // self.itemsperpage
@@ -745,7 +816,19 @@ class EStalker_Live_Categories(Screen):
 
             self["page"].setText(_("Page: ") + "{}/{}".format(page, page_all))
             self["listposition"].setText("{}/{}".format(position, position_all))
-            self["main_title"].setText("{}: {}".format(self.main_title, channel_title))
+
+            parts = []
+
+            if self.main_title:
+                parts.append(self.main_title)
+
+            if self.group_title:
+                parts.append(self.group_title)
+
+            if channel_title:
+                parts.append(channel_title)
+
+            self["main_title"].setText(": ".join(parts))
 
             self.loadBlankImage()
 
@@ -754,12 +837,7 @@ class EStalker_Live_Categories(Screen):
                     self["epg_list"].setIndex(current_index)
 
                 if cfg.channelpicons.value:
-                    self.timerImage = eTimer()
-
-                    try:
-                        self.timerImage.callback.append(self.downloadImage)
-                    except:
-                        self.timerImage_conn = self.timerImage.timeout.connect(self.downloadImage)
+                    self._stopTimerImage()
                     self.timerImage.start(250, True)
 
                 if self["key_blue"].getText() != _("Reset Search"):
@@ -818,112 +896,203 @@ class EStalker_Live_Categories(Screen):
         self.updateEPGListWithShortEPG()
 
     def downloadImage(self):
-        if self["main_list"].getCurrent():
-            try:
-                for filename in ["original.png", "temp.png"]:
-                    file_path = os.path.join(dir_tmp, filename)
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-            except Exception:
-                pass
+        if debugs:
+            print("*** downloadImage ***")
 
+        if not self["main_list"].getCurrent():
+            self.loadDefaultImage()
+            return
+
+        # Clear immediately so previous image doesn't remain if new fails
+        self.loadBlankImage()
+
+        # bump request id so stale callbacks can be ignored (zap protection)
+        try:
+            self._picon_req_id += 1
+        except:
+            self._picon_req_id = 1
+
+        req_id = self._picon_req_id
+
+        desc_image = ""
+        try:
+            desc_image = self["main_list"].getCurrent()[5]
+        except:
             desc_image = ""
+
+        if not desc_image or desc_image.lower() == "n/a":
+            self.loadDefaultImage()
+            return
+
+        if not desc_image.startswith(("http://", "https://")):
+            self.loadDefaultImage()
+            return
+
+        fd = None
+        temp = None
+
+        try:
+            fd, temp = tempfile.mkstemp(prefix="xst_live_picon_", suffix=".png", dir=dir_tmp)
             try:
-                desc_image = self["main_list"].getCurrent()[5]
+                os.close(fd)
             except:
                 pass
 
-            if not desc_image:
-                self.loadDefaultImage()
-                return
+            parsed = urlparse(desc_image)
+            domain = parsed.hostname
+            scheme = parsed.scheme
 
-            temp = os.path.join(dir_tmp, "temp.png")
+            url = desc_image
+            if pythonVer == 3:
+                try:
+                    url = desc_image.encode()
+                except:
+                    url = desc_image
+
+            def _cleanup_temp():
+                try:
+                    if temp and os.path.exists(temp):
+                        os.remove(temp)
+                except:
+                    pass
+
+            def _ok(_data=None):
+                # ignore stale callback if user moved again
+                if getattr(self, "_picon_req_id", 0) != req_id:
+                    _cleanup_temp()
+                    return
+
+                self.resizeImage(temp, req_id=req_id)
+
+            def _err(_failure=None):
+                if getattr(self, "_picon_req_id", 0) != req_id:
+                    _cleanup_temp()
+                    return
+
+                _cleanup_temp()
+                self.loadDefaultImage()
+
+            if scheme == "https" and sslverify:
+                sniFactory = SNIFactory(domain)
+                d = downloadPage(url, temp, sniFactory, timeout=2)
+            else:
+                d = downloadPage(url, temp, timeout=2)
+
+            d.addCallback(_ok)
+            d.addErrback(_err)
+
+        except Exception:
+            try:
+                if fd:
+                    os.close(fd)
+            except:
+                pass
 
             try:
-                parsed = urlparse(desc_image)
-                domain = parsed.hostname
-                scheme = parsed.scheme
+                if temp and os.path.exists(temp):
+                    os.remove(temp)
+            except:
+                pass
 
-                if pythonVer == 3:
-                    desc_image = desc_image.encode()
-
-                if scheme == "https" and sslverify:
-                    sniFactory = SNIFactory(domain)
-                    downloadPage(desc_image, temp, sniFactory, timeout=2).addCallback(self.resizeImage).addErrback(self.loadDefaultImage)
-                else:
-                    downloadPage(desc_image, temp, timeout=2).addCallback(self.resizeImage).addErrback(self.loadDefaultImage)
-            except Exception:
-                self.loadDefaultImage()
+            self.loadDefaultImage()
 
     def loadBlankImage(self, data=None):
+        if debugs:
+            print("*** loadBlankImage ***")
+
         if self["picon"].instance:
             self["picon"].instance.setPixmapFromFile(os.path.join(common_path, "picon_blank.png"))
 
     def loadDefaultImage(self, data=None):
+        if debugs:
+            print("*** loadDefaultImage ***")
+
         if self["picon"].instance:
             self["picon"].instance.setPixmapFromFile(os.path.join(common_path, "picon.png"))
 
-    def resizeImage(self, data=None):
-        current_item = self["main_list"].getCurrent()
-        if current_item:
-            original = os.path.join(dir_tmp, "temp.png")
+    def resizeImage(self, original, req_id=None, data=None):
+        if debugs:
+            print("*** resizeImage ***", original, req_id)
 
-            if screenwidth.width() == 2560:
-                size = [294, 176]
-            elif screenwidth.width() > 1280:
-                size = [220, 130]
-            else:
-                size = [147, 88]
+        if req_id is not None and getattr(self, "_picon_req_id", 0) != req_id:
+            try:
+                if original and os.path.exists(original):
+                    os.remove(original)
+            except:
+                pass
+            return
 
-            if os.path.exists(original):
+        size = self.picon_size
+        if os.path.exists(original):
+            im = None
+            try:
+                im = Image.open(original)
+                if im.mode != "RGBA":
+                    im = im.convert("RGBA")
+
+                if im.size[0] == 0 or im.size[1] == 0:
+                    raise ValueError("Image has zero dimension")
+                ratio = min(size[0] / float(im.size[0]), size[1] / float(im.size[1]))
+                new_size = (int(im.size[0] * ratio), int(im.size[1] * ratio))
                 try:
-                    im = Image.open(original)
+                    im = im.resize(new_size, Image.Resampling.LANCZOS)
+                except:
+                    im = im.resize(new_size, Image.ANTIALIAS)
 
-                    if im.mode != "RGBA":
-                        im = im.convert("RGBA")
+                bg = Image.new("RGBA", size, (255, 255, 255, 0))
+                left = (size[0] - im.size[0]) // 2
+                top = (size[1] - im.size[1]) // 2
+                bg.paste(im, (left, top), mask=im)
+                bg.save(original, "PNG")
 
-                    src_w, src_h = im.size
-                    target_w, target_h = size
+                if self["picon"].instance:
+                    self["picon"].instance.setPixmapFromFile(original)
 
-                    scale = min(float(target_w) / src_w, float(target_h) / src_h)
-                    new_size = (int(src_w * scale), int(src_h * scale))
-
-                    try:
-                        im = im.resize(new_size, Image.Resampling.LANCZOS)
-                    except:
-                        im = im.resize(new_size, Image.ANTIALIAS)
-
-                    bg = Image.new("RGBA", size, (255, 255, 255, 0))
-                    left = (target_w - new_size[0]) // 2
-                    top = (target_h - new_size[1]) // 2
-                    bg.paste(im, (left, top), mask=im)
-
-                    bg.save(original, "PNG")
-
-                    if self["picon"].instance:
-                        self["picon"].instance.setPixmapFromFile(original)
-
-                except Exception:
-                    self.loadDefaultImage()
-            else:
+            except Exception as e:
+                print("Error resizing image:", e)
                 self.loadDefaultImage()
+            finally:
+                if im is not None:
+                    try:
+                        im.close()
+                    except:
+                        pass
+
+            try:
+                os.remove(original)
+            except:
+                pass
+        else:
+            self.loadDefaultImage()
 
     def goUp(self):
+        if debugs:
+            print("*** goUp ***")
+
         instance = self.selectedlist.master.master.instance
         instance.moveSelection(instance.moveUp)
         self.selectionChanged()
 
     def goDown(self):
+        if debugs:
+            print("*** goDown ***")
+
         instance = self.selectedlist.master.master.instance
         instance.moveSelection(instance.moveDown)
         self.selectionChanged()
 
     def pageUp(self):
+        if debugs:
+            print("*** pageUp ***")
+
         instance = self.selectedlist.master.master.instance
         instance.moveSelection(instance.pageUp)
         self.selectionChanged()
 
     def pageDown(self):
+        if debugs:
+            print("*** pageDown ***")
+
         instance = self.selectedlist.master.master.instance
         instance.moveSelection(instance.pageDown)
         self.selectionChanged()
@@ -1109,11 +1278,12 @@ class EStalker_Live_Categories(Screen):
 
         elif current_filter == _("Delete"):
             self.deleteRecent()
+
         else:
-            self.session.openWithCallback(self.filterChannels, VirtualKeyBoard, title=_("Filter this category..."), text=getattr(self, "searchString", "") or "")
+            self.session.openWithCallback(self.filterChannels, VirtualKeyBoard, title=_("Filter this category..."), text=self.searchString)
 
     def deleteRecent(self):
-        # print("*** deleterecent ***")
+        # print("*** deleteRecent ***")
         current_item = self["main_list"].getCurrent()
         if current_item:
             current_index = self["main_list"].getIndex()
@@ -1206,7 +1376,7 @@ class EStalker_Live_Categories(Screen):
 
     def resetSearch(self):
         if debugs:
-            print("*** resetsearch ***")
+            print("*** resetSearch ***")
 
         self["key_yellow"].setText(self.sortText)
         self.do_sort = True
@@ -1249,11 +1419,6 @@ class EStalker_Live_Categories(Screen):
         nowtime = int(time.mktime(datetime.now().timetuple())) if pythonVer == 2 else int(datetime.timestamp(datetime.now()))
 
         if self.level == 1 and self["main_list"].getCurrent():
-            adult_keywords = {
-                "adult", "+18", "18+", "18 rated", "xxx", "sex", "porn",
-                "voksen", "volwassen", "aikuinen", "Erwachsene", "dorosly",
-                "взрослый", "vuxen", "£дорослий"
-            }
 
             current_title = str(self["main_list"].getCurrent()[0])
 
@@ -1263,7 +1428,7 @@ class EStalker_Live_Categories(Screen):
             elif "sport" in current_title.lower():
                 glob.adultChannel = False
 
-            elif any(keyword in current_title.lower() for keyword in adult_keywords):
+            elif any(keyword in current_title.lower() for keyword in self.adult_keywords):
                 glob.adultChannel = True
 
             else:
@@ -1291,8 +1456,12 @@ class EStalker_Live_Categories(Screen):
         if self["main_list"].getCurrent():
             current_index = self["main_list"].getIndex()
             glob.nextlist[-1]["index"] = current_index
-            glob.currentchannellist = self.main_list[:]
+
+            if glob.currentchannellist is not self.main_list:
+                glob.currentchannellist = self.main_list[:]
+
             glob.currentchannellistindex = current_index
+            self.group_title = self["main_list"].getCurrent()[0]
 
             if self.level == 1:
                 if self.list1:
@@ -1398,9 +1567,19 @@ class EStalker_Live_Categories(Screen):
                             channel[17] = (channel[2] == stream_id)
 
                         if self.chosen_category == "favourites":
-                            self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[16] is True]
+                            self.main_list = [
+                                buildLiveStreamList(
+                                    x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18],
+                                    x[6],  self._px_play, self._px_fav, self._px_watching
+                                )
+                                for x in self.list2 if x[16] is True]
                         else:
-                            self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
+                            self.main_list = [
+                                buildLiveStreamList(
+                                    x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18],
+                                    x[6],  self._px_play, self._px_fav, self._px_watching
+                                )
+                                for x in self.list2 if x[18] is False]
 
                         self["main_list"].setList(self.main_list)
                         self.setIndex()
@@ -1424,7 +1603,6 @@ class EStalker_Live_Categories(Screen):
                                 glob.newPlayingServiceRefString = nowref.toString()
 
                             update_channel_icons_and_list()
-
                         else:
                             update_channel_icons_and_list()
                             self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
@@ -1441,7 +1619,6 @@ class EStalker_Live_Categories(Screen):
                                 glob.newPlayingServiceRefString = nowref.toString()
 
                             update_channel_icons_and_list()
-
                         else:
                             update_channel_icons_and_list()
                             self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
@@ -1452,33 +1629,76 @@ class EStalker_Live_Categories(Screen):
                     self.createSetup()
 
     def reload(self):
+        if debugs:
+            print("*** reload ***")
+
+        idx = glob.currentchannellistindex
+        position = idx + 1
+        self.current_page = (position - 1) // self.itemsperpage + 1
+
+        glob.nextlist[-1]["index"] = idx
+
+        # Set the index BEFORE selectionChanged so pagination calculates correctly
+        self["main_list"].setIndex(idx)
+        self["epg_list"].setIndex(idx)
+
         self.selectionChanged()
-        self.setWatchingIcon(glob.currentchannellistindex)
-        self.setIndex()
+
+        self.setWatchingIcon(idx)
+
+        # Re-apply index after setWatchingIcon since it calls setList which resets to 0
+        self["main_list"].setIndex(idx)
+        self["epg_list"].setIndex(idx)
+
+        self.downloadImage()
 
     def setWatchingIcon(self, idx):
-        if self["main_list"].getCurrent() and self.list2:
-            # Clear all watching flags
-            for channel in self.list2:
-                channel[17] = False
+        if debugs:
+            print("*** setWatchingIcon ***")
 
-            # Set watching for currently active channel index
-            try:
-                self.list2[idx][17] = True
-            except:
-                pass
+        if not self["main_list"].getCurrent() or not self.list2:
+            return
 
-            if self.chosen_category == "favourites":
-                self.main_list = [
-                    buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6])for x in self.list2 if x[16] is True
-                ]
-            else:
-                self.main_list = [
-                    buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
+        # Get the stream_id of the channel the player was on
+        try:
+            watching_stream_id = glob.currentchannellist[idx][4]
+        except (IndexError, TypeError):
+            return
 
-            self["main_list"].setList(self.main_list)
+        # Clear all watching flags in list2
+        for channel in self.list2:
+            channel[17] = False
+
+        # Set watching flag by stream_id match, not raw index
+        for channel in self.list2:
+            if str(channel[2]) == str(watching_stream_id):
+                channel[17] = True
+                break
+
+        # Rebuild main_list with updated watching flags
+        if self.chosen_category == "favourites":
+            self.main_list = [
+                buildLiveStreamList(
+                    x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18],
+                    x[6], self._px_play, self._px_fav, self._px_watching
+                )
+                for x in self.list2 if x[16] is True
+            ]
+        else:
+            self.main_list = [
+                buildLiveStreamList(
+                    x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18],
+                    x[6], self._px_play, self._px_fav, self._px_watching
+                )
+                for x in self.list2 if x[18] is False
+            ]
+
+        self["main_list"].setList(self.main_list)
 
     def setIndex(self, data=None):
+        if debugs:
+            print("*** setIndex ***")
+
         if self["main_list"].getCurrent():
             self["main_list"].setIndex(glob.currentchannellistindex)
             self["epg_list"].setIndex(glob.currentchannellistindex)
@@ -1528,7 +1748,7 @@ class EStalker_Live_Categories(Screen):
 
     def showfavourites(self):
         if debugs:
-            print("*** show favourites ***")
+            print("*** showfavourites ***")
 
         self.showfav = True
         self.parentalCheck()
@@ -1616,6 +1836,9 @@ class EStalker_Live_Categories(Screen):
             self["progress"].show()
 
     def refreshEPGInfo(self):
+        if debugs:
+            print("*** refreshEPGInfo ***")
+
         current_item = self["epg_list"].getCurrent()
         if not current_item:
             return
@@ -1640,6 +1863,8 @@ class EStalker_Live_Categories(Screen):
 
         self["x_title"].setText(nowTitle)
         self["x_description"].setText(descriptionnow)
+
+        percent = 0
 
         if startnowunixtime and startnextunixtime:
             self["progress"].show()
@@ -1696,11 +1921,21 @@ class EStalker_Live_Categories(Screen):
                 return datetime.strptime(datetime_str, time_format)
             except ValueError:
                 pass
-        return ""
+        return ""  # Return None if none of the formats match
 
     def shortEPG(self):
         if debugs:
             print("*** shortEPG ***")
+
+        # helper: parse local portal time
+        def parse_epg_time(timestr):
+            if not timestr:
+                return 0
+            try:
+                dt = datetime.strptime(timestr, "%Y-%m-%d %H:%M:%S")
+                return int(time.mktime(dt.timetuple()))
+            except Exception:
+                return 0
 
         if self["main_list"].getCurrent():
             self.showingshortEPG = not self.showingshortEPG
@@ -1715,59 +1950,63 @@ class EStalker_Live_Categories(Screen):
 
                 if self.level == 2:
                     try:
-                        stream_id = self["main_list"].getCurrent()[4]
-                        url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&limit=10&size=10".format(stream_id)
+                        stream_id = str(self["main_list"].getCurrent()[4])
 
+                        url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&limit=10&size=10&JsHttpRequest=1-xml".format(stream_id)
                         response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
 
-                        listings = []
-
-                        if response:
-                            listings = response.get("js", [])
+                        listings = response.get("js", []) if response else []
 
                         if listings:
-                            first_start = listings[0].get("start_timestamp", 0)
-                            first_start_dt = datetime.utcfromtimestamp(first_start)
-
-                            now = datetime.now()
-
+                            now_ts = int(time.time())
                             self.epgshortlist = []
                             duplicatecheck = []
 
                             for index, listing in enumerate(listings):
                                 try:
-                                    title = listing.get("name", "")
-                                    description = listing.get("descr", "")
-                                    t_time = listing.get("t_time")
-                                    t_time_to = listing.get("t_time_to")
+                                    # USE STRING TIMES INSTEAD OF UTC TIMESTAMPS
+                                    start_ts = parse_epg_time(listing.get("time"))
+                                    stop_ts = parse_epg_time(listing.get("time_to"))
 
-                                    if not t_time or not t_time_to:
+                                    if not start_ts or not stop_ts:
                                         continue
 
-                                    # Build datetime objects using the date from first_start_dt and t_time fields
-                                    date_base = first_start_dt.date()
-                                    start_datetime = datetime.strptime("{} {}".format(date_base, t_time), "%Y-%m-%d %H:%M")
-                                    end_datetime = datetime.strptime("{} {}".format(date_base, t_time_to), "%Y-%m-%d %H:%M")
+                                    # skip past events
+                                    if stop_ts < now_ts:
+                                        continue
 
-                                    # If t_time_to is before t_time, assume it passes midnight
-                                    if end_datetime < start_datetime:
-                                        end_datetime += timedelta(days=1)
+                                    start_datetime = datetime.fromtimestamp(start_ts)
+                                    end_datetime = datetime.fromtimestamp(stop_ts)
+
+                                    title = listing.get("name", "")
+                                    description = listing.get("descr", "")
 
                                     epg_date_all = start_datetime.strftime("%a %d/%m")
-                                    epg_time_all = "{} - {}".format(start_datetime.strftime("%H:%M"), end_datetime.strftime("%H:%M"))
+                                    epg_time_all = "{} - {}".format(
+                                        start_datetime.strftime("%H:%M"),
+                                        end_datetime.strftime("%H:%M")
+                                    )
 
-                                    if [epg_date_all, epg_time_all] not in duplicatecheck and end_datetime >= now:
+                                    if [epg_date_all, epg_time_all] not in duplicatecheck:
                                         duplicatecheck.append([epg_date_all, epg_time_all])
+
                                         self.epgshortlist.append(buildShortEPGListEntry(
-                                            str(epg_date_all), str(epg_time_all), str(title), str(description),
-                                            index, start_datetime, end_datetime,
-                                            int(start_datetime.strftime("%s")), int(end_datetime.strftime("%s"))
+                                            str(epg_date_all),
+                                            str(epg_time_all),
+                                            str(title),
+                                            str(description),
+                                            index,
+                                            start_datetime,
+                                            end_datetime,
+                                            start_ts,
+                                            stop_ts
                                         ))
 
                                 except Exception as e:
-                                    print("Error processing short EPG entry using t_time:", e)
+                                    print("Error processing short EPG entry: {}".format(e))
 
                             self["epg_short_list"].setList(self.epgshortlist)
+
                             instance = self["epg_short_list"].master.master.instance
                             instance.setSelectionEnable(1)
 
@@ -1783,6 +2022,7 @@ class EStalker_Live_Categories(Screen):
 
                     except Exception as e:
                         print("Error fetching short EPG:", e)
+
             else:
                 self["epg_short_list"].setList([])
                 self.selectedlist = self["main_list"]
@@ -1790,7 +2030,7 @@ class EStalker_Live_Categories(Screen):
 
     def displayShortEPG(self):
         if debugs:
-            print("*** displayshortEPG ***")
+            print("*** displayShortEPG ***")
 
         if self["epg_short_list"].getCurrent():
             title = str(self["epg_short_list"].getCurrent()[0])
@@ -1798,20 +2038,6 @@ class EStalker_Live_Categories(Screen):
             timeall = str(self["epg_short_list"].getCurrent()[2])
             self["x_title"].setText(timeall + " " + title)
             self["x_description"].setText(description)
-
-    def stopStream(self):
-        if debugs:
-            print("*** stop stream ***")
-
-        current_playing_ref = glob.currentPlayingServiceRefString
-        new_playing_ref = glob.newPlayingServiceRefString
-
-        if current_playing_ref and new_playing_ref and current_playing_ref != new_playing_ref:
-            currently_playing_service = self.session.nav.getCurrentlyPlayingServiceReference()
-            if currently_playing_service:
-                self.session.nav.stopService()
-            self.session.nav.playService(eServiceReference(current_playing_ref))
-            glob.newPlayingServiceRefString = current_playing_ref
 
     def getVisibleChannels(self):
         current_index = self["main_list"].getIndex()
@@ -1838,70 +2064,92 @@ class EStalker_Live_Categories(Screen):
         self.updateEPGListWithShortEPG()
 
     def updateEPGListWithShortEPG(self):
+
         def extract_main_description(descr):
             if not descr:
                 return ""
-
             descr = descr.replace("\r\n", "\n")
             match = re.search(r"Description:\s*(.+)", descr, re.DOTALL)
             if not match:
                 return descr.strip()
-
             description = match.group(1)
-
             stop_labels = ["Credits:", "Director:", "Producer:", "Actor:", "Category:"]
             for label in stop_labels:
                 index = description.find(label)
                 if index != -1:
                     description = description[:index]
                     break
-
             return description.strip()
 
+        # NEW: convert portal local time string → local timestamp
+        def parse_epg_time(timestr):
+            if not timestr:
+                return 0
+            try:
+                dt = datetime.strptime(timestr, "%Y-%m-%d %H:%M:%S")
+                return int(time.mktime(dt.timetuple()))
+            except Exception:
+                return 0
+
+        """
+        if not hasattr(self, 'epg_cache') or not self.epg_cache:
+            return
+            """
+
         now = int(time.time())
-        epgoffset_sec = 0
 
         for channel in self.list2:
-            epg_channel_id = channel[4]
+            epg_channel_id = str(channel[4])
 
-            if epg_channel_id in self.short_epg_results:
-                events = self.short_epg_results[epg_channel_id]
+            """
+            if epg_channel_id not in self.epg_cache:
+                continue
+                """
 
-                for index, entry in enumerate(events):
-                    time_str = entry.get("time", "")
-                    time_to_str = entry.get("time_to", "")
+            # events = self.epg_cache[epg_channel_id]
 
-                    if time_str and time_to_str:
-                        try:
-                            dt_start = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
-                            dt_stop = datetime.strptime(time_to_str, "%Y-%m-%d %H:%M:%S")
+            if epg_channel_id not in self.short_epg_results:
+                continue
 
-                            start = int(time.mktime(dt_start.timetuple())) + epgoffset_sec
-                            stop = int(time.mktime(dt_stop.timetuple())) + epgoffset_sec
-                        except Exception:
-                            start = 0
-                            stop = 0
-                    else:
-                        start = 0
-                        stop = 0
+            events = self.short_epg_results[epg_channel_id]
+
+            for index, entry in enumerate(events):
+
+                # CHANGED: use parsed local times instead of UTC timestamps
+                start = parse_epg_time(entry.get("time"))
+                stop = parse_epg_time(entry.get("time_to"))
+
+                if not start or not stop:
+                    continue
+
+                if start < now and stop > now:
+                    channel[9] = str(entry.get("t_time") or time.strftime("%H:%M", time.localtime(start)))
+                    channel[10] = str(entry.get("name", "") or "")
+                    channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
+                    channel[19] = start
 
                     next_entry = events[index + 1] if (index + 1) < len(events) else None
+                    if next_entry:
+                        next_start = parse_epg_time(next_entry.get("time"))
 
-                    if start < now and stop > now:
-                        channel[9] = str(time.strftime("%H:%M", time.localtime(start)))
-                        channel[10] = str(entry.get("name", "") or "")
-                        channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
-                        channel[19] = start
+                        channel[12] = str(next_entry.get("t_time") or (time.strftime("%H:%M", time.localtime(next_start)) if next_start else ""))
+                        channel[13] = str(next_entry.get("name", "") or "")
+                        channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
+                        channel[20] = next_start
+                    else:
+                        channel[12] = ""
+                        channel[13] = ""
+                        channel[14] = ""
+                        channel[20] = 0
+                    break
 
+                else:
+                    if start > now:
+                        next_entry = events[index] if index < len(events) else None
                         if next_entry:
-                            next_start_str = next_entry.get("time", "")
-                            try:
-                                dt_next_start = datetime.strptime(next_start_str, "%Y-%m-%d %H:%M:%S")
-                                next_start = int(time.mktime(dt_next_start.timetuple())) + epgoffset_sec
-                            except Exception:
-                                next_start = 0
+                            next_start = parse_epg_time(next_entry.get("time"))
 
-                            channel[12] = str(time.strftime("%H:%M", time.localtime(next_start)) if next_start else "")
+                            channel[12] = str(next_entry.get("t_time") or (time.strftime("%H:%M", time.localtime(next_start)) if next_start else ""))
                             channel[13] = str(next_entry.get("name", "") or "")
                             channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
                             channel[20] = next_start
@@ -1910,11 +2158,13 @@ class EStalker_Live_Categories(Screen):
                             channel[13] = ""
                             channel[14] = ""
                             channel[20] = 0
-
                         break
 
         self.epglist = [
-            buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20])
+            buildEPGListEntry(
+                x[0], x[1], x[9], x[10], x[11],
+                x[12], x[13], x[14], x[18], x[19], x[20]
+            )
             for x in self.list2 if x[18] is False
         ]
 
@@ -1934,15 +2184,17 @@ def buildShortEPGListEntry(date_all, time_all, title, description, index, start_
     return (title, date_all, time_all, description, index, start_datetime, end_datetime, start_timestamp, stop_timestamp)
 
 
-def buildCategoryList(index, title, category_id, hidden, number):
-    png = LoadPixmap(os.path.join(common_path, "more.png"))
-    return (title, png, index, category_id, hidden, number)
+def buildCategoryList(index, title, category_id, hidden, number, px_more=None):
+    return (title, px_more, index, category_id, hidden, number)
 
 
-def buildLiveStreamList(index, name, stream_id, stream_icon, number, command, next_url, favourite, watching, hidden, category_id):
-    png = LoadPixmap(os.path.join(common_path, "play.png"))
+def buildLiveStreamList(index, name, stream_id, stream_icon, number, command, next_url, favourite, watching, hidden, category_id, px_play=None, px_fav=None, px_watching=None):
+    png = px_play
+
     if favourite:
-        png = LoadPixmap(os.path.join(common_path, "favourite.png"))
+        png = px_fav
+
     if watching:
-        png = LoadPixmap(os.path.join(common_path, "watching.png"))
+        png = px_watching
+
     return (name, png, index, next_url, stream_id, stream_icon, number, command, hidden, category_id)

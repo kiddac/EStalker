@@ -39,7 +39,7 @@ class EStalker_EPG_Short:
         self.prepare()
 
     def download_single_epg(self, ch_id):
-        url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&limit=10&size=10".format(ch_id)
+        url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&limit=10&size=10&JsHttpRequest=1-xml".format(ch_id)
         d = self.agent.request(b'GET', url.encode(), self.headers)
         d.addCallback(lambda response, ch_id=ch_id: self.handle_response(response, ch_id))
         d.addErrback(lambda failure, ch_id=ch_id: self.handle_error(failure, ch_id))
@@ -72,11 +72,11 @@ class EStalker_EPG_Short:
 
         if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                b"Cookie": [("mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, adid)).encode()]
+                b"Cookie": [("mac={}; stb_lang=en; timezone={}; adid={}".format(mac, timezone, adid)).encode()]
             }
         else:
             host_headers = {
-                b"Cookie": [("mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)).encode()]
+                b"Cookie": [("mac={}; stb_lang=en; timezone={}".format(mac, timezone)).encode()]
             }
 
         base_headers.update(host_headers)
@@ -110,8 +110,6 @@ class EStalker_EPG_Short:
                     data = f.read()
             else:
                 data = body
-
-            # print("*** data ***", data)
 
             if not data:
                 return

@@ -376,6 +376,13 @@ class EStalker_StreamPlayer(
         self["speed"] = Label()
         self["statusicon"] = MultiPixmap()
 
+        if screenwidth.width() == 2560:
+            self.picon_size = (294, 176)
+        elif screenwidth.width() > 1280:
+            self.picon_size = (220, 130)
+        else:
+            self.picon_size = (147, 88)
+
         self.setup_title = _("TV")
 
         self.retry = False
@@ -412,11 +419,11 @@ class EStalker_StreamPlayer(
 
         if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
+                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(self.mac, self.timezone, self.adid)
             }
         else:
             host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
+                "Cookie": "mac={}; stb_lang=en; timezone={}".format(self.mac, self.timezone)
             }
 
         self.headers.update(host_headers)
@@ -764,7 +771,7 @@ class EStalker_StreamPlayer(
         temp = None
 
         try:
-            fd, temp = tempfile.mkstemp(prefix="xst_picon_", suffix=".png", dir=dir_tmp)
+            fd, temp = tempfile.mkstemp(prefix="xst_live_picon_", suffix=".png", dir=dir_tmp)
             try:
                 os.close(fd)
             except:
@@ -836,14 +843,8 @@ class EStalker_StreamPlayer(
         if self["picon"].instance:
             self["picon"].instance.setPixmapFromFile(os.path.join(common_path, "picon.png"))
 
-    def resizeImage(self, original, data=None):
-        if screenwidth.width() == 2560:
-            size = [294, 176]
-        elif screenwidth.width() > 1280:
-            size = [220, 130]
-        else:
-            size = [147, 88]
-
+    def resizeImage(self, original, req_id=None, data=None):
+        size = self.picon_size
         if os.path.exists(original):
             im = None
             try:
@@ -851,10 +852,14 @@ class EStalker_StreamPlayer(
                 if im.mode != "RGBA":
                     im = im.convert("RGBA")
 
+                if im.size[0] == 0 or im.size[1] == 0:
+                    raise ValueError("Image has zero dimension")
+                ratio = min(size[0] / float(im.size[0]), size[1] / float(im.size[1]))
+                new_size = (int(im.size[0] * ratio), int(im.size[1] * ratio))
                 try:
-                    im.thumbnail(size, Image.Resampling.LANCZOS)
+                    im = im.resize(new_size, Image.Resampling.LANCZOS)
                 except:
-                    im.thumbnail(size, Image.ANTIALIAS)
+                    im = im.resize(new_size, Image.ANTIALIAS)
 
                 bg = Image.new("RGBA", size, (255, 255, 255, 0))
                 left = (size[0] - im.size[0]) // 2
@@ -959,11 +964,10 @@ class EStalker_StreamPlayer(
                 glob.currentchannellistindex = 0
                 glob.nextlist[-1]["index"] = glob.currentchannellistindex
 
-            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
-
-            if not command:
+            if glob.currentchannellist[glob.currentchannellistindex] is None:
                 self.load_page_data()
-                command = str(glob.currentchannellist[glob.currentchannellistindex][7])
+
+            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
 
             if isinstance(command, str):
                 if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
@@ -1007,11 +1011,10 @@ class EStalker_StreamPlayer(
                 glob.currentchannellistindex = list_length - 1
                 glob.nextlist[-1]["index"] = glob.currentchannellistindex
 
-            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
-
-            if not command:
+            if glob.currentchannellist[glob.currentchannellistindex] is None:
                 self.load_page_data()
-                command = str(glob.currentchannellist[glob.currentchannellistindex][7])
+
+            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
 
             if isinstance(command, str):
                 if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
@@ -1145,87 +1148,115 @@ class EStalker_StreamPlayer(
     def processdata(self, response):
         if debugs:
             print("*** processdata ***")
+
+        if not response:
+            return
+
+        # On first call, size the global lists to total_items
+        if not glob.currentchannellist or len(glob.currentchannellist) != self.total_items:
+            glob.currentchannellist = [None] * self.total_items
+            glob.currentepglist = [None] * self.total_items
+            glob.originalChannelList2 = [None] * self.total_items
+
+        start_index = (self.current_page - 1) * self.itemsperpage
+
         self.list2 = []
 
-        if response:
-            for index, channel in enumerate(response):
-                if not isinstance(channel, dict) or not channel:
-                    self.list2.append([index, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", False, False, False, None, None])
-                    continue
+        for index, channel in enumerate(response):
+            global_index = start_index + index
 
-                stream_id = str(channel.get("id", ""))
+            if not isinstance(channel, dict) or not channel:
+                continue
 
-                if not stream_id or stream_id == "0" or stream_id == "*":
-                    continue
+            stream_id = str(channel.get("id", ""))
+            if not stream_id or stream_id == "0" or stream_id == "*":
+                continue
 
-                name = str(channel.get("name", ""))
+            name = str(channel.get("name", ""))
+            if not name or name == "None":
+                continue
 
-                if not name or name == "None":
-                    continue
+            if name and '\" ' in name:
+                parts = name.split('\" ', 1)
+                if len(parts) > 1:
+                    name = parts[0]
 
-                if name and '\" ' in name:
-                    parts = name.split('\" ', 1)
-                    if len(parts) > 1:
-                        name = parts[0]
+            number = str(channel.get("number", ""))
+            cmd = str(channel.get("cmd", ""))
+            hidden = False
+            stream_icon = str(channel.get("logo", ""))
 
-                number = str(channel.get("number", ""))
-                cmd = str(channel.get("cmd", ""))
-                hidden = False
-                stream_icon = str(channel.get("logo", ""))
+            if stream_icon and stream_icon.startswith("http"):
+                if stream_icon.startswith("https://vignette.wikia.nocookie.net/tvfanon6528"):
+                    if "scale-to-width-down" not in stream_icon:
+                        stream_icon = str(stream_icon) + "/revision/latest/scale-to-width-down/220"
+            else:
+                stream_icon = ""
 
-                if stream_icon and stream_icon.startswith("http"):
-                    if stream_icon.startswith("https://vignette.wikia.nocookie.net/tvfanon6528"):
-                        if "scale-to-width-down" not in stream_icon:
-                            stream_icon = str(stream_icon) + "/revision/latest/scale-to-width-down/220"
-                else:
-                    stream_icon = ""
+            epg_channel_id = str(channel.get("id", ""))
+            category_id = str(channel.get("tv_genre_id", ""))
+            service_ref = ""
+            next_url = ""
+            favourite = False
 
-                epg_channel_id = str(channel.get("id", ""))
-                category_id = str(channel.get("tv_genre_id", ""))
-                service_ref = ""
-                next_url = ""
-                favourite = False
+            if "livefavourites" in glob.active_playlist["player_info"]:
+                for fav in glob.active_playlist["player_info"]["livefavourites"]:
 
-                if "livefavourites" in glob.active_playlist["player_info"]:
-                    for fav in glob.active_playlist["player_info"]["livefavourites"]:
+                    if str(stream_id) == str(fav["id"]):
+                        favourite = True
+                        break
+            else:
+                glob.active_playlist["player_info"]["livefavourites"] = []
 
-                        if str(stream_id) == str(fav["id"]):
-                            favourite = True
-                            break
-                else:
-                    glob.active_playlist["player_info"]["livefavourites"] = []
+            self.list2.append([
+                index,
+                str(name),
+                str(stream_id),
+                str(stream_icon),
+                str(epg_channel_id),
+                str(number),
+                str(category_id),
+                str(cmd),
+                str(service_ref),
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                str(next_url),
+                favourite,
+                False,
+                hidden,
+                None,
+                None
+            ])
 
-                self.list2.append([
-                    index,
-                    str(name),
-                    str(stream_id),
-                    str(stream_icon),
-                    str(epg_channel_id),
-                    str(number),
-                    str(category_id),
-                    str(cmd),
-                    str(service_ref),
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    str(next_url),
-                    favourite,
-                    False,
-                    hidden,
-                    None,
-                    None
-                ])
+            self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
+            glob.currentchannellist = self.main_list[:]
 
-        self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
-        glob.currentchannellist = self.main_list[:]
+            self.updateDisplay()
+            list2_entry = [
+                global_index, name, stream_id, stream_icon, epg_channel_id,
+                number, category_id, cmd, service_ref,
+                "", "", "", "", "", "", next_url,
+                favourite, False, hidden, None, None
+            ]
 
-        self.updateDisplay()
+            self.list2.append(list2_entry)
 
-        self.epglist = [buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20]) for x in self.list2 if x[18] is False]
-        glob.currentepglist = self.epglist[:]
+            main_entry = buildLiveStreamList(
+                global_index, name, stream_id, stream_icon, number,
+                cmd, next_url, favourite, False, hidden, category_id
+            )
+            epg_entry = buildEPGListEntry(
+                global_index, name, "", "", "", "", "", "", hidden, None, None
+            )
+
+            # Merge into the global lists at the correct position
+            glob.currentchannellist[global_index] = main_entry
+            glob.currentepglist[global_index] = epg_entry
+            glob.originalChannelList2[global_index] = list2_entry
 
     def updateDisplay(self):
         visible_channels = self.getVisibleChannels()
@@ -1279,88 +1310,104 @@ class EStalker_StreamPlayer(
         self.updateEPGListWithShortEPG()
 
     def updateEPGListWithShortEPG(self):
+
         def extract_main_description(descr):
             if not descr:
                 return ""
-
             descr = descr.replace("\r\n", "\n")
             match = re.search(r"Description:\s*(.+)", descr, re.DOTALL)
             if not match:
                 return descr.strip()
-
             description = match.group(1)
-
             stop_labels = ["Credits:", "Director:", "Producer:", "Actor:", "Category:"]
             for label in stop_labels:
                 index = description.find(label)
                 if index != -1:
                     description = description[:index]
                     break
-
             return description.strip()
 
+        # NEW: convert portal local time string → local timestamp
+        def parse_epg_time(timestr):
+            if not timestr:
+                return 0
+            try:
+                dt = datetime.strptime(timestr, "%Y-%m-%d %H:%M:%S")
+                return int(time.mktime(dt.timetuple()))
+            except Exception:
+                return 0
+
         now = int(time.time())
-        epgoffset_sec = 0
 
-        if self.list2:
-            for channel in self.list2:
-                epg_channel_id = channel[4]
+        for channel in self.list2:
+            epg_channel_id = str(channel[4])
 
-                if epg_channel_id in self.short_epg_results:
-                    events = self.short_epg_results[epg_channel_id]
+            if epg_channel_id not in self.short_epg_results:
+                continue
 
-                    for index, entry in enumerate(events):
-                        time_str = entry.get("time", "")
-                        time_to_str = entry.get("time_to", "")
+            events = self.short_epg_results[epg_channel_id]
 
-                        if time_str and time_to_str:
-                            try:
-                                dt_start = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
-                                dt_stop = datetime.strptime(time_to_str, "%Y-%m-%d %H:%M:%S")
+            for index, entry in enumerate(events):
 
-                                start = int(time.mktime(dt_start.timetuple())) + epgoffset_sec
-                                stop = int(time.mktime(dt_stop.timetuple())) + epgoffset_sec
-                            except Exception:
-                                start = 0
-                                stop = 0
+                # CHANGED: use parsed local times instead of UTC timestamps
+                start = parse_epg_time(entry.get("time"))
+                stop = parse_epg_time(entry.get("time_to"))
+
+                if not start or not stop:
+                    continue
+
+                if start < now and stop > now:
+                    channel[9] = str(entry.get("t_time") or time.strftime("%H:%M", time.localtime(start)))
+                    channel[10] = str(entry.get("name", "") or "")
+                    channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
+                    channel[19] = start
+
+                    next_entry = events[index + 1] if (index + 1) < len(events) else None
+                    if next_entry:
+                        next_start = parse_epg_time(next_entry.get("time"))
+
+                        channel[12] = str(next_entry.get("t_time") or (time.strftime("%H:%M", time.localtime(next_start)) if next_start else ""))
+                        channel[13] = str(next_entry.get("name", "") or "")
+                        channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
+                        channel[20] = next_start
+                    else:
+                        channel[12] = ""
+                        channel[13] = ""
+                        channel[14] = ""
+                        channel[20] = 0
+                    break
+
+                else:
+                    if start > now:
+                        next_entry = events[index] if index < len(events) else None
+                        if next_entry:
+                            next_start = parse_epg_time(next_entry.get("time"))
+
+                            channel[12] = str(next_entry.get("t_time") or (time.strftime("%H:%M", time.localtime(next_start)) if next_start else ""))
+                            channel[13] = str(next_entry.get("name", "") or "")
+                            channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
+                            channel[20] = next_start
                         else:
-                            start = 0
-                            stop = 0
+                            channel[12] = ""
+                            channel[13] = ""
+                            channel[14] = ""
+                            channel[20] = 0
+                        break
 
-                        next_entry = events[index + 1] if (index + 1) < len(events) else None
+        self.epglist = [
+            buildEPGListEntry(
+                x[0], x[1], x[9], x[10], x[11],
+                x[12], x[13], x[14], x[18], x[19], x[20]
+            )
+            for x in self.list2 if x[18] is False
+        ]
 
-                        if start < now and stop > now:
-                            channel[9] = str(time.strftime("%H:%M", time.localtime(start)))
-                            channel[10] = str(entry.get("name", "") or "")
-                            channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
-                            channel[19] = start
+        self["epg_list"].updateList(self.epglist)
 
-                            if next_entry:
-                                next_start_str = next_entry.get("time", "")
-                                try:
-                                    dt_next_start = datetime.strptime(next_start_str, "%Y-%m-%d %H:%M:%S")
-                                    next_start = int(time.mktime(dt_next_start.timetuple())) + epgoffset_sec
-                                except Exception:
-                                    next_start = 0
+        instance = self["epg_list"].master.master.instance
+        instance.setSelectionEnable(0)
 
-                                channel[12] = str(time.strftime("%H:%M", time.localtime(next_start)) if next_start else "")
-                                channel[13] = str(next_entry.get("name", "") or "")
-                                channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
-                                channel[20] = next_start
-                            else:
-                                channel[12] = ""
-                                channel[13] = ""
-                                channel[14] = ""
-                                channel[20] = 0
-
-                            break
-
-            self.epglist = [
-                buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20])
-                for x in self.list2 if x[18] is False
-            ]
-
-            glob.currentepglist = self.epglist[:]
+        self.refreshEPGInfo()
 
 
 def buildEPGListEntry(index, title, epgNowTime, epgNowTitle, epgNowDesc, epgNextTime, epgNextTitle, epgNextDesc, hidden, epgNowUnixTime, epgNextUnixTime):
