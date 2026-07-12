@@ -72,11 +72,11 @@ class EStalker_EPG_Short:
 
         if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                b"Cookie": [("mac={}; stb_lang=en; timezone={}; adid={}".format(mac, timezone, adid)).encode()]
+                b"Cookie": [("mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, adid)).encode()]
             }
         else:
             host_headers = {
-                b"Cookie": [("mac={}; stb_lang=en; timezone={}".format(mac, timezone)).encode()]
+                b"Cookie": [("mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)).encode()]
             }
 
         base_headers.update(host_headers)

@@ -6,13 +6,6 @@ import os
 import json
 import hashlib
 
-try:
-    from http.client import HTTPConnection
-    HTTPConnection.debuglevel = 0
-except:
-    from httplib import HTTPConnection
-    HTTPConnection.debuglevel = 0
-
 # Enigma2 components
 from Components.ActionMap import ActionMap
 from Components.Pixmap import Pixmap
@@ -26,7 +19,7 @@ from Tools.LoadPixmap import LoadPixmap
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import skin_directory, common_path, version, hasConcurrent, hasMultiprocessing, cfg, debugs, pythonVer, dir_tmp
+from .plugin import skin_directory, common_path, version, cfg, debugs, pythonVer, dir_tmp
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data
 
@@ -55,13 +48,19 @@ def normalize_superscripts(text):
 def clean_names(response):
     found_superscript = False
 
+    if not isinstance(response, dict):
+        glob.hassuperscript = False
+        return response
+
     if "js" in response and isinstance(response["js"], list):
         for item in response["js"]:
             if "title" in item and isinstance(item["title"], str):
                 original = item["title"]
                 converted = normalize_superscripts(original)
+
                 if converted != original:
                     found_superscript = True
+
                 item["title"] = converted
 
     glob.hassuperscript = found_superscript
@@ -159,50 +158,79 @@ class EStalker_Menu(Screen):
         if debugs:
             print("*** download_url ***", url)
 
-        self.timezone = get_local_timezone()
-        self.token = glob.active_playlist["playlist_info"]["token"]
-        self.token_random = glob.active_playlist["playlist_info"]["token_random"]
-        self.domain = str(glob.active_playlist["playlist_info"].get("domain", ""))
-        self.port = glob.active_playlist["playlist_info"].get("port", "")
-        self.host = str(glob.active_playlist["playlist_info"].get("host", "")).rstrip("/")
-        self.mac = glob.active_playlist["playlist_info"].get("mac", "").upper()
-        self.portal = glob.active_playlist["playlist_info"].get("portal", None)
-        self.portal_version = glob.active_playlist["playlist_info"].get("version", "5.3.1")
-        self.path_prefix = glob.active_playlist["playlist_info"].get("path_prefix", "")
+        timezone = get_local_timezone()
+        token = glob.active_playlist["playlist_info"]["token"]
+        token_random = glob.active_playlist["playlist_info"]["token_random"]
+        domain = str(glob.active_playlist["playlist_info"].get("domain", ""))
+        port = glob.active_playlist["playlist_info"].get("port", "")
+        host = str(glob.active_playlist["playlist_info"].get("host", "")).rstrip("/")
+        mac = glob.active_playlist["playlist_info"].get("mac", "").upper()
+        portal = glob.active_playlist["playlist_info"].get("portal", None)
+        portal_version = glob.active_playlist["playlist_info"].get("version", "5.3.1")
+        path_prefix = glob.active_playlist["playlist_info"].get("path_prefix", "")
 
-        self.referer = self.host + self.path_prefix + "index.html"
+        referer = host + path_prefix + "index.html"
 
-        self.sn = hashlib.md5(self.mac.encode()).hexdigest().upper()[:13]
-        self.adid = hashlib.md5((self.sn + self.mac).encode()).hexdigest()
+        sn = hashlib.md5(mac.encode()).hexdigest().upper()[:13]
+        adid = hashlib.md5((sn + mac).encode()).hexdigest()
 
-        encoded_mac = quote(self.mac, safe='')
-        encoded_timezone = quote(self.timezone, safe='')
+        encoded_mac = quote(mac, safe="")
+        encoded_timezone = quote(timezone, safe="")
 
-        self.headers = {
+        headers = {
             "Pragma": "no-cache",
             "Accept-Language": "en-US,en;q=0.5",
             "Accept-Encoding": "gzip, deflate",
-            "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+            "Host": "{}:{}".format(
+                domain,
+                port
+            ) if port else domain,
+            "User-Agent": (
+                "Mozilla/5.0 (QtEmbedded; U; Linux; C) "
+                "AppleWebKit/533.3 (KHTML, like Gecko) "
+                "MAG200 stbapp ver: 2 rev: 250 Safari/533.3"
+            ),
             "X-User-Agent": "Model: MAG250; Link: WiFi",
             "Connection": "Close",
-            "Referer": self.referer,
+            "Referer": referer,
         }
 
-        if self.portal and "/stalker_portal/" in self.portal:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(self.mac, self.timezone, self.adid)
-            }
+        if portal and "/stalker_portal/" in portal:
+            headers["Cookie"] = (
+                "mac={}; stb_lang=en; timezone={}; adid={}"
+            ).format(
+                encoded_mac,
+                encoded_timezone,
+                adid
+            )
         else:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}".format(self.mac, self.timezone)
-            }
-        self.headers.update(host_headers)
+            headers["Cookie"] = (
+                "mac={}; stb_lang=en; timezone={}"
+            ).format(
+                encoded_mac,
+                encoded_timezone
+            )
 
-        self.headers["Authorization"] = "Bearer " + self.token
+        headers["Authorization"] = "Bearer " + token
+
+        self.timezone = timezone
+        self.token = token
+        self.token_random = token_random
+        self.domain = domain
+        self.port = port
+        self.host = host
+        self.mac = mac
+        self.portal = portal
+        self.portal_version = portal_version
+        self.path_prefix = path_prefix
+        self.referer = referer
+        self.sn = sn
+        self.adid = adid
+        self.headers = headers.copy()
 
         category = url[1]
-        response = make_request(url[0], method="GET", headers=self.headers, params=None, response_type="json")
+
+        response = make_request(url[0], method="GET", headers=headers, params=None, response_type="json")
 
         if pythonVer == 3:
             response = clean_names(response)
@@ -216,76 +244,114 @@ class EStalker_Menu(Screen):
         max_retries = 1
         retries = 0
         success = False
+        pending_urls = list(self.url_list)
 
-        while retries <= max_retries and not success:
+        glob.active_playlist["data"]["live_categories"] = {}
+        glob.active_playlist["data"]["vod_categories"] = {}
+        glob.active_playlist["data"]["series_categories"] = {}
+
+        for url in self.url_list:
+            if url[1] == 3:
+                glob.active_playlist["data"]["live_streams"] = {}
+                break
+
+        while pending_urls and retries <= max_retries:
             if retries > 0:
                 if debugs:
                     print("Retry attempt:", retries)
 
                 self.reauthorize()
 
-            glob.active_playlist["data"]["live_categories"] = {}
-            glob.active_playlist["data"]["vod_categories"] = {}
-            glob.active_playlist["data"]["series_categories"] = {}
-            if 3 in self.url_list:
-                glob.active_playlist["data"]["live_streams"] = {}
-
             results = []
-            threads = len(self.url_list)
 
-            if hasConcurrent or hasMultiprocessing:
-                if hasConcurrent:
-                    try:
-                        from concurrent.futures import ThreadPoolExecutor
-                        with ThreadPoolExecutor(max_workers=threads) as executor:
-                            results = list(executor.map(self.download_url, self.url_list))
-                    except Exception as e:
-                        print("Concurrent execution error:", e)
-
-                elif hasMultiprocessing:
-                    try:
-                        from multiprocessing.pool import ThreadPool
-                        pool = ThreadPool(threads)
-                        results = pool.imap(self.download_url, self.url_list)
-                        pool.close()
-                        pool.join()
-                    except Exception as e:
-                        print("Multiprocessing execution error:", e)
-
-                # If results is an iterator, convert to list
-                if not isinstance(results, list):
-                    results = list(results)
-
-            else:
-                for url in self.url_list:
+            for url in pending_urls:
+                try:
                     result = self.download_url(url)
                     results.append(result)
 
-            for category, response in results:
-                if response:
-                    if category == 0:
-                        glob.active_playlist["data"]["live_categories"] = response
-                    elif category == 1:
-                        glob.active_playlist["data"]["vod_categories"] = response
-                    elif category == 2:
-                        glob.active_playlist["data"]["series_categories"] = response
-                    elif category == 3:
-                        glob.active_playlist["data"]["live_streams"] = response
-                    success = True
+                except Exception as e:
+                    category = url[1]
 
-            if not success:
-                retries += 1
+                    print(
+                        "Category download error:",
+                        category,
+                        type(e).__name__,
+                        str(e)
+                    )
+
+                    results.append((category, None))
+
+            responses = {}
+
+            for category, response in results:
+                responses[category] = response
+
+                if not response:
+                    continue
+
+                success = True
+
+                if category == 0:
+                    glob.active_playlist["data"][
+                        "live_categories"
+                    ] = response
+
+                elif category == 1:
+                    glob.active_playlist["data"][
+                        "vod_categories"
+                    ] = response
+
+                elif category == 2:
+                    glob.active_playlist["data"][
+                        "series_categories"
+                    ] = response
+
+                elif category == 3:
+                    glob.active_playlist["data"][
+                        "live_streams"
+                    ] = response
+
+            failed_urls = []
+
+            for url in pending_urls:
+                category = url[1]
+                response = responses.get(category)
+
+                if not response:
+                    failed_urls.append(url)
+
+                    if debugs:
+                        print("Failed category:", category)
+
+            pending_urls = failed_urls
+            retries += 1
 
         self["splash"].hide()
 
         if success:
             glob.active_playlist["data"]["data_downloaded"] = True
             self.createSetup()
+
+            if pending_urls and debugs:
+                print(
+                    "Some URLs failed after retry:",
+                    pending_urls
+                )
+
         else:
             glob.active_playlist["data"]["data_downloaded"] = False
-            self.session.openWithCallback(self.close, MessageBox, (_("Access Denied.")), MessageBox.TYPE_WARNING, timeout=5)
+            self.session.openWithCallback(
+                self.close,
+                MessageBox,
+                _("Access Denied."),
+                MessageBox.TYPE_WARNING,
+                timeout=5
+            )
+
             if debugs:
-                print("Failed to download all URLs after retries.")
+                print(
+                    "Failed to download all URLs after retries."
+                )
 
     def writeJsonFile(self):
         if debugs:

@@ -9,13 +9,6 @@ import os
 import re
 import time
 
-try:
-    from http.client import HTTPConnection
-    HTTPConnection.debuglevel = 0
-except ImportError:
-    from httplib import HTTPConnection
-    HTTPConnection.debuglevel = 0
-
 from datetime import datetime
 
 try:
@@ -874,40 +867,102 @@ class EStalker_Playlists(Screen):
 
     def autoDeleteInvalid(self, answer=None):
         if answer is None:
-            self.session.openWithCallback(self.autoDeleteInvalid, MessageBox, _("Delete ALL invalid playlists?\n(Those marked as Not Active/Blocked/Expired)"), MessageBox.TYPE_YESNO)
+            self.session.openWithCallback(
+                self.autoDeleteInvalid,
+                MessageBox,
+                _(
+                    "Delete ALL invalid playlists?\n"
+                    "(Those marked as Not Active/Blocked/Expired)"
+                ),
+                MessageBox.TYPE_YESNO
+            )
             return
 
         if not answer:
             return
 
         with open(playlist_file, "r") as f:
-            lines = [line.strip() for line in f]
+            lines = f.readlines()
 
         macs_to_keep = {
-            playlist["playlist_info"]["mac"].lower()
+            playlist["playlist_info"]["mac"].strip().lower()
             for playlist in self.playlists_all
             if playlist["playlist_info"].get("valid", False)
         }
+
+        mac_regex = re.compile(
+            r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+        )
 
         new_lines = []
         current_url = None
 
         for line in lines:
-            if line.startswith(("http://", "https://")):
-                current_url = line
+            stripped = line.strip()
+
+            if stripped.startswith(("http://", "https://")):
+                current_url = stripped
                 new_lines.append(line)
-            elif line and current_url:
-                if line.lower() in macs_to_keep:
-                    new_lines.append(line)
-                else:
-                    new_lines.append("#" + line)
+                continue
+
+            if not stripped or current_url is None:
+                new_lines.append(line)
+                continue
+
+            was_commented = stripped.startswith("#")
+            content = stripped.lstrip("#").strip()
+
+            if "#" in content:
+                mac_part, comment_part = content.split("#", 1)
+                mac_part = mac_part.strip()
+                comment_part = comment_part.strip()
             else:
+                mac_part = content.strip()
+                comment_part = ""
+
+            if not mac_regex.match(mac_part):
                 new_lines.append(line)
+                continue
+
+            if mac_part.lower() in macs_to_keep:
+                prefix = "# " if was_commented else ""
+
+                if comment_part:
+                    new_lines.append(
+                        "{}{} #{}\n".format(
+                            prefix,
+                            mac_part.upper(),
+                            comment_part
+                        )
+                    )
+                else:
+                    new_lines.append(
+                        "{}{}\n".format(
+                            prefix,
+                            mac_part.upper()
+                        )
+                    )
+            else:
+                if comment_part:
+                    new_lines.append(
+                        "# {} #{}\n".format(
+                            mac_part.upper(),
+                            comment_part
+                        )
+                    )
+                else:
+                    new_lines.append(
+                        "# {}\n".format(mac_part.upper())
+                    )
 
         with open(playlist_file, "w") as f:
-            f.write("\n".join(new_lines) + "\n")
+            f.writelines(new_lines)
 
-        self.playlists_all = [p for p in self.playlists_all if p["playlist_info"].get("valid", False)]
+        self.playlists_all = [
+            playlist
+            for playlist in self.playlists_all
+            if playlist["playlist_info"].get("valid", False)
+        ]
 
         for index, playlist in enumerate(self.playlists_all):
             playlist["playlist_info"]["index"] = index
@@ -915,7 +970,12 @@ class EStalker_Playlists(Screen):
         self.writeJsonFile()
         self.createSetup()
 
-        self.session.open(MessageBox, _("Removed all invalid playlists"), MessageBox.TYPE_INFO, timeout=3)
+        self.session.open(
+            MessageBox,
+            _("Removed all invalid playlists"),
+            MessageBox.TYPE_INFO,
+            timeout=3
+        )
 
     def checkXtream(self):
         self.session.open(EStalker_UserInfo)
@@ -999,7 +1059,7 @@ class EStalker_UserInfo(Screen):
             "X-User-Agent": "Model: MAG250; Link: WiFi",
             "Connection": "Close",
             "Referer": referer,
-            "Cookie": "mac={}; stb_lang=en; timezone={}".format(mac, timezone),
+            "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone),
         }
 
     def _fetch_xtream_creds(self, portal, headers, content_type, domain):

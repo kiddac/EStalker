@@ -19,15 +19,28 @@ try:
 except ImportError:
     from urllib.parse import urlparse
     from urllib.parse import unquote, quote
-try:
-    from http.client import HTTPConnection
-    HTTPConnection.debuglevel = 0
-except ImportError:
-    from httplib import HTTPConnection
-    HTTPConnection.debuglevel = 0
 
 # Third-party imports
 from twisted.web.client import downloadPage
+
+# https twisted client hack #
+try:
+    from twisted.internet import ssl
+    from twisted.internet._sslverify import ClientTLSOptions
+    sslverify = True
+except:
+    sslverify = False
+
+if sslverify:
+    class SNIFactory(ssl.ClientContextFactory):
+        def __init__(self, hostname=None):
+            self.hostname = hostname
+
+        def getContext(self):
+            ctx = self._contextFactory(self.method)
+            if self.hostname:
+                ClientTLSOptions(self.hostname, ctx)
+            return ctx
 
 # Enigma2 components
 from Components.ActionMap import ActionMap
@@ -35,10 +48,10 @@ from Components.Label import Label
 from Components.Pixmap import MultiPixmap, Pixmap
 from Components.ServiceEventTracker import ServiceEventTracker, InfoBarBase
 from enigma import eTimer, eServiceReference, iPlayableService, ePicLoad
-from Tools import Notifications
 from Screens.InfoBarGenerics import InfoBarSeek, InfoBarAudioSelection, InfoBarSummarySupport, InfoBarMoviePlayerSummarySupport, InfoBarSubtitleSupport, InfoBarNotifications
 from Screens.MessageBox import MessageBox
 from Screens.Screen import Screen
+from Tools import Notifications
 from Tools.BoundFunction import boundFunction
 
 try:
@@ -49,7 +62,7 @@ except ImportError as e:
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import cfg, dir_tmp, pythonVer, screenwidth, skin_directory
+from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data,  _get_current_aspect_ratio
 
@@ -78,26 +91,6 @@ else:
         def __init__(self, *args, **kwargs):
             pass
 
-# https twisted client hack #
-try:
-    from twisted.internet import ssl
-    from twisted.internet._sslverify import ClientTLSOptions
-    sslverify = True
-except:
-    sslverify = False
-
-if sslverify:
-    class SNIFactory(ssl.ClientContextFactory):
-        def __init__(self, hostname=None):
-            self.hostname = hostname
-
-        def getContext(self):
-            ctx = self._contextFactory(self.method)
-            if self.hostname:
-                ClientTLSOptions(self.hostname, ctx)
-            return ctx
-
-
 VIDEO_ASPECT_RATIO_MAP = {
     0: "4:3 Letterbox",
     1: "4:3 PanScan",
@@ -124,7 +117,6 @@ if os.path.exists("/usr/bin/apt-get"):
     streamtypelist.append("8193")
     vodstreamtypelist.append("8193")
 
-
 playlists_json = cfg.playlists_json.value
 
 
@@ -149,7 +141,7 @@ class IPTVInfoBarShowHide():
             self.hideTimer_conn = self.hideTimer.timeout.connect(self.doTimerHide)
         except:
             self.hideTimer.callback.append(self.doTimerHide)
-        self.hideTimer.start(3000, True)
+        self.hideTimer.start(4000, True)
 
         self.onShow.append(self.__onShow)
         self.onHide.append(self.__onHide)
@@ -171,7 +163,7 @@ class IPTVInfoBarShowHide():
     def startHideTimer(self):
         if self.__state == self.STATE_SHOWN and not self.__locked:
             self.hideTimer.stop()
-            self.hideTimer.start(3000, True)
+            self.hideTimer.start(4000, True)
 
         elif hasattr(self, "pvrStateDialog"):
             self.hideTimer.stop()
@@ -481,11 +473,11 @@ class EStalker_VodPlayer(
 
         if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(self.mac, self.timezone, self.adid)
+                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
             }
         else:
             host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}".format(self.mac, self.timezone)
+                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
             }
 
         self.headers.update(host_headers)
@@ -561,6 +553,8 @@ class EStalker_VodPlayer(
             "green": self.nextAR,
             "ok": self.refreshInfobar,
         }, -2)
+
+        self._vod_req_id = 0
 
         self.timerWatched = eTimer()
         try:
@@ -791,7 +785,7 @@ class EStalker_VodPlayer(
     def loadDefaultImage(self, data=None):
         if self["cover"].instance:
             self["cover"].instance.setPixmapFromFile(
-                os.path.join(skin_directory, "common/cover.png")
+                os.path.join(common_path, "cover.png")
             )
 
     def downloadImage(self):
@@ -810,7 +804,12 @@ class EStalker_VodPlayer(
         except:
             desc_image = ""
 
-        if not desc_image or desc_image.lower() == "n/a":
+        if not desc_image or str(desc_image).lower() == "n/a":
+            self.loadDefaultImage()
+            return
+
+        if not desc_image.startswith(("http://", "https://")):
+            self.loadDefaultImage()
             return
 
         fd = None

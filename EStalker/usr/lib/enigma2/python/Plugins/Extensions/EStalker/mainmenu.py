@@ -105,7 +105,6 @@ class EStalker_MainMenu(Screen):
         except Exception as e:
             print("Error checking location validity:", e)
 
-        dependencies = True
         dependencies = self.check_python_dependencies()
 
         if not dependencies:
@@ -171,15 +170,23 @@ class EStalker_MainMenu(Screen):
         self.playOriginalChannel()
 
     def playOriginalChannel(self):
-        if glob.currentPlayingServiceRefString != glob.newPlayingServiceRefString:
-            if glob.newPlayingServiceRefString and glob.currentPlayingServiceRefString:
-                self.session.nav.playService(eServiceReference(glob.currentPlayingServiceRefString))
+        if glob.currentPlayingServiceRefString:
+            if glob.currentPlayingServiceRefString != glob.newPlayingServiceRefString:
+                try:
+                    self.session.nav.playService(eServiceReference(glob.currentPlayingServiceRefString))
+                except:
+                    pass
+            try:
+                if glob.original_aspect_ratio is not None:
+                    eAVSwitch.getInstance().setAspectRatio(glob.original_aspect_ratio)
+            except Exception:
+                pass
 
-        try:
-            if glob.original_aspect_ratio is not None:
-                eAVSwitch.getInstance().setAspectRatio(glob.original_aspect_ratio)
-        except Exception:
-            pass
+        else:
+            try:
+                self.session.nav.stopService()
+            except:
+                pass
 
         self.close()
 

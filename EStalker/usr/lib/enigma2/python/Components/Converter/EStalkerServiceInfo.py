@@ -29,7 +29,7 @@ class EStalkerServiceInfo(Poll, Converter):
     def __init__(self, type):
         Poll.__init__(self)
         Converter.__init__(self, type)
-        self.poll_interval = 1000
+        self.poll_interval = 500
         self.poll_enabled = True
         self.type, self.interesting_events = {
 
@@ -151,22 +151,40 @@ class EStalkerServiceInfo(Poll, Converter):
 
         if self.type in (self.IS_MULTICHANNEL, self.AUDIO_STEREO):
             audio = service.audioTracks()
+
             if audio:
                 n = audio.getNumberOfTracks()
                 idx = 0
+
                 while idx < n:
                     i = audio.getTrackInfo(idx)
                     description = i.getDescription()
-                    if description and description.split()[0] in ("AC3", "AC-3", "AC3+", "DTS"):
+
+                    try:
+                        description = str(description)
+                    except:
+                        description = ""
+
+                    try:
+                        codec = description.split()[0]
+                    except:
+                        codec = ""
+
+                    if codec in ("AC3", "AC-3", "AC3+", "DTS"):
                         if self.type == self.IS_MULTICHANNEL:
                             return True
+
                         elif self.type == self.AUDIO_STEREO:
                             return False
+
                     idx += 1
+
                 if self.type == self.IS_MULTICHANNEL:
                     return False
+
                 elif self.type == self.AUDIO_STEREO:
                     return True
+
             return False
 
         elif self.type == self.IS_WIDESCREEN:
@@ -209,7 +227,6 @@ class EStalkerServiceInfo(Poll, Converter):
 
     @cached
     def getText(self):
-
         service = self.source.service
         info = service and service.info()
         if not info:
@@ -243,7 +260,6 @@ class EStalkerServiceInfo(Poll, Converter):
             if not video_height:
                 try:
                     video_height = int(self.getServiceInfoString(info, iServiceInformation.sVideoHeight))
-
                 except:
                     return ""
             return "%d" % video_height

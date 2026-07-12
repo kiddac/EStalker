@@ -91,7 +91,7 @@ def make_request(url, method="GET", headers=None, params=None, response_type=Non
                 post_headers = headers.copy() if headers else {}
                 if "Content-Type" not in post_headers:
                     post_headers["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8"
-                r = http.post(url, headers=post_headers, data=body, timeout=(5, 8), verify=False, allow_redirects=True)
+                r = http.post(url, headers=post_headers, data=body, timeout=10, verify=False, allow_redirects=True)
             else:
                 if params:
                     parsed_url = urlparse(url)
@@ -100,7 +100,7 @@ def make_request(url, method="GET", headers=None, params=None, response_type=Non
                     merged_params.update(params)
                     query_string = urlencode(merged_params)
                     url = urlunparse(parsed_url._replace(query=query_string))
-                r = http.get(url, headers=headers, timeout=(5, 8), verify=False, allow_redirects=True)
+                r = http.get(url, headers=headers, timeout=10, verify=False, allow_redirects=True)
 
             r.raise_for_status()
 

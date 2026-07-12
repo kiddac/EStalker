@@ -15,14 +15,6 @@ from itertools import cycle, islice
 
 import hashlib
 
-
-try:
-    from http.client import HTTPConnection
-    HTTPConnection.debuglevel = 0
-except ImportError:
-    from httplib import HTTPConnection
-    HTTPConnection.debuglevel = 0
-
 try:
     from urllib.parse import urlparse, parse_qs, urlunparse
 except:
@@ -920,7 +912,7 @@ class EStalker_Live_Categories(Screen):
         except:
             desc_image = ""
 
-        if not desc_image or desc_image.lower() == "n/a":
+        if not desc_image or str(desc_image).lower() == "n/a":
             self.loadDefaultImage()
             return
 
@@ -1570,14 +1562,14 @@ class EStalker_Live_Categories(Screen):
                             self.main_list = [
                                 buildLiveStreamList(
                                     x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18],
-                                    x[6],  self._px_play, self._px_fav, self._px_watching
+                                    x[6], self._px_play, self._px_fav, self._px_watching
                                 )
                                 for x in self.list2 if x[16] is True]
                         else:
                             self.main_list = [
                                 buildLiveStreamList(
                                     x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18],
-                                    x[6],  self._px_play, self._px_fav, self._px_watching
+                                    x[6], self._px_play, self._px_fav, self._px_watching
                                 )
                                 for x in self.list2 if x[18] is False]
 
@@ -1708,6 +1700,8 @@ class EStalker_Live_Categories(Screen):
         if debugs:
             print("*** back ***")
 
+        self._stopTimerImage()
+
         self.showfav = False
         self.chosen_category = ""
 
@@ -1722,11 +1716,11 @@ class EStalker_Live_Categories(Screen):
             self.stopStream()
             self.close()
         else:
+            self.level -= 1
             self["x_title"].setText("")
             self["x_description"].setText("")
             if cfg.stopstream.value:
                 self.stopStream()
-            self.level -= 1
 
             self["category_actions"].setEnabled(True)
             self["channel_actions"].setEnabled(False)

@@ -5,13 +5,6 @@
 import os
 import json
 
-try:
-    from http.client import HTTPConnection
-    HTTPConnection.debuglevel = 0
-except ImportError:
-    from httplib import HTTPConnection
-    HTTPConnection.debuglevel = 0
-
 
 # Enigma2 components
 from Components.ActionMap import ActionMap

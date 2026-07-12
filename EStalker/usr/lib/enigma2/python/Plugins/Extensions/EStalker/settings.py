@@ -102,7 +102,6 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
                 x[1].cancel()
 
             self.close()
-        return
 
     def save(self):
         pin_value = str(cfg.adultpin.value).strip().zfill(4)
@@ -236,7 +235,6 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
                     self["VKeyIcon"].hide()
 
     def changedEntry(self):
-        self.item = self["config"].getCurrent()
         for x in self.onChangedEntry:
             x()
 
@@ -257,8 +255,6 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
         if sel:
             if sel == cfg.location:
                 self.openDirectoryBrowser(cfg.location.value, "location")
-        else:
-            pass
 
     def openDirectoryBrowser(self, path, cfgitem):
         if cfgitem != "location":

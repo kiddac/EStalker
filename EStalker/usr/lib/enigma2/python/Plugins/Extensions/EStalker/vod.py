@@ -20,13 +20,6 @@ import hashlib
 import unicodedata
 
 try:
-    from http.client import HTTPConnection
-    HTTPConnection.debuglevel = 0
-except ImportError:
-    from httplib import HTTPConnection
-    HTTPConnection.debuglevel = 0
-
-try:
     from urllib import quote, quote_plus
 except ImportError:
     from urllib.parse import quote, quote_plus
@@ -225,11 +218,11 @@ class EStalker_Vod_Categories(Screen):
 
         if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(self.mac, self.timezone, self.adid)
+                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
             }
         else:
             host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}".format(self.mac, self.timezone)
+                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
             }
 
         self.headers.update(host_headers)

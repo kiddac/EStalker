@@ -9,10 +9,10 @@ import json
 import os
 import re
 import time
+import tempfile
 from datetime import datetime
 from itertools import cycle, islice
 import hashlib
-import tempfile
 
 try:
     from urlparse import urlparse, parse_qs, urlunparse
@@ -21,13 +21,6 @@ except ImportError:
     from urllib.parse import urlparse, parse_qs, urlunparse
     from urllib.parse import unquote, quote
 
-
-try:
-    from http.client import HTTPConnection
-    HTTPConnection.debuglevel = 0
-except ImportError:
-    from httplib import HTTPConnection
-    HTTPConnection.debuglevel = 0
 
 # Third-party imports
 from PIL import Image
@@ -153,7 +146,7 @@ class IPTVInfoBarShowHide():
             self.hideTimer_conn = self.hideTimer.timeout.connect(self.doTimerHide)
         except:
             self.hideTimer.callback.append(self.doTimerHide)
-        self.hideTimer.start(3000, True)
+        self.hideTimer.start(4000, True)
 
         self.onShow.append(self.__onShow)
         self.onHide.append(self.__onHide)
@@ -175,7 +168,7 @@ class IPTVInfoBarShowHide():
     def startHideTimer(self):
         if self.__state == self.STATE_SHOWN and not self.__locked:
             self.hideTimer.stop()
-            self.hideTimer.start(3000, True)
+            self.hideTimer.start(4000, True)
 
         elif hasattr(self, "pvrStateDialog"):
             self.hideTimer.stop()
@@ -376,14 +369,14 @@ class EStalker_StreamPlayer(
         self["speed"] = Label()
         self["statusicon"] = MultiPixmap()
 
+        self.setup_title = _("TV")
+
         if screenwidth.width() == 2560:
             self.picon_size = (294, 176)
         elif screenwidth.width() > 1280:
             self.picon_size = (220, 130)
         else:
             self.picon_size = (147, 88)
-
-        self.setup_title = _("TV")
 
         self.retry = False
 
@@ -419,11 +412,11 @@ class EStalker_StreamPlayer(
 
         if self.portal and "/stalker_portal/" in self.portal:
             host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(self.mac, self.timezone, self.adid)
+                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
             }
         else:
             host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}".format(self.mac, self.timezone)
+                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
             }
 
         self.headers.update(host_headers)
@@ -444,6 +437,8 @@ class EStalker_StreamPlayer(
             "0": self.restartStream,
             "ok": self.OKButton,
         }, -2)
+
+        self._picon_req_id = 0
 
         self.timerImage = eTimer()
         try:
@@ -764,9 +759,13 @@ class EStalker_StreamPlayer(
         except:
             desc_image = ""
 
-        if not desc_image or desc_image.lower() == "n/a":
+        if not desc_image or str(desc_image).lower() == "n/a":
+            self.loadDefaultImage()
             return
 
+        if not desc_image.startswith(("http://", "https://")):
+            self.loadDefaultImage()
+            return
         fd = None
         temp = None
 
@@ -801,10 +800,9 @@ class EStalker_StreamPlayer(
                     _cleanup_temp()
                     return
 
-                self.resizeImage(temp)
+                self.resizeImage(temp, req_id=req_id)
 
             def _err(_failure=None):
-                # Ignore stale callbacks
                 if getattr(self, "_picon_req_id", 0) != req_id:
                     _cleanup_temp()
                     return
@@ -821,7 +819,7 @@ class EStalker_StreamPlayer(
             d.addCallback(_ok)
             d.addErrback(_err)
 
-        except:
+        except Exception:
             try:
                 if fd:
                     os.close(fd)

@@ -75,7 +75,6 @@ class EStalker_Settings(ConfigListScreen, Screen):
         elif answer:
             for x in self["config"].list:
                 x[1].cancel()
-
             self.close()
 
     def initConfig(self):
@@ -170,7 +169,6 @@ class EStalker_Settings(ConfigListScreen, Screen):
                     self["VKeyIcon"].hide()
 
     def changedEntry(self):
-        self.item = self["config"].getCurrent()
         for x in self.onChangedEntry:
             x()
 
