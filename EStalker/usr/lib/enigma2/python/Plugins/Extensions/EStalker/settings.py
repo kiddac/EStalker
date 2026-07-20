@@ -4,7 +4,7 @@
 import os
 
 from . import _
-from .plugin import cfg, skin_directory
+from .plugin import cfg, skin_directory, isDreambox
 from .eStaticText import StaticText
 
 from Components.ActionMap import ActionMap
@@ -56,7 +56,7 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
 
         skin_path = os.path.join(skin_directory, cfg.skin.value)
         skin = os.path.join(skin_path, "settings.xml")
-        if os.path.exists("/var/lib/dpkg/status"):
+        if isDreambox:
             skin = os.path.join(skin_path, "DreamOS/settings.xml")
 
         with open(skin, "r") as f:

@@ -8,9 +8,7 @@ from __future__ import division
 import json
 import hashlib
 import os
-import re
 import tempfile
-import unicodedata
 from itertools import cycle, islice
 
 try:
@@ -19,6 +17,12 @@ try:
 except ImportError:
     from urllib.parse import urlparse
     from urllib.parse import unquote, quote
+try:
+    from http.client import HTTPConnection
+    HTTPConnection.debuglevel = 0
+except ImportError:
+    from httplib import HTTPConnection
+    HTTPConnection.debuglevel = 0
 
 # Third-party imports
 from twisted.web.client import downloadPage
@@ -64,7 +68,7 @@ from . import _
 from . import estalker_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory
 from .eStaticText import StaticText
-from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data,  _get_current_aspect_ratio
+from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data,  _get_current_aspect_ratio, clearCaches
 
 try:
     from enigma import eAVSwitch
@@ -101,20 +105,16 @@ VIDEO_ASPECT_RATIO_MAP = {
     6: "16:9 Letterbox"
 }
 
-streamtypelist = ["1", "4097"]
 vodstreamtypelist = ["4097"]
 
 if os.path.exists("/usr/bin/gstplayer"):
-    streamtypelist.append("5001")
     vodstreamtypelist.append("5001")
 
 
 if os.path.exists("/usr/bin/exteplayer3"):
-    streamtypelist.append("5002")
     vodstreamtypelist.append("5002")
 
 if os.path.exists("/usr/bin/apt-get"):
-    streamtypelist.append("8193")
     vodstreamtypelist.append("8193")
 
 playlists_json = cfg.playlists_json.value
@@ -379,6 +379,9 @@ class EStalker_VodPlayer(
 
     def __init__(self, session, streamurl, servicetype, stream_id=None):
         Screen.__init__(self, session)
+
+        clearCaches()
+
         self.session = session
 
         for x in (
@@ -484,62 +487,6 @@ class EStalker_VodPlayer(
 
         self.headers["Authorization"] = "Bearer " + self.token
 
-        # Precompiled regex (stripjunk)
-        self._re_has_ascii = re.compile(r'[\x00-\x7F]')
-        self._re_has_non_ascii = re.compile(r'[^\x00-\x7F]')
-
-        self._re_remove_non_ascii = re.compile(r'[^\x00-\x7F]+')
-
-        self._re_end_the = re.compile(r'\s*the$', re.IGNORECASE)
-        self._re_prefix_xx_colon = re.compile(r'^\w{2}:', re.IGNORECASE)
-        self._re_prefix_xx_pipe_xx = re.compile(r'^\w{2}\|\w{2}\s', re.IGNORECASE)
-
-        self._re_leading_doublepipes = re.compile(r'^\|\|.*?\|\|')
-        self._re_leading_singlepipe_block = re.compile(r'^\|.*?\|')
-        self._re_any_pipe_block = re.compile(r'\|.*?\|')
-
-        self._re_leading_doublebars = re.compile(r'^┃┃.*?┃┃')
-        self._re_leading_singlebar_block = re.compile(r'^┃.*?┃')
-        self._re_any_bar_block = re.compile(r'┃.*?┃')
-
-        self._re_parens = re.compile(r'\(\(.*?\)\)|\([^()]*\)')
-        self._re_brackets = re.compile(r'\[\[.*?\]\]|\[.*?\]')
-
-        self._re_is_year_only = re.compile(r'^\d{4}$')
-        self._re_trailing_year = re.compile(r'[\s\-]*(?:[\(\[\"]?\d{4}[\)\]\"]?)$')
-
-        self._re_lang_dash_prefix = re.compile(r'^[A-Za-z0-9\-]{1,7}\s*-\s*', re.IGNORECASE)
-
-        # Bad substrings
-        bad_strings = [
-            "ae|", "al|", "ar|", "at|", "ba|", "be|", "bg|", "br|", "cg|", "ch|", "cz|", "da|", "de|", "dk|",
-            "ee|", "en|", "es|", "eu|", "ex-yu|", "fi|", "fr|", "gr|", "hr|", "hu|", "in|", "ir|", "it|", "lt|",
-            "mk|", "mx|", "nl|", "no|", "pl|", "pt|", "ro|", "rs|", "ru|", "se|", "si|", "sk|", "sp|", "tr|",
-            "uk|", "us|", "yu|",
-            "1080p", "1080p-dual-lat-cine-calidad.com", "1080p-dual-lat-cine-calidad.com-1",
-            "1080p-dual-lat-cinecalidad.mx", "1080p-lat-cine-calidad.com", "1080p-lat-cine-calidad.com-1",
-            "1080p-lat-cinecalidad.mx", "1080p.dual.lat.cine-calidad.com", "3d", "'", "#", "(", ")", "-", "[]", "/",
-            "4k", "720p", "aac", "blueray", "ex-yu:", "fhd", "hd", "hdrip", "hindi", "imdb", "multi:", "multi-audio",
-            "multi-sub", "multi-subs", "multisub", "ozlem", "sd", "top250", "u-", "uhd", "vod", "x264",
-            "amz", "dolby", "audio", "8k", "3840p", "50fps", "60fps", "hevc", "raw ", "vip ", "NF", "d+", "a+", "vp", "prmt", "mrvl"
-        ]
-        self._re_bad_strings = re.compile('|'.join(map(re.escape, bad_strings)), re.IGNORECASE)
-
-        # Bad suffixes
-        bad_suffix = [
-            " al", " ar", " ba", " da", " de", " en", " es", " eu", " ex-yu", " fi", " fr", " gr", " hr", " mk",
-            " nl", " no", " pl", " pt", " ro", " rs", " ru", " si", " swe", " sw", " tr", " uk", " yu"
-        ]
-        self._re_bad_suffix = re.compile(r'(' + '|'.join(map(re.escape, bad_suffix)) + r')$', re.IGNORECASE)
-
-        self._re_dots_underscores = re.compile(r"[._'\*]")
-
-        self.adult_keywords = set([
-            "adult", "+18", "18+", "18 rated", "xxx", "sex", "porn",
-            "voksen", "volwassen", "aikuinen", "Erwachsene", "dorosly",
-            "взрослый", "vuxen", "£дорослий"
-        ])
-
         self["actions"] = ActionMap(["EStalkerActions"], {
             "cancel": self.back,
             "stop": self.back,
@@ -554,7 +501,7 @@ class EStalker_VodPlayer(
             "ok": self.refreshInfobar,
         }, -2)
 
-        self._vod_req_id = 0
+        self._cover_req_id = 0
 
         self.timerWatched = eTimer()
         try:
@@ -642,85 +589,11 @@ class EStalker_VodPlayer(
         with open(playlists_json, "w") as f:
             json.dump(self.playlists_all, f, indent=4)
 
-    def normalize_text(self, text):
-
-        has_ascii = bool(self._re_has_ascii.search(text))
-        has_non_ascii = bool(self._re_has_non_ascii.search(text))
-
-        if has_ascii and has_non_ascii:
-
-            if pythonVer == 2:
-                if isinstance(text, str):
-                    text = text.decode("utf-8", "ignore")
-
-                text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore")
-
-            else:
-                text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
-
-        return text
-
-    def stripjunk(self, text, database=None):
-        searchtitle = text
-
-        # Move "the" from the end to the beginning (case-insensitive)
-        if self._re_end_the.search(searchtitle.strip().lower()):
-            searchtitle = "The " + searchtitle[:-3].strip()
-
-        # remove xx: at start (case-insensitive)
-        searchtitle = self._re_prefix_xx_colon.sub('', searchtitle)
-
-        # remove xx|xx at start (case-insensitive)
-        searchtitle = self._re_prefix_xx_pipe_xx.sub('', searchtitle)
-
-        # remove all leading content between and including || or |
-        searchtitle = self._re_leading_doublepipes.sub('', searchtitle)
-        searchtitle = self._re_leading_singlepipe_block.sub('', searchtitle)
-        searchtitle = self._re_any_pipe_block.sub('', searchtitle)
-
-        # remove all leading content between and including ┃┃ or ┃
-        searchtitle = self._re_leading_doublebars.sub('', searchtitle)
-        searchtitle = self._re_leading_singlebar_block.sub('', searchtitle)
-        searchtitle = self._re_any_bar_block.sub('', searchtitle)
-
-        # remove all content between and including () unless it's all digits
-        searchtitle = self._re_parens.sub('', searchtitle)
-
-        # remove all content between and including []
-        searchtitle = self._re_brackets.sub('', searchtitle)
-
-        # remove trailing year (but not if the whole title *is* a year)
-        if not self._re_is_year_only.match(searchtitle.strip()):
-            searchtitle = self._re_trailing_year.sub('', searchtitle)
-
-        # remove up to 6 characters followed by space and dash at start (e.g. "EN -", "BE-NL -")
-        searchtitle = self._re_lang_dash_prefix.sub('', searchtitle)
-
-        # normalise text
-        searchtitle = self.normalize_text(searchtitle)
-
-        # Bad substrings to strip (case-insensitive)
-        searchtitle = self._re_bad_strings.sub('', searchtitle)
-
-        # Bad suffixes to remove (case-insensitive, only if at end)
-        searchtitle = self._re_bad_suffix.sub('', searchtitle)
-
-        # Replace '.', '_', "'", '*' with space
-        searchtitle = self._re_dots_underscores.sub(' ', searchtitle)
-
-        # Trim leading/trailing hyphens and whitespace
-        searchtitle = searchtitle.strip(' -').strip()
-
-        return str(searchtitle)
-
     def playStream(self, servicetype, streamurl):
         self._stopTimer("timerWatched")
 
         if not streamurl:
             return
-
-        if cfg.infobarcovers.value is True:
-            self.downloadImage()
 
         self["streamcat"].setText("VOD" if glob.categoryname == "vod" else "Series")
         self["streamtype"].setText(str(servicetype))
@@ -739,18 +612,10 @@ class EStalker_VodPlayer(
         self.reference = eServiceReference(int(self.servicetype), 0, streamurl)
         self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
-        if self.session.nav.getCurrentlyPlayingServiceReference():
-            if self.session.nav.getCurrentlyPlayingServiceReference().toString() != self.reference.toString():
+        self.session.nav.playService(self.reference)
 
-                try:
-                    self.session.nav.stopService()
-                except:
-                    pass
-
-                self.session.nav.playService(self.reference)
-
-        else:
-            self.session.nav.playService(self.reference)
+        if cfg.infobarcovers.value is True:
+            self.downloadImage()
 
         if self.session.nav.getCurrentlyPlayingServiceReference():
             glob.newPlayingServiceRef = self.session.nav.getCurrentlyPlayingServiceReference()
@@ -881,7 +746,7 @@ class EStalker_VodPlayer(
 
             self.loadDefaultImage()
 
-    def resizeImage(self, preview, req_id=None, data=None):
+    def resizeImage(self, preview, req_id=None):
         if not self["cover"].instance:
             return
 
@@ -973,13 +838,20 @@ class EStalker_VodPlayer(
         self.close()
 
     def toggleStreamType(self):
+        try:
+            setResumePoint(self.session)
+        except Exception as e:
+            print(e)
+
         currentindex = 0
 
         for index, item in enumerate(vodstreamtypelist, start=0):
             if str(item) == str(self.servicetype):
                 currentindex = index
                 break
+
         nextStreamType = islice(cycle(vodstreamtypelist), currentindex + 1, None)
+
         try:
             self.servicetype = int(next(nextStreamType))
         except:

@@ -100,7 +100,7 @@ def make_request(url, method="GET", headers=None, params=None, response_type=Non
                     merged_params.update(params)
                     query_string = urlencode(merged_params)
                     url = urlunparse(parsed_url._replace(query=query_string))
-                r = http.get(url, headers=headers, timeout=10, verify=False, allow_redirects=True)
+                r = http.get(url, headers=headers, timeout=(5, 10), verify=False, allow_redirects=True)
 
             r.raise_for_status()
 
@@ -507,3 +507,13 @@ def _get_current_aspect_ratio():
             print("*** avSwitch failed ***", e)
 
     return current_ar
+
+
+def clearCaches():
+    try:
+        os.system("sync")
+
+        with open("/proc/sys/vm/drop_caches", "w") as drop_caches:
+            drop_caches.write("3\n")
+    except (IOError, OSError):
+        pass

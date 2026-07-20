@@ -1,9 +1,18 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+try:
+    from http.client import HTTPConnection
+    HTTPConnection.debuglevel = 0
+except:
+    from httplib import HTTPConnection
+    HTTPConnection.debuglevel = 0
+
 from twisted.internet import reactor
 from twisted.web.client import Agent, readBody
 from twisted.web.http_headers import Headers
+from twisted.internet.protocol import Factory
+
 import json
 import sys
 import gzip
@@ -24,6 +33,9 @@ try:
     from urllib import quote
 except ImportError:
     from urllib.parse import quote
+
+
+Factory.noisy = False
 
 
 class EStalker_EPG_Short:
@@ -102,8 +114,16 @@ class EStalker_EPG_Short:
 
     def process_body(self, body, ch_id, response):
         try:
-            encoding_headers = response.headers.getRawHeaders(b"Content-Encoding", [b""])
-            encoding = encoding_headers[0].decode('utf-8').lower() if isinstance(encoding_headers[0], bytes) else encoding_headers[0].lower()
+            encoding_headers = response.headers.getRawHeaders(
+                b"Content-Encoding",
+                [b""]
+            )
+            encoding = encoding_headers[0]
+
+            if isinstance(encoding, bytes):
+                encoding = encoding.decode("utf-8")
+
+            encoding = encoding.lower()
 
             if encoding == "gzip":
                 with gzip.GzipFile(fileobj=io.BytesIO(body)) as f:
@@ -111,23 +131,23 @@ class EStalker_EPG_Short:
             else:
                 data = body
 
-            if not data:
-                return
+            if sys.version_info[0] == 3 and isinstance(data, bytes):
+                data = data.decode("utf-8", "ignore")
 
-            if sys.version_info[0] == 3:
-                data = data.decode('utf-8')
+            data = data.strip()
 
-            json_data = json.loads(data)
-            epg_events = json_data.get("js", [])
+            if data[:1] in ("{", "["):
+                json_data = json.loads(data)
+                epg_events = json_data.get("js", [])
 
-            if epg_events:
-                self.epg_data.extend(epg_events)
+                if epg_events:
+                    self.epg_data.extend(epg_events)
 
-                if self.partial_callback:
-                    self.partial_callback({"js": self.epg_data})
+                    if self.partial_callback:
+                        self.partial_callback({"js": self.epg_data})
 
-        except Exception as e:
-            print(e)
+        except Exception:
+            pass
 
         self.responses_received += 1
         self.check_complete()

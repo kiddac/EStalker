@@ -5,6 +5,13 @@
 import os
 import json
 
+try:
+    from http.client import HTTPConnection
+    HTTPConnection.debuglevel = 0
+except ImportError:
+    from httplib import HTTPConnection
+    HTTPConnection.debuglevel = 0
+
 
 # Enigma2 components
 from Components.ActionMap import ActionMap
@@ -16,9 +23,8 @@ from Screens.Screen import Screen
 
 # Local application/library-specific imports
 from . import _
-from .plugin import skin_directory, cfg, debugs
+from .plugin import skin_directory, cfg, debugs, isDreambox
 from .eStaticText import StaticText
-from . import processfiles as loadfiles
 
 playlist_file = cfg.playlist_file.value
 playlists_json = cfg.playlists_json.value
@@ -35,7 +41,7 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         skin_path = os.path.join(skin_directory, cfg.skin.value)
         skin = os.path.join(skin_path, "settings.xml")
 
-        if os.path.exists("/var/lib/dpkg/status"):
+        if isDreambox:
             skin = os.path.join(skin_path, "DreamOS/settings.xml")
 
         with open(skin, "r") as f:

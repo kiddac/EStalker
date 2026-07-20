@@ -16,11 +16,8 @@ from Screens.Screen import Screen
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import skin_directory, cfg
+from .plugin import skin_directory, cfg, isDreambox
 from .eStaticText import StaticText
-
-playlist_file = cfg.playlist_file.value
-playlists_json = cfg.playlists_json.value
 
 
 class EStalker_Settings(ConfigListScreen, Screen):
@@ -33,11 +30,13 @@ class EStalker_Settings(ConfigListScreen, Screen):
         skin_path = os.path.join(skin_directory, cfg.skin.value)
         skin = os.path.join(skin_path, "settings.xml")
 
-        if os.path.exists("/var/lib/dpkg/status"):
+        if isDreambox:
             skin = os.path.join(skin_path, "DreamOS/settings.xml")
 
         with open(skin, "r") as f:
             self.skin = f.read()
+
+        self.playlists_json = cfg.playlists_json.value
 
         self.setup_title = _("Playlist Settings")
 
@@ -93,7 +92,6 @@ class EStalker_Settings(ConfigListScreen, Screen):
             live_streamtype_choices.append(("8193", "DreamOS GStreamer(8193)"))
             vod_streamtype_choices.append(("8193", "DreamOS GStreamer(8193)"))
 
-        # playlist_info = glob.active_playlist.get("playlist_info", {})
         player_info = glob.active_playlist.get("player_info", {})
 
         self.liveType = str(player_info.get("livetype", ""))
@@ -216,13 +214,13 @@ class EStalker_Settings(ConfigListScreen, Screen):
 
     def getPlaylistJson(self):
         playlists_all = []
-        if os.path.exists(playlists_json) and os.stat(playlists_json).st_size > 0:
+        if os.path.exists(self.playlists_json) and os.stat(self.playlists_json).st_size > 0:
             try:
-                with open(playlists_json) as f:
+                with open(self.playlists_json) as f:
                     playlists_all = json.load(f)
             except Exception as e:
                 print("Error loading playlists:", e)
-                os.remove(playlists_json)
+                os.remove(self.playlists_json)
         return playlists_all
 
     def getPlaylistUserFile(self):
@@ -235,6 +233,6 @@ class EStalker_Settings(ConfigListScreen, Screen):
         self.writeJsonFile()
 
     def writeJsonFile(self):
-        with open(playlists_json, "w") as f:
+        with open(self.playlists_json, "w") as f:
             json.dump(self.playlists_all, f, indent=4)
         self.close()

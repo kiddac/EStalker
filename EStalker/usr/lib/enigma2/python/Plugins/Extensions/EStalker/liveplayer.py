@@ -22,6 +22,13 @@ except ImportError:
     from urllib.parse import unquote, quote
 
 
+try:
+    from http.client import HTTPConnection
+    HTTPConnection.debuglevel = 0
+except ImportError:
+    from httplib import HTTPConnection
+    HTTPConnection.debuglevel = 0
+
 # Third-party imports
 from PIL import Image
 from twisted.web.client import downloadPage
@@ -63,14 +70,12 @@ from . import _
 from . import estalker_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory, debugs
 from .eStaticText import StaticText
-from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data, _get_current_aspect_ratio
+from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data, _get_current_aspect_ratio, clearCaches
 
 try:
     from enigma import eAVSwitch
 except Exception:
     from enigma import eAVControl as eAVSwitch
-
-playlists_json = cfg.playlists_json.value
 
 
 if pythonVer == 3:
@@ -109,20 +114,15 @@ VIDEO_ASPECT_RATIO_MAP = {
 }
 
 streamtypelist = ["1", "4097"]
-vodstreamtypelist = ["4097"]
 
 if os.path.exists("/usr/bin/gstplayer"):
     streamtypelist.append("5001")
-    vodstreamtypelist.append("5001")
-
 
 if os.path.exists("/usr/bin/exteplayer3"):
     streamtypelist.append("5002")
-    vodstreamtypelist.append("5002")
 
 if os.path.exists("/usr/bin/apt-get"):
     streamtypelist.append("8193")
-    vodstreamtypelist.append("8193")
 
 
 class IPTVInfoBarShowHide():
@@ -312,7 +312,7 @@ class EStalker_StreamPlayer(
 
     ALLOW_SUSPEND = True
 
-    def __init__(self, session, streamurl, servicetype, stream_id=None):
+    def __init__(self, session, streamurl, servicetype):
         Screen.__init__(self, session)
         self.session = session
 
@@ -338,6 +338,7 @@ class EStalker_StreamPlayer(
         except Exception:
             self.ar_id_player = -1
 
+        self.playlists_json = cfg.playlists_json.value
         self.streamurl = streamurl
         self.servicetype = servicetype
         self.originalservicetype = self.servicetype
@@ -589,9 +590,9 @@ class EStalker_StreamPlayer(
             recent_entries.pop()
 
         self.playlists_all = []
-        if os.path.exists(playlists_json):
+        if os.path.exists(self.playlists_json):
             try:
-                with open(playlists_json, "r") as f:
+                with open(self.playlists_json, "r") as f:
                     self.playlists_all = json.load(f)
             except:
                 self.playlists_all = []
@@ -722,7 +723,7 @@ class EStalker_StreamPlayer(
         self._cleanupTimer("timerWatchdog")
 
         glob.nextlist[-1]["index"] = glob.currentchannellistindex
-
+        clearCaches()
         self.close()
 
     def toggleStreamType(self):
@@ -841,7 +842,7 @@ class EStalker_StreamPlayer(
         if self["picon"].instance:
             self["picon"].instance.setPixmapFromFile(os.path.join(common_path, "picon.png"))
 
-    def resizeImage(self, original, req_id=None, data=None):
+    def resizeImage(self, original, req_id=None):
         size = self.picon_size
         if os.path.exists(original):
             im = None

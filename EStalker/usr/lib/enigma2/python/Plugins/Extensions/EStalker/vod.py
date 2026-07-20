@@ -20,6 +20,13 @@ import hashlib
 import unicodedata
 
 try:
+    from http.client import HTTPConnection
+    HTTPConnection.debuglevel = 0
+except ImportError:
+    from httplib import HTTPConnection
+    HTTPConnection.debuglevel = 0
+
+try:
     from urllib import quote, quote_plus
 except ImportError:
     from urllib.parse import quote, quote_plus
@@ -37,6 +44,7 @@ from PIL import Image
 from twisted.internet import reactor
 from twisted.web.client import Agent, downloadPage, readBody
 from twisted.web.http_headers import Headers
+from twisted.internet.protocol import Factory
 
 try:
     from twisted.web.client import BrowserLikePolicyForHTTPS
@@ -77,6 +85,9 @@ try:
     TMDB_installed = True
 except ImportError:
     pass
+
+
+Factory.noisy = False
 
 
 if pythonVer == 3:

@@ -6,12 +6,18 @@ import os
 import json
 import hashlib
 
+try:
+    from http.client import HTTPConnection
+    HTTPConnection.debuglevel = 0
+except:
+    from httplib import HTTPConnection
+    HTTPConnection.debuglevel = 0
+
 # Enigma2 components
 from Components.ActionMap import ActionMap
 from Components.Pixmap import Pixmap
 from Components.Sources.List import List
 from enigma import eTimer
-# from requests.adapters import HTTPAdapter, Retry
 from Screens.MessageBox import MessageBox
 from Screens.Screen import Screen
 from Tools.LoadPixmap import LoadPixmap
@@ -27,9 +33,6 @@ try:
     from urllib import quote
 except ImportError:
     from urllib.parse import quote
-
-
-playlists_json = cfg.playlists_json.value
 
 
 if pythonVer == 3:
@@ -76,6 +79,7 @@ class EStalker_Menu(Screen):
 
         skin_path = os.path.join(skin_directory, cfg.skin.value)
         skin = os.path.join(skin_path, "menu.xml")
+
         with open(skin, "r") as f:
             self.skin = f.read()
 
@@ -83,6 +87,7 @@ class EStalker_Menu(Screen):
         self.drawList = []
         self["list"] = List(self.drawList, enableWrapAround=True)
 
+        self.playlists_json = cfg.playlists_json.value
         self.setup_title = _("Playlist Menu")
 
         self["key_red"] = StaticText(_("Back"))
@@ -357,12 +362,12 @@ class EStalker_Menu(Screen):
         if debugs:
             print("*** writeJsonFile ***")
 
-        with open(playlists_json, "r") as f:
+        with open(self.playlists_json, "r") as f:
             playlists_all = json.load(f)
 
         playlists_all[glob.current_selection] = glob.active_playlist
 
-        with open(playlists_json, "w") as f:
+        with open(self.playlists_json, "w") as f:
             json.dump(playlists_all, f, indent=4)
 
     def createSetup(self):
@@ -385,7 +390,6 @@ class EStalker_Menu(Screen):
         show_live = glob.active_playlist["player_info"].get("showlive", False)
         show_vod = glob.active_playlist["player_info"].get("showvod", False)
         show_series = glob.active_playlist["player_info"].get("showseries", False)
-        # show_catchup = glob.active_playlist["player_info"].get("showcatchup", False)
 
         glob.active_playlist["data"]["live_streams"] = {}
 
@@ -406,9 +410,10 @@ class EStalker_Menu(Screen):
         self.writeJsonFile()
 
         if not self.list:
-            self.session.openWithCallback(self.close, MessageBox, (_("No data, blocked or playlist not compatible with EStalker plugin.")), MessageBox.TYPE_WARNING, timeout=5)
+            self.session.openWithCallback(self.quit, MessageBox, (_("No data, blocked or playlist not compatible with EStalker plugin.")), MessageBox.TYPE_WARNING, timeout=5)
 
     def quit(self):
+        self["splash"].hide()
         self.close()
 
     def __next__(self):
@@ -427,9 +432,6 @@ class EStalker_Menu(Screen):
             elif category == 2:
                 from . import series
                 self.session.openWithCallback(lambda: self.start, series.EStalker_Series_Categories)
-            # elif category == 3:
-            #     from . import catchup
-            #     self.session.openWithCallback(lambda: self.start, catchup.EStalker_Catchup_Categories)
             elif category == 4:
                 self.settings()
 
@@ -492,7 +494,6 @@ def buildListEntry(index, title, category_id, playlisturl):
         0: "live.png",
         1: "vod.png",
         2: "series.png",
-        # 3: "catchup.png",
         4: "settings.png",
         5: "epg_download.png"
     }

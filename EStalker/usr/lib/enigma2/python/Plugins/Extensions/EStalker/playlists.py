@@ -9,12 +9,25 @@ import os
 import re
 import time
 
+try:
+    from http.client import HTTPConnection
+    HTTPConnection.debuglevel = 0
+except ImportError:
+    from httplib import HTTPConnection
+    HTTPConnection.debuglevel = 0
+
 from datetime import datetime
 
 try:
     from urllib.parse import urlparse
 except ImportError:
     from urlparse import urlparse
+
+try:
+    from urllib import quote
+except ImportError:
+    from urllib.parse import quote
+
 
 # Third-party imports
 import requests
@@ -33,29 +46,15 @@ from Components.Label import Label
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import skin_directory, cfg, common_path, version, hasConcurrent, hasMultiprocessing, debugs
+from .plugin import skin_directory, cfg, common_path, version, hasConcurrent, hasMultiprocessing
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, xtream_request, perform_handshake, get_profile_data
 from . import processfiles as loadfiles
 
 try:
-    from urllib import quote
-except ImportError:
-    from urllib.parse import quote
-
-
-playlist_file = cfg.playlist_file.value
-playlists_json = cfg.playlists_json.value
-
-try:
     basestring
 except NameError:
     basestring = str
-
-
-# ########################################################################################
-# Module-level helper functions
-# ########################################################################################
 
 
 def parse_date_safe(date_str):
@@ -126,11 +125,6 @@ def extract_portal_path_from_stream(resp, url):
     return None
 
 
-# ########################################################################################
-# EStalker_Playlists Screen
-# ########################################################################################
-
-
 class EStalker_Playlists(Screen):
     ALLOW_SUSPEND = True
 
@@ -143,6 +137,10 @@ class EStalker_Playlists(Screen):
         with open(skin, "r") as f:
             self.skin = f.read()
 
+        self.playlist_file = cfg.playlist_file.value
+        self.playlists_json = cfg.playlists_json.value
+        self.playlists_all = []
+
         self.setup_title = _("Manage Playlists")
 
         self["key_red"] = StaticText(_("Back"))
@@ -153,7 +151,6 @@ class EStalker_Playlists(Screen):
 
         self.list = []
         self.drawList = []
-        self.playlists_all = []
 
         self["playlists"] = List(self.drawList, enableWrapAround=True)
         self["playlists"].onSelectionChanged.append(self.getCurrentEntry)
@@ -184,35 +181,23 @@ class EStalker_Playlists(Screen):
         self.setTitle(self.setup_title)
 
     def start(self, answer=None):
-        """
-        if debugs:
-            print("*** start ***")
-            print("")
-            """
-
         loadfiles.process_files()
 
         # check if playlists.json file exists in specified location
-        if os.path.isfile(playlists_json):
-            with open(playlists_json, "r") as f:
+        if os.path.isfile(self.playlists_json):
+            with open(self.playlists_json, "r") as f:
                 try:
                     self.playlists_all = json.load(f)
                     self.playlists_all.sort(key=lambda e: e["playlist_info"]["index"], reverse=False)
                 except Exception:
-                    os.remove(playlists_json)
+                    os.remove(self.playlists_json)
 
-        if self.playlists_all and os.path.isfile(playlist_file) and os.path.getsize(playlist_file) > 0:
+        if self.playlists_all and os.path.isfile(self.playlist_file) and os.path.getsize(self.playlist_file) > 0:
             self.delayedDownload()
         else:
             self.close()
 
     def delayedDownload(self):
-        """
-        if debugs:
-            print("*** delayedDownload ***")
-            print("")
-            """
-
         self.timer = eTimer()
         try:
             self.timer_conn = self.timer.timeout.connect(self.makeUrlList)
@@ -224,12 +209,6 @@ class EStalker_Playlists(Screen):
         self.timer.start(10, True)
 
     def makeUrlList(self):
-        """
-        if debugs:
-            print("*** makeUrlList ***")
-            print("")
-            """
-
         self.url_list = []
 
         for index, playlist in enumerate(self.playlists_all):
@@ -241,25 +220,9 @@ class EStalker_Playlists(Screen):
                 self.url_list.append((index, mac, host, domain, self.timezone))
 
         if self.url_list:
-            """
-            if debugs:
-                print("*** self.url_list ***", self.url_list)
-                """
             self.process_downloads()
 
-    # ########################################################################################
-    # Download helpers - broken out from download_url
-    # ########################################################################################
-
     def _build_headers(self, domain, port, mac, timezone, referer):
-        """Build standard MAG headers."""
-
-        """
-        if debugs:
-            print("*** _build_headers ***")
-            print("")
-            """
-
         encoded_mac = quote(mac, safe='')
         encoded_timezone = quote(timezone, safe='')
         return {
@@ -275,12 +238,6 @@ class EStalker_Playlists(Screen):
         }
 
     def _get_path_prefix(self, http, host, headers, path_prefix):
-        """Stage 1: Determine the correct portal path prefix."""
-        """
-        if debugs:
-            print("*** _get_path_prefix ***")
-            """
-
         if path_prefix == "/stalker_portal/c/":
             primary_url = host + "/stalker_portal/c/"
             primary_prefix = "/stalker_portal/c/"
@@ -344,39 +301,17 @@ class EStalker_Playlists(Screen):
         return host + "/portal.php"
 
     def _get_portal_version(self, http, host, headers, path_prefix):
-        """Stage 3: Get portal version from version.js."""
-
-        """
-        if debugs:
-            print("*** _get_portal_version ***")
-            print("")
-            """
-
         version_url = host + path_prefix + "version.js"
-        # new_referer = host + path_prefix + "index.html"
-        # headers["Referer"] = new_referer
 
         vresponse = make_request(version_url, method="GET", headers=headers, params=None, response_type="text")
         if vresponse:
             match = re.search(r"ver\s*=\s*['\"]([^'\"]+)['\"]", vresponse)
             if match:
                 portal_version = match.group(1).strip()
-                """
-                if debugs:
-                    print("*** portal_version ***", portal_version)
-                    """
                 return portal_version
         return path_prefix
 
     def _do_handshake(self, portal, host, mac, headers):
-        """Stage 4: Perform handshake and return updated portal, token, token_random, headers."""
-
-        """
-        if debugs:
-            print("*** _do_handshake ***")
-            print("")
-            """
-
         return perform_handshake(portal, host, mac, headers)
 
     def _get_profile(self, portal, mac, token, token_random, headers, param_mode):
@@ -391,9 +326,6 @@ class EStalker_Playlists(Screen):
         }
         account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json")
 
-        if debugs:
-            print("*** account_info ***", account_info)
-
         if account_info and isinstance(account_info, dict):
             js_data = account_info.get("js") or {}
             expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
@@ -402,7 +334,6 @@ class EStalker_Playlists(Screen):
         return None, False
 
     def _format_expiry(self, expiry):
-        """Normalise expiry string."""
         if expiry == "Unlimited":
             return _("Unlimited")
 
@@ -412,14 +343,6 @@ class EStalker_Playlists(Screen):
         return expiry or ""
 
     def download_url(self, url_info):
-        """Orchestrate all stages to retrieve playlist info for a single entry."""
-
-        """
-        if debugs:
-            print("*** download_url ***")
-            print("")
-            """
-
         index = url_info[0]
         mac = str(url_info[1]).strip().upper()
         host = url_info[2].rstrip("/")
@@ -444,76 +367,26 @@ class EStalker_Playlists(Screen):
             # Stage 1
             path_prefix = self._get_path_prefix(http, host, headers, path_prefix)
 
-            """
-            if path_prefix is None:
-                return index, {"valid": False, "expiry": _("Invalid Domain")}
-
-            # Add this — if we got no useful path back, the server is dead
-            if not path_prefix:
-                return index, {"valid": False, "expiry": _("Invalid Domain")}
-                """
-
-            """
-            if debugs:
-                print("*** path_prefix ***", path_prefix)
-                """
-            """
-            if path_prefix is None:
-                return index, {"valid": False, "expiry": _("Invalid Domain")}
-                """
-
             # Stage 2
             portal = self._get_portal_url(http, host, headers, path_prefix, portal)
-
-            if debugs:
-                print("*** portal ***", portal)
 
             # Stage 3
             portal_version = self._get_portal_version(http, host, headers, path_prefix)
 
-            if debugs:
-                print("*** portal_version ***", portal_version)
-
             # Stage 4
             portal, token, token_random, headers = self._do_handshake(portal, host, mac, headers)
-
-            if debugs:
-                print("*** portal ***", portal)
-                print("*** token ***", token)
-                print("*** token_random ***", token_random)
-                print("*** headers ***", headers)
 
             if not token:
                 return index, {"valid": False}
 
             # Stage 5
             play_token, status, blocked, returned_mac, returned_id = self._get_profile(portal, mac, token, token_random, headers, "full")
-            # stored_id = returned_id
-
-            if debugs:
-                print("*** play_token ***", play_token)
-                print("*** status ***", status)
-                print("*** blocked ***", blocked)
-                print("*** returned_mac ***", returned_mac)
-                print("*** returned_id ***", returned_id)
 
             # Stage 6
             expiry, account_valid = self._get_account_info(portal, mac, token, token_random, headers)
 
             if not account_valid:
-                if debugs:
-                    print("*** retrying with no params ***")
                 play_token, status, blocked, returned_mac, returned_id = self._get_profile(portal, mac, token, token_random, headers, "basic")
-                # stored_id = returned_id
-                # print("*** stored_id 2 ***", stored_id)
-
-                if debugs:
-                    print("*** play_token2 ***", play_token)
-                    print("*** status2 ***", status)
-                    print("*** blocked2 ***", blocked)
-                    print("*** returned_mac2 ***", returned_mac)
-                    print("*** returned_id2 ***", returned_id)
-
                 expiry, account_valid = self._get_account_info(portal, mac, token, token_random, headers)
 
             if not account_valid:
@@ -524,21 +397,8 @@ class EStalker_Playlists(Screen):
                 if not token:
                     valid = False
 
-                # if not returned_id:
-                    # valid = False
-
-                # if str(returned_id) == "0":
-                    # valid = False
-
                 if str(blocked) == "1":
                     valid = False
-
-                # if "stalker" not in portal:
-                #   if not expiry and status != 0:
-                #       valid = False
-
-            if debugs:
-                print("*** valid ***", valid)
 
             expiry = self._format_expiry(expiry)
 
@@ -558,16 +418,7 @@ class EStalker_Playlists(Screen):
                 "headers": headers or ""
             }
 
-    # ########################################################################################
-    # Processing and results
-    # ########################################################################################
-
     def process_downloads(self):
-        """
-        if debugs:
-            print("*** process_downloads ***")
-            """
-
         threads = min(len(self.url_list), 10)
         results = []
 
@@ -635,13 +486,6 @@ class EStalker_Playlists(Screen):
         self.update_results(results)
 
     def update_results(self, results):
-
-        """
-        if debugs:
-            print("*** update_results ***")
-            print("")
-            """
-
         for result in results:
             if not result:
                 continue
@@ -688,24 +532,10 @@ class EStalker_Playlists(Screen):
         self.createSetup()
 
     def writeJsonFile(self):
-        """
-        if debugs:
-            print("*** writeJsonFile ***")
-            """
-
-        with open(playlists_json, "w") as f:
+        with open(self.playlists_json, "w") as f:
             json.dump(self.playlists_all, f, indent=4)
 
-    # ########################################################################################
-    # UI setup
-    # ########################################################################################
-
     def createSetup(self):
-        """
-        if debugs:
-            print("*** createSetup ***")
-            """
-
         self["splash"].hide()
         self.list = []
 
@@ -731,9 +561,6 @@ class EStalker_Playlists(Screen):
 
             message = _("Active")
             parsed_date = parse_date_safe(expiry)
-
-            # if expiry == _("Invalid Domain"):
-            #     message = _("Invalid Domain")
 
             if parsed_date and parsed_date < datetime.now():
                 message = _("Expired")
@@ -763,10 +590,6 @@ class EStalker_Playlists(Screen):
         pixmap = LoadPixmap(cached=True, path=os.path.join(common_path, pixmap_file))
         return (index, str(domain), str(url), str(expires), str(message), pixmap, str(mac), str(portal_version), str(portal_label), str(status), str(status_label), str(portalpath))
 
-    # ########################################################################################
-    # Actions
-    # ########################################################################################
-
     def quit(self, answer=None):
         try:
             self.timer.stop()
@@ -790,7 +613,7 @@ class EStalker_Playlists(Screen):
         url_to_delete = str(self.currentplaylist["playlist_info"]["url"]).strip().rstrip('/')
         mac_to_delete = str(self.currentplaylist["playlist_info"]["mac"]).strip().lower()
 
-        with open(playlist_file, "r") as f:
+        with open(self.playlist_file, "r") as f:
             lines = f.readlines()
 
         new_lines = []
@@ -809,7 +632,7 @@ class EStalker_Playlists(Screen):
             else:
                 new_lines.append(line)
 
-        with open(playlist_file, "w") as f:
+        with open(self.playlist_file, "w") as f:
             f.writelines(new_lines)
 
         for i, playlist in enumerate(self.playlists_all):
@@ -881,7 +704,7 @@ class EStalker_Playlists(Screen):
         if not answer:
             return
 
-        with open(playlist_file, "r") as f:
+        with open(self.playlist_file, "r") as f:
             lines = f.readlines()
 
         macs_to_keep = {
@@ -955,7 +778,7 @@ class EStalker_Playlists(Screen):
                         "# {}\n".format(mac_part.upper())
                     )
 
-        with open(playlist_file, "w") as f:
+        with open(self.playlist_file, "w") as f:
             f.writelines(new_lines)
 
         self.playlists_all = [
@@ -980,10 +803,6 @@ class EStalker_Playlists(Screen):
     def checkXtream(self):
         self.session.open(EStalker_UserInfo)
 
-
-# ########################################################################################
-# EStalker_UserInfo Screen
-# ########################################################################################
 
 class EStalker_UserInfo(Screen):
     ALLOW_SUSPEND = True
@@ -1047,7 +866,6 @@ class EStalker_UserInfo(Screen):
         self.get_stream_url()
 
     def _build_mag_headers(self, domain, port, mac, timezone, referer):
-        """Build MAG headers for UserInfo requests."""
         encoded_mac = quote(mac, safe='')
         encoded_timezone = quote(timezone, safe='')
         return {
@@ -1063,7 +881,6 @@ class EStalker_UserInfo(Screen):
         }
 
     def _fetch_xtream_creds(self, portal, headers, content_type, domain):
-        """Attempt to extract Xtream credentials from a portal content list."""
         try:
             list_url = "{}?type={}&action=get_ordered_list&genre=*&JsHttpRequest=1-xml".format(portal, content_type)
             data = make_request(list_url, method="GET", headers=headers, params=None, response_type="json")
@@ -1109,12 +926,6 @@ class EStalker_UserInfo(Screen):
         return {}
 
     def get_stream_url(self):
-
-        """
-        if debugs:
-            print("*** get_stream_url ***")
-            """
-
         portal = glob.active_playlist["playlist_info"]["portal"]
         domain = glob.active_playlist["playlist_info"]["domain"]
         mac = glob.active_playlist["playlist_info"]["mac"]
@@ -1134,11 +945,6 @@ class EStalker_UserInfo(Screen):
             self.fetch_xtream_api(xtream_creds)
 
     def fetch_xtream_api(self, xtream_creds):
-        """
-        if debugs:
-            print("*** fetch_xtream_api ***")
-            """
-
         username = xtream_creds.get("username", "")
         password = xtream_creds.get("password", "")
         host = glob.active_playlist["playlist_info"]["host"]
@@ -1184,7 +990,6 @@ class EStalker_UserInfo(Screen):
         self.update_results(index, expiry, active_cons, max_cons)
 
     def _format_timestamp(self, timestamp):
-        """Convert a Unix timestamp to a human-readable date string."""
         try:
             ts = int(timestamp)
             if ts > 0:
@@ -1197,7 +1002,7 @@ class EStalker_UserInfo(Screen):
         return ""
 
     def update_results(self, index, expiry, active_cons, max_cons):
-        with open(playlists_json, "r") as f:
+        with open(self.playlists_json, "r") as f:
             self.playlists_all = json.load(f)
 
         self.playlists_all[index]["playlist_info"].update({
@@ -1209,13 +1014,8 @@ class EStalker_UserInfo(Screen):
         self.writeJsonFile()
 
     def writeJsonFile(self):
-        """
-        if debugs:
-            print("*** writeJsonFile ***")
-            """
-
         try:
-            with open(playlists_json, "w") as f:
+            with open(self.playlists_json, "w") as f:
                 json.dump(self.playlists_all, f, indent=4)
         except Exception as e:
             print("Error writing JSON:", e)

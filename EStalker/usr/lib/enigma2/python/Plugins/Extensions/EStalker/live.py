@@ -15,6 +15,14 @@ from itertools import cycle, islice
 
 import hashlib
 
+
+try:
+    from http.client import HTTPConnection
+    HTTPConnection.debuglevel = 0
+except ImportError:
+    from httplib import HTTPConnection
+    HTTPConnection.debuglevel = 0
+
 try:
     from urllib.parse import urlparse, parse_qs, urlunparse
 except:
@@ -66,8 +74,6 @@ if sslverify:
                 ClientTLSOptions(self.hostname, ctx)
             return ctx
 
-playlists_json = cfg.playlists_json.value
-
 
 if pythonVer == 3:
     superscript_to_normal = str.maketrans(
@@ -113,11 +119,13 @@ class EStalker_Live_Categories(Screen):
         with codecs.open(skin, "r", encoding="utf-8") as f:
             self.skin = f.read()
 
+        self.playlists_json = cfg.playlists_json.value
         self.setup_title = _("Live Categories")
         self.main_title = _("Live TV")
         self.group_title = ""
 
         self["main_title"] = StaticText(self.main_title)
+
         self.main_list = []
         self["main_list"] = List(self.main_list, enableWrapAround=True)
 
@@ -144,7 +152,6 @@ class EStalker_Live_Categories(Screen):
 
         # xmltv variables
         self.xmltvdownloaded = False
-        # self.xmltv_channel_list = []
 
         # pagination variables
         self["page"] = StaticText("")
@@ -159,7 +166,7 @@ class EStalker_Live_Categories(Screen):
         self.chosen_category = ""
 
         self.pin = False
-        # self.sort_check = False
+
         self.showfav = False
         self.firstlist = True
         self.do_sort = False
@@ -167,7 +174,6 @@ class EStalker_Live_Categories(Screen):
         self.sortindex = 0
         self.sortText = _("Sort: A-Z")
 
-        # self.epgtimeshift = 0
         self.level = 1
 
         self.selectedlist = self["main_list"]
@@ -779,12 +785,16 @@ class EStalker_Live_Categories(Screen):
         current_playing_ref = glob.currentPlayingServiceRefString
         new_playing_ref = glob.newPlayingServiceRefString
 
-        if current_playing_ref and new_playing_ref and current_playing_ref != new_playing_ref:
-            currently_playing_service = self.session.nav.getCurrentlyPlayingServiceReference()
-            if currently_playing_service:
-                self.session.nav.stopService()
-            self.session.nav.playService(eServiceReference(current_playing_ref))
-            glob.newPlayingServiceRefString = current_playing_ref
+        if current_playing_ref:
+            if current_playing_ref and new_playing_ref and current_playing_ref != new_playing_ref:
+                currently_playing_service = self.session.nav.getCurrentlyPlayingServiceReference()
+                if currently_playing_service:
+                    self.session.nav.stopService()
+
+                self.session.nav.playService(eServiceReference(current_playing_ref))
+                glob.newPlayingServiceRefString = current_playing_ref
+        else:
+            self.session.nav.stopService()
 
     def selectionChanged(self):
         if debugs:
@@ -1002,7 +1012,7 @@ class EStalker_Live_Categories(Screen):
         if self["picon"].instance:
             self["picon"].instance.setPixmapFromFile(os.path.join(common_path, "picon.png"))
 
-    def resizeImage(self, original, req_id=None, data=None):
+    def resizeImage(self, original, req_id=None):
         if debugs:
             print("*** resizeImage ***", original, req_id)
 
@@ -1093,6 +1103,7 @@ class EStalker_Live_Categories(Screen):
     def reset(self):
         if debugs:
             print("*** reset ***")
+
         self.selectedlist.setIndex(0)
         self.selectionChanged()
 
@@ -1196,8 +1207,10 @@ class EStalker_Live_Categories(Screen):
 
             if current_sort == _("Sort: A-Z"):
                 activelist.sort(key=lambda x: x[1].lower(), reverse=False)
+
             elif current_sort == _("Sort: Z-A"):
                 activelist.sort(key=lambda x: x[1].lower(), reverse=True)
+
             elif current_sort == _("Sort: Original"):
                 activelist.sort(key=lambda x: x[4], reverse=False)
 
@@ -1275,19 +1288,21 @@ class EStalker_Live_Categories(Screen):
             self.session.openWithCallback(self.filterChannels, VirtualKeyBoard, title=_("Filter this category..."), text=self.searchString)
 
     def deleteRecent(self):
-        # print("*** deleteRecent ***")
+        if debugs:
+            print("*** deleteRecent ***")
+
         current_item = self["main_list"].getCurrent()
         if current_item:
             current_index = self["main_list"].getIndex()
 
-            if not os.path.exists(playlists_json):
+            if not os.path.exists(self.playlists_json):
                 self.playlists_all = []
             else:
-                with open(playlists_json, "r") as f:
+                with open(self.playlists_json, "r") as f:
                     try:
                         self.playlists_all = json.load(f)
                     except Exception:
-                        os.remove(playlists_json)
+                        os.remove(self.playlists_json)
                         self.playlists_all = []
 
             # safer: delete by stream id
@@ -1306,7 +1321,7 @@ class EStalker_Live_Categories(Screen):
                         self.playlists_all[idx] = glob.active_playlist
                         break
 
-            with open(playlists_json, "w") as f:
+            with open(self.playlists_json, "w") as f:
                 json.dump(self.playlists_all, f, indent=4)
 
             del self.list2[current_index]
@@ -1597,7 +1612,7 @@ class EStalker_Live_Categories(Screen):
                             update_channel_icons_and_list()
                         else:
                             update_channel_icons_and_list()
-                            self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
+                            self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype))
                     else:
                         if cfg.livepreview.value is True:
                             try:
@@ -1613,7 +1628,7 @@ class EStalker_Live_Categories(Screen):
                             update_channel_icons_and_list()
                         else:
                             update_channel_icons_and_list()
-                            self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype), stream_id)
+                            self.session.openWithCallback(self.reload, liveplayer.EStalker_StreamPlayer, str(next_url), str(streamtype))
 
                     self["category_actions"].setEnabled(False)
 
@@ -1704,6 +1719,7 @@ class EStalker_Live_Categories(Screen):
 
         self.showfav = False
         self.chosen_category = ""
+        self.group_title = ""
 
         if self.selectedlist == self["epg_short_list"]:
             self.shortEPG()
@@ -1716,11 +1732,12 @@ class EStalker_Live_Categories(Screen):
             self.stopStream()
             self.close()
         else:
-            self.level -= 1
             self["x_title"].setText("")
             self["x_description"].setText("")
             if cfg.stopstream.value:
                 self.stopStream()
+
+            self.level -= 1
 
             self["category_actions"].setEnabled(True)
             self["channel_actions"].setEnabled(False)
@@ -1783,14 +1800,13 @@ class EStalker_Live_Categories(Screen):
             }
 
             glob.active_playlist["player_info"]["livefavourites"].insert(0, newfavourite)
-            # self.hideEPG()
 
-        with open(playlists_json, "r") as f:
+        with open(self.playlists_json, "r") as f:
             try:
                 self.playlists_all = json.load(f)
             except Exception as e:
                 print("Error loading playlists JSON:", e)
-                os.remove(playlists_json)
+                os.remove(self.playlists_json)
                 self.playlists_all = []
 
         if self.playlists_all:
@@ -1800,7 +1816,7 @@ class EStalker_Live_Categories(Screen):
                     playlists.update(glob.active_playlist)
                     break
 
-        with open(playlists_json, "w") as f:
+        with open(self.playlists_json, "w") as f:
             json.dump(self.playlists_all, f, indent=4)
 
         if self.chosen_category == "favourites":

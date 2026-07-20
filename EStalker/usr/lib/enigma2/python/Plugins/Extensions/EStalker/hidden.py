@@ -19,10 +19,8 @@ from Tools.BoundFunction import boundFunction
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import skin_directory, common_path, cfg, debugs
+from .plugin import skin_directory, common_path, cfg
 from .eStaticText import StaticText
-
-playlists_json = cfg.playlists_json.value
 
 
 class ProtectedScreen:
@@ -47,10 +45,9 @@ class EStalker_HiddenCategories(Screen, ProtectedScreen):
     ALLOW_SUSPEND = True
 
     def __init__(self, session, category_type, channellist, level=1):
-        if debugs:
-            print("*** __init__ ***")
-
         Screen.__init__(self, session)
+
+        self.playlists_json = cfg.playlists_json.value
 
         if cfg.adult.value:
             ProtectedScreen.__init__(self)
@@ -59,6 +56,7 @@ class EStalker_HiddenCategories(Screen, ProtectedScreen):
 
         skin_path = os.path.join(skin_directory, cfg.skin.value)
         skin = os.path.join(skin_path, "hidden.xml")
+
         with open(skin, "r") as f:
             self.skin = f.read()
 
@@ -70,18 +68,11 @@ class EStalker_HiddenCategories(Screen, ProtectedScreen):
         self.startList = []
         self.drawList = []
         self["hidden_list"] = List(self.drawList, enableWrapAround=True)
-        self["hidden_list"].onSelectionChanged.append(self.getCurrentEntry)
-        self.currentSelection = 0
 
         self["key_red"] = StaticText(_("Cancel"))
         self["key_green"] = StaticText(_("Save"))
         self["key_yellow"] = StaticText(_("Invert"))
         self["key_blue"] = StaticText(_("Reset"))
-
-        playlist_info = glob.active_playlist["playlist_info"]
-        self.protocol = playlist_info["protocol"]
-        self.domain = playlist_info["domain"]
-        self.host = playlist_info["host"]
 
         self["actions"] = ActionMap(["EStalkerActions"], {
             "red": self.keyCancel,
@@ -97,17 +88,9 @@ class EStalker_HiddenCategories(Screen, ProtectedScreen):
         self.onLayoutFinish.append(self.__layoutFinished)
 
     def __layoutFinished(self):
-        if debugs:
-            print("*** __layoutFinished ***")
-
         self.setTitle(self.setup_title)
-        self.getCurrentEntry()
 
     def loadHidden(self):
-        if debugs:
-            print("*** loadHidden ***")
-
-        self.playlists_all = []
         self.startList = []
         player_info = glob.active_playlist["player_info"]
 
@@ -116,76 +99,53 @@ class EStalker_HiddenCategories(Screen, ProtectedScreen):
             "live": ["livehidden", "channelshidden"],
             "vod": ["vodhidden", "vodstreamshidden"],
             "series": ["serieshidden", "seriestitleshidden", "seriesseasonshidden", "seriesepisodeshidden"],
-            # "catchup": ["catchuphidden", "catchupchannelshidden"]
         }
 
         # Get the corresponding key based on category_type and level
         list_key = category_keys.get(self.category_type, [])[self.level - 1]
 
         # Retrieve hidelist based on list_key
-        self.hidelist = player_info.get(list_key, [])
+        hidelist = player_info.get(list_key, [])
 
         # Populate startList based on hidelist
         for item in self.channellist:
-            hidden = item[2] in self.hidelist
+            hidden = item[2] in hidelist
             self.startList.append([item[1], item[2], hidden])
 
-        self.drawList = []
         self.drawList = [self.buildListEntry(x[0], x[1], x[2]) for x in self.startList]
         self["hidden_list"].setList(self.drawList)
 
     def buildListEntry(self, name, category_id, enabled):
-        if debugs:
-            print("*** buildListEntry ***")
-
         image_path = "lock_hidden.png" if enabled else "lock_off.png"
         full_path = os.path.join(common_path, image_path)
         pixmap = LoadPixmap(cached=True, path=full_path)
         return (pixmap, str(name), str(category_id), enabled)
 
     def refresh(self):
-        if debugs:
-            print("*** refresh ***")
-
         self.drawList = []
         self.drawList = [self.buildListEntry(x[0], x[1], x[2]) for x in self.startList]
         self["hidden_list"].updateList(self.drawList)
 
     def toggleSelection(self):
-        if debugs:
-            print("*** toggleSelection ***")
-
         if self["hidden_list"].list:
             idx = self["hidden_list"].getIndex()
             self.startList[idx][2] = not self.startList[idx][2]
             self.refresh()
 
     def toggleAllSelection(self):
-        if debugs:
-            print("*** toggleAllSelection( ***")
-
         for idx, item in enumerate(self["hidden_list"].list):
             self.startList[idx][2] = not self.startList[idx][2]
         self.refresh()
 
     def clearAllSelection(self):
-        if debugs:
-            print("*** clearAllSelection ***")
-
         for idx, item in enumerate(self["hidden_list"].list):
             self.startList[idx][2] = False
         self.refresh()
-
-    def getCurrentEntry(self):
-        self.currentSelection = self["hidden_list"].getIndex()
 
     def keyCancel(self):
         self.close()
 
     def keyGreen(self):
-        if debugs:
-            print("*** keyGreen ***")
-
         count = sum(1 for item in self.startList if item[2])
 
         if count == len(self.channellist):
@@ -202,7 +162,6 @@ class EStalker_HiddenCategories(Screen, ProtectedScreen):
             "live": ["livehidden", "channelshidden"],
             "vod": ["vodhidden", "vodstreamshidden"],
             "series": ["serieshidden", "seriestitleshidden", "seriesseasonshidden", "seriesepisodeshidden"],
-            # "catchup": ["catchuphidden", "catchupchannelshidden"]
         }
 
         # Get the list key based on category type and level
@@ -224,7 +183,7 @@ class EStalker_HiddenCategories(Screen, ProtectedScreen):
             # Update player_info with the modified list
             player_info[list_key] = selected_list
 
-        with open(playlists_json) as f:
+        with open(self.playlists_json) as f:
             self.playlists_all = json.load(f, object_pairs_hook=OrderedDict)
 
         for idx, playlist in enumerate(self.playlists_all):
@@ -235,7 +194,7 @@ class EStalker_HiddenCategories(Screen, ProtectedScreen):
                 self.playlists_all[idx] = glob.active_playlist
                 break
 
-        with open(playlists_json, "w") as f:
+        with open(self.playlists_json, "w") as f:
             json.dump(self.playlists_all, f, indent=4)
 
         self.close()

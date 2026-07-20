@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Standard library imports
+import json
 import os
 import sys
 
@@ -22,14 +23,12 @@ from . import processfiles as loadfiles
 from .plugin import skin_directory, common_path, version, cfg
 from .eStaticText import StaticText
 
-from .utils import _get_current_aspect_ratio
+from .utils import _get_current_aspect_ratio, clearCaches
 
 try:
     from enigma import eAVSwitch
 except Exception:
     from enigma import eAVControl as eAVSwitch
-
-playlists_json = cfg.playlists_json.value
 
 
 class EStalker_MainMenu(Screen):
@@ -37,6 +36,9 @@ class EStalker_MainMenu(Screen):
 
     def __init__(self, session):
         Screen.__init__(self, session)
+
+        clearCaches()
+
         self.session = session
 
         skin_path = os.path.join(skin_directory, cfg.skin.value)
@@ -49,6 +51,7 @@ class EStalker_MainMenu(Screen):
         self.playlists_all = []
         self["list"] = List(self.drawList, enableWrapAround=True)
 
+        self.playlists_json = cfg.playlists_json.value
         self.setup_title = _("Main Menu")
         self["key_red"] = StaticText(_("Back"))
         self["key_green"] = StaticText(_("OK"))
@@ -167,7 +170,23 @@ class EStalker_MainMenu(Screen):
                 self.addServer()
 
     def quit(self, data=None):
+        self.clearData()
         self.playOriginalChannel()
+
+    def clearData(self):
+        for playlist in self.playlists_all:
+            playlist["data"]["live_categories"] = {}
+            playlist["data"]["vod_categories"] = {}
+            playlist["data"]["series_categories"] = {}
+            playlist["data"]["live_streams"] = {}
+            playlist["data"]["data_downloaded"] = False
+            playlist["data"]["fail_count"] = 0
+
+        try:
+            with open(self.playlists_json, "w") as f:
+                json.dump(self.playlists_all, f, indent=4)
+        except Exception as e:
+            print("JSON write error:", e)
 
     def playOriginalChannel(self):
         if glob.currentPlayingServiceRefString:
@@ -188,6 +207,7 @@ class EStalker_MainMenu(Screen):
             except:
                 pass
 
+        clearCaches()
         self.close()
 
     def resetData(self, answer=None):
@@ -195,8 +215,8 @@ class EStalker_MainMenu(Screen):
             self.session.openWithCallback(self.resetData, MessageBox, _("Warning: delete stored json data for all playlists... Settings, favourites etc. \nPlaylists will not be deleted.\nDo you wish to continue?"))
         elif answer:
             try:
-                os.remove(playlists_json)
-                with open(playlists_json, "a"):
+                os.remove(self.playlists_json)
+                with open(self.playlists_json, "a"):
                     pass
             except OSError as e:
                 print("Error deleting or recreating JSON file:", e)
