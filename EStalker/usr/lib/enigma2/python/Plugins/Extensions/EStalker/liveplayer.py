@@ -602,7 +602,7 @@ class EStalker_StreamPlayer(
                 if (playlists["playlist_info"]["host"] == glob.active_playlist["playlist_info"]["host"] and playlists["playlist_info"]["mac"] == glob.active_playlist["playlist_info"]["mac"]):
                     playlists.update(glob.active_playlist)
                     break
-        with open(playlists_json, "w") as f:
+        with open(self.playlists_json, "w") as f:
             json.dump(self.playlists_all, f, indent=4)
 
     def playStream(self, servicetype, streamurl):

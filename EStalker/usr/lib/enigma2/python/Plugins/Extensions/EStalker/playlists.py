@@ -309,7 +309,7 @@ class EStalker_Playlists(Screen):
             if match:
                 portal_version = match.group(1).strip()
                 return portal_version
-        return path_prefix
+        return ""
 
     def _do_handshake(self, portal, host, mac, headers):
         return perform_handshake(portal, host, mac, headers)
