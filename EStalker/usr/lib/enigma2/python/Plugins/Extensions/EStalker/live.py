@@ -261,6 +261,7 @@ class EStalker_Live_Categories(Screen):
         self.sortby = "number"
 
         self.epg_downloaded_channels = set()
+        self.epg_cache_dirty = False
 
         # buttons / keys
         self["key_red"] = StaticText(_("Back"))
@@ -325,6 +326,18 @@ class EStalker_Live_Categories(Screen):
             self.timerImage.callback.append(self.downloadImage)
         except:
             self.timerImage_conn = self.timerImage.timeout.connect(self.downloadImage)
+
+        self.timerrefresh = eTimer()
+        try:
+            self.timerrefresh.callback.append(self.updateDisplay)
+        except:
+            self.timerrefresh_conn = self.timerrefresh.timeout.connect(self.updateDisplay)
+
+        self.timerEPGUpdate = eTimer()
+        try:
+            self.timerEPGUpdate.callback.append(self.updateEPGListWithShortEPG)
+        except:
+            self.timerEPGUpdate_conn = self.timerEPGUpdate.timeout.connect(self.updateEPGListWithShortEPG)
 
         self.onFirstExecBegin.append(self.createSetup)
         self.onLayoutFinish.append(self.__layoutFinished)
@@ -427,6 +440,10 @@ class EStalker_Live_Categories(Screen):
     def getLevel2(self, response):
         if debugs:
             print("*** getLevel2 ***")
+
+        # Rebuilding list2 clears its embedded EPG fields. Cached EPG must be
+        # reapplied once after the page/list has been reconstructed.
+        self.epg_cache_dirty = True
 
         if self.chosen_category == "favourites":
             response = glob.active_playlist["player_info"].get("livefavourites", [])
@@ -535,6 +552,8 @@ class EStalker_Live_Categories(Screen):
             self.firstlist = False
 
         self.buildLists()
+        if self.short_epg_results:
+            self.updateEPGListWithShortEPG()
 
     def downloadApiData(self, url, page=1):
         if debugs:
@@ -848,12 +867,7 @@ class EStalker_Live_Categories(Screen):
                         response = self.downloadApiData(glob.nextlist[-1]["next_url"])
                         self.getLevel2(response)
 
-                self.timerrefresh = eTimer()
-
-                try:
-                    self.timerrefresh.callback.append(self.updateDisplay)
-                except:
-                    self.timerrefresh_conn = self.timerrefresh.timeout.connect(self.updateDisplay)
+                self.timerrefresh.stop()
                 self.timerrefresh.start(260, True)
 
         else:
@@ -875,7 +889,8 @@ class EStalker_Live_Categories(Screen):
         channels_to_fetch = [ch_id for ch_id in visible_channels if ch_id not in self.epg_downloaded_channels]
 
         if not channels_to_fetch:
-            self.updateEPGListWithShortEPG()
+            if self.epg_cache_dirty:
+                self.updateEPGListWithShortEPG()
             return
 
         for ch_id in channels_to_fetch:
@@ -887,15 +902,24 @@ class EStalker_Live_Categories(Screen):
         EStalker_EPG_Short(channels_to_fetch, done_callback=self.handle_epg_done, partial_callback=self.handle_epg_partial)
 
     def handle_epg_partial(self, result):
-        for entry in result.get("js", []):
-            ch_id = str(entry.get("ch_id"))
-            if not ch_id:
-                continue
-            if ch_id not in self.short_epg_results:
-                self.short_epg_results[ch_id] = []
-            self.short_epg_results[ch_id].append(entry)
+        if self._store_short_epg(result.get("js", [])):
+            # Coalesce responses arriving close together into one list rebuild.
+            self.timerEPGUpdate.stop()
+            self.timerEPGUpdate.start(100, True)
 
-        self.updateEPGListWithShortEPG()
+    def _store_short_epg(self, entries):
+        grouped_entries = {}
+        for entry in entries:
+            ch_id = str(entry.get("ch_id"))
+            if not ch_id or ch_id == "None":
+                continue
+
+            grouped_entries.setdefault(ch_id, []).append(entry)
+
+        for ch_id, channel_entries in grouped_entries.items():
+            self.short_epg_results[ch_id] = channel_entries
+
+        return bool(grouped_entries)
 
     def downloadImage(self):
         if debugs:
@@ -1740,6 +1764,11 @@ class EStalker_Live_Categories(Screen):
             print("*** back ***")
 
         self._stopTimerImage()
+        try:
+            self.timerrefresh.stop()
+            self.timerEPGUpdate.stop()
+        except Exception:
+            pass
 
         self.showfav = False
         self.chosen_category = ""
@@ -2081,21 +2110,27 @@ class EStalker_Live_Categories(Screen):
         end = start + self.itemsperpage
         channel_list = self.main_list if hasattr(self, 'main_list') else []
 
-        return [item[4] for item in channel_list[start:end] if len(item) > 4]
+        visible_ids = []
+        seen_ids = set()
+        for item in channel_list[start:end]:
+            if len(item) <= 4 or not item[4]:
+                continue
+            ch_id = str(item[4])
+            if ch_id not in seen_ids:
+                seen_ids.add(ch_id)
+                visible_ids.append(ch_id)
+        return visible_ids
 
     def handle_epg_done(self, epg_data):
-        if not epg_data or "js" not in epg_data:
+        if not epg_data:
             return
 
-        for entry in epg_data["js"]:
-            ch_id = str(entry.get("ch_id"))
-            if not ch_id:
-                continue
-            if ch_id not in self.short_epg_results:
-                self.short_epg_results[ch_id] = []
-            self.short_epg_results[ch_id].append(entry)
+        for ch_id in epg_data.get("failed_ids", []):
+            self.epg_downloaded_channels.discard(str(ch_id))
 
-        self.updateEPGListWithShortEPG()
+        if self._store_short_epg(epg_data.get("js", [])):
+            self.timerEPGUpdate.stop()
+            self.updateEPGListWithShortEPG()
 
     def updateEPGListWithShortEPG(self):
 
@@ -2203,6 +2238,7 @@ class EStalker_Live_Categories(Screen):
         ]
 
         self["epg_list"].updateList(self.epglist)
+        self.epg_cache_dirty = False
 
         instance = self["epg_list"].master.master.instance
         instance.setSelectionEnable(0)

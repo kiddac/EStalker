@@ -9,6 +9,7 @@ except:
     HTTPConnection.debuglevel = 0
 
 from twisted.internet import reactor
+from twisted.internet.defer import DeferredSemaphore
 from twisted.web.client import Agent, readBody
 from twisted.web.http_headers import Headers
 from twisted.internet.protocol import Factory
@@ -45,16 +46,36 @@ class EStalker_EPG_Short:
         self.partial_callback = partial_callback
         self.visible_ids = visible_ids
         self.epg_data = []
+        self.failed_ids = set()
         self.responses_received = 0
         self.total_requests = len(visible_ids)
+        self.retry_counts = {}
         self.agent = Agent(reactor, contextFactory=contextFactory)
+        # MAG/Stalker portals are often sensitive to parallel short-EPG calls.
+        self.request_semaphore = DeferredSemaphore(2)
         self.prepare()
 
     def download_single_epg(self, ch_id):
+        return self.request_semaphore.run(self._download_single_epg, ch_id)
+
+    def _download_single_epg(self, ch_id):
         url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&limit=10&size=10&JsHttpRequest=1-xml".format(ch_id)
         d = self.agent.request(b'GET', url.encode(), self.headers)
-        d.addCallback(lambda response, ch_id=ch_id: self.handle_response(response, ch_id))
-        d.addErrback(lambda failure, ch_id=ch_id: self.handle_error(failure, ch_id))
+        d.addCallbacks(
+            lambda response, ch_id=ch_id: self.handle_response(response, ch_id),
+            lambda failure, ch_id=ch_id: self.handle_error(failure, ch_id)
+        )
+        cancel_request = getattr(d, "cancel", None)
+        if cancel_request:
+            timeout_call = reactor.callLater(6.0, cancel_request)
+
+            def cancel_timeout(result):
+                if timeout_call.active():
+                    timeout_call.cancel()
+                return result
+
+            d.addBoth(cancel_timeout)
+        return d
 
     def prepare(self):
         timezone = get_local_timezone()
@@ -101,16 +122,16 @@ class EStalker_EPG_Short:
             self.download_single_epg(ch_id)
 
     def handle_response(self, response, ch_id):
-        if response.code == 503:
-            try:
-                reactor.callLater(1.0, self.download_single_epg, ch_id)
-            except:
-                pass
+        if response.code >= 400:
+            self.retry_or_complete(ch_id)
             return
 
         d = readBody(response)
-        d.addErrback(lambda failure, ch_id=ch_id: self.handle_error(failure, ch_id))
-        d.addCallback(lambda body: self.process_body(body, ch_id, response))
+        d.addCallbacks(
+            lambda body: self.process_body(body, ch_id, response),
+            lambda failure, ch_id=ch_id: self.handle_error(failure, ch_id)
+        )
+        return d
 
     def process_body(self, body, ch_id, response):
         try:
@@ -136,37 +157,76 @@ class EStalker_EPG_Short:
 
             data = data.strip()
 
-            if data[:1] in ("{", "["):
-                json_data = json.loads(data)
-                epg_events = json_data.get("js", [])
+            if data[:1] not in ("{", "["):
+                raise ValueError("Invalid short EPG response")
 
-                if epg_events:
-                    self.epg_data.extend(epg_events)
+            json_data = json.loads(data)
+            if not isinstance(json_data, dict):
+                raise ValueError("Invalid short EPG response")
 
-                    if self.partial_callback:
-                        self.partial_callback({"js": self.epg_data})
+            epg_events = json_data.get("js", [])
+            if epg_events is None:
+                epg_events = []
+            if not isinstance(epg_events, list):
+                raise ValueError("Invalid short EPG response")
+
+            # A busy portal can return HTTP 200 with an empty js list. Verify an
+            # empty result before accepting that the channel genuinely has no EPG.
+            if not epg_events and self.retry_empty_response(ch_id):
+                return
+
+            for event in epg_events:
+                if isinstance(event, dict) and not event.get("ch_id"):
+                    event["ch_id"] = str(ch_id)
+
+            if epg_events:
+                self.epg_data.extend(epg_events)
+
+                if self.partial_callback:
+                    self.partial_callback({"js": epg_events})
 
         except Exception:
-            pass
+            self.retry_or_complete(ch_id)
+            return
 
+        self.failed_ids.discard(str(ch_id))
         self.responses_received += 1
         self.check_complete()
 
     def check_complete(self):
         if self.responses_received >= self.total_requests:
             if self.done_callback:
-                self.done_callback({"js": self.epg_data})
+                self.done_callback({
+                    "js": self.epg_data,
+                    "failed_ids": list(self.failed_ids),
+                })
 
     def handle_error(self, failure, ch_id=None):
-        if hasattr(failure.value, 'response'):
-            response = failure.value.response
-            code = getattr(response, 'code', 0)
-            if code == 503 and ch_id is not None:
-                try:
-                    reactor.callLater(1.0, self.download_single_epg, ch_id)
-                except:
-                    pass
-                return
+        if ch_id is not None:
+            self.retry_or_complete(ch_id)
+            return
 
         self.responses_received += 1
         self.check_complete()
+
+    def retry_or_complete(self, ch_id):
+        retry_key = str(ch_id)
+        retries = self.retry_counts.get(retry_key, 0)
+        if retries < 2:
+            self.retry_counts[retry_key] = retries + 1
+            reactor.callLater(0.5 * (retries + 1), self.download_single_epg, ch_id)
+            return
+
+        self.failed_ids.add(retry_key)
+        self.responses_received += 1
+        self.check_complete()
+
+    def retry_empty_response(self, ch_id):
+        retry_key = str(ch_id)
+        retries = self.retry_counts.get(retry_key, 0)
+        if retries >= 2:
+            return False
+
+        self.retry_counts[retry_key] = retries + 1
+        reactor.callLater(0.5 * (retries + 1), self.download_single_epg, ch_id)
+        return True

@@ -1212,32 +1212,44 @@ class EStalker_StreamPlayer(
         end = start + self.itemsperpage
         channel_list = self.main_list if hasattr(self, 'main_list') else []
 
-        return [item[4] for item in channel_list[start:end] if len(item) > 4]
+        visible_ids = []
+        seen_ids = set()
+        for item in channel_list[start:end]:
+            if len(item) <= 4 or not item[4]:
+                continue
+            ch_id = str(item[4])
+            if ch_id not in seen_ids:
+                seen_ids.add(ch_id)
+                visible_ids.append(ch_id)
+        return visible_ids
 
     def handle_epg_done(self, epg_data):
-        if not epg_data or "js" not in epg_data:
+        if not epg_data:
             return
 
-        for entry in epg_data["js"]:
-            ch_id = str(entry.get("ch_id"))
-            if not ch_id:
-                continue
-            if ch_id not in self.short_epg_results:
-                self.short_epg_results[ch_id] = []
-            self.short_epg_results[ch_id].append(entry)
+        for ch_id in epg_data.get("failed_ids", []):
+            self.epg_downloaded_channels.discard(str(ch_id))
 
-        self.updateEPGListWithShortEPG()
+        if self._store_short_epg(epg_data.get("js", [])):
+            self.updateEPGListWithShortEPG()
 
     def handle_epg_partial(self, result):
-        for entry in result.get("js", []):
-            ch_id = str(entry.get("ch_id"))
-            if not ch_id:
-                continue
-            if ch_id not in self.short_epg_results:
-                self.short_epg_results[ch_id] = []
-            self.short_epg_results[ch_id].append(entry)
+        if self._store_short_epg(result.get("js", [])):
+            self.updateEPGListWithShortEPG()
 
-        self.updateEPGListWithShortEPG()
+    def _store_short_epg(self, entries):
+        grouped_entries = {}
+        for entry in entries:
+            ch_id = str(entry.get("ch_id"))
+            if not ch_id or ch_id == "None":
+                continue
+
+            grouped_entries.setdefault(ch_id, []).append(entry)
+
+        for ch_id, channel_entries in grouped_entries.items():
+            self.short_epg_results[ch_id] = channel_entries
+
+        return bool(grouped_entries)
 
     def updateEPGListWithShortEPG(self):
         def extract_main_description(descr):
