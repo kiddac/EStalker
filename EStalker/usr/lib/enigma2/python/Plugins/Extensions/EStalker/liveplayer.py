@@ -459,15 +459,26 @@ class EStalker_StreamPlayer(
         except:
             self.timerWatchdog_conn = self.timerWatchdog.timeout.connect(self.sendWatchdog)
 
-        # Pagination variables - add these
-        self.all_data = []
+        # Lazy channel/EPG pagination state
         self.pages_downloaded = set()
         self.current_page = 1
         self.itemsperpage = 14
-        self.total_items = 0
+        self.total_items = len(glob.currentchannellist)
         self.sortby = "number"
         self.epg_downloaded_channels = set()
         self.short_epg_results = {}
+        self.list2 = list(glob.originalChannelList2 or [])
+        for epg_entry in glob.currentepglist or []:
+            if not epg_entry or len(epg_entry) < 11:
+                continue
+            channel_index = epg_entry[1]
+            if not isinstance(channel_index, int) or channel_index >= len(self.list2):
+                continue
+            channel = self.list2[channel_index]
+            if not channel or len(channel) < 21:
+                continue
+            channel[9:15] = list(epg_entry[2:8])
+            channel[19:21] = list(epg_entry[9:11])
 
         self.onFirstExecBegin.append(boundFunction(self.playStream, self.servicetype, self.streamurl))
 
@@ -954,94 +965,55 @@ class EStalker_StreamPlayer(
         if debugs:
             print("*** __next___ ***")
 
-        self.servicetype = self.originalservicetype
-
-        if glob.currentchannellist:
-            list_length = len(glob.currentchannellist)
-            glob.currentchannellistindex += 1
-            if glob.currentchannellistindex >= list_length:
-                glob.currentchannellistindex = 0
-                glob.nextlist[-1]["index"] = glob.currentchannellistindex
-
-            if glob.currentchannellist[glob.currentchannellistindex] is None:
-                self.load_page_data()
-
-            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
-
-            if isinstance(command, str):
-                if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
-                    url = "{0}?type=itv&action=create_link&cmd={1}&series=0&forced_storage=0&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
-                    self.retry = False
-                    response = self.createLink(url)
-                    self.streamurl = ""
-
-                    if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                        self.streamurl = str(response["js"]["cmd"])
-                else:
-                    self.streamurl = command
-
-            if isinstance(self.streamurl, str):
-                parts = self.streamurl.split(None, 1)
-                if len(parts) == 2:
-                    self.streamurl = parts[1].lstrip()
-
-                parsed = urlparse(self.streamurl)
-                if parsed.scheme in ["http", "https"]:
-                    self.streamurl = parsed.geturl()
-
-            else:
-                self.streamurl = ""
-
-            str_servicetype = str(self.servicetype)
-            str_streamurl = str(self.streamurl) if self.streamurl else ""
-
-            self.playStream(str_servicetype, str_streamurl)
+        self._zap(1)
 
     def prev(self):
         if debugs:
             print("*** prev ***")
 
+        self._zap(-1)
+
+    def _zap(self, direction):
+        if not glob.currentchannellist:
+            return
+
         self.servicetype = self.originalservicetype
+        list_length = len(glob.currentchannellist)
+        glob.currentchannellistindex = (
+            glob.currentchannellistindex + direction
+        ) % list_length
+        glob.nextlist[-1]["index"] = glob.currentchannellistindex
 
-        if glob.currentchannellist:
-            list_length = len(glob.currentchannellist)
-            glob.currentchannellistindex -= 1
-            if glob.currentchannellistindex < 0:
-                glob.currentchannellistindex = list_length - 1
-                glob.nextlist[-1]["index"] = glob.currentchannellistindex
+        channel = glob.currentchannellist[glob.currentchannellistindex]
+        command = channel[7] if channel and len(channel) > 7 else ""
 
-            if glob.currentchannellist[glob.currentchannellistindex] is None:
-                self.load_page_data()
+        if not command:
+            self.load_page_data()
+            channel = glob.currentchannellist[glob.currentchannellistindex]
+            command = channel[7] if channel and len(channel) > 7 else ""
 
-            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
+        if not command:
+            return
 
-            if isinstance(command, str):
-                if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
-                    url = "{0}?type=itv&action=create_link&cmd={1}&series=0&forced_storage=0&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
-                    self.retry = False
-                    response = self.createLink(url)
-                    self.streamurl = ""
+        self.streamurl = self._resolve_stream_url(str(command))
+        self.playStream(str(self.servicetype), self.streamurl)
 
-                    if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                        self.streamurl = str(response["js"]["cmd"])
-                else:
-                    self.streamurl = command
+    def _resolve_stream_url(self, command):
+        if "localhost" in command or "///" in command or "/ch/" in command or "http" not in command:
+            url = "{0}?type=itv&action=create_link&cmd={1}&series=0&forced_storage=0&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
+            self.retry = False
+            response = self.createLink(url)
+            if not isinstance(response, dict):
+                return ""
+            response_data = response.get("js") or {}
+            if not isinstance(response_data, dict):
+                return ""
+            command = str(response_data.get("cmd", ""))
 
-            if isinstance(self.streamurl, str):
-                parts = self.streamurl.split(None, 1)
-                if len(parts) == 2:
-                    self.streamurl = parts[1].lstrip()
-
-                parsed = urlparse(self.streamurl)
-                if parsed.scheme in ["http", "https"]:
-                    self.streamurl = parsed.geturl()
-            else:
-                self.streamurl = ""
-
-            str_servicetype = str(self.servicetype)
-            str_streamurl = str(self.streamurl) if self.streamurl else ""
-
-            self.playStream(str_servicetype, str_streamurl)
+        parts = command.split(None, 1)
+        streamurl = parts[1].lstrip() if len(parts) == 2 else command
+        parsed = urlparse(streamurl)
+        return parsed.geturl() if parsed.scheme in ("http", "https") else ""
 
     def setAspectRatio(self, ar_index):
         try:
@@ -1065,34 +1037,26 @@ class EStalker_StreamPlayer(
         self.session.open(MessageBox, message, type=MessageBox.TYPE_INFO, timeout=1)
 
     def load_page_data(self):
-        self.pages_downloaded = set()
         self.retry = False
 
-        self.itemsperpage = 14
         current_index = glob.currentchannellistindex
-        position = current_index + 1
-        page = (position - 1) // self.itemsperpage + 1
-
-        if not hasattr(self, 'current_page') or page != self.current_page:
-            self.current_page = page
-            response = self.downloadApiData(glob.nextlist[-1]["next_url"])
-            self.processdata(response)
+        page = current_index // self.itemsperpage + 1
+        self.current_page = page
+        response = self.downloadApiData(glob.nextlist[-1]["next_url"], page)
+        if response is not None:
+            self.processdata(response, page)
 
     def downloadApiData(self, url, page=1):
         if debugs:
             print("*** downloadApiData ***", url)
 
-        # Initialize storage for all data if it doesn't exist
-        if not hasattr(self, 'all_data') or not isinstance(self.all_data, list):
-            self.all_data = []
-
         if "all_channels" not in url:
-            paged_url = self._updateUrlPage(url, self.current_page)
+            paged_url = self._updateUrlPage(url, page)
         else:
             paged_url = url
 
         if paged_url in self.pages_downloaded:
-            return self.all_data
+            return None
 
         try:
             data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
@@ -1117,25 +1081,15 @@ class EStalker_StreamPlayer(
                 if "all_channels" in url:
                     return current_page_data
 
-                if not hasattr(self, 'all_data') or not isinstance(self.all_data, list) or not self.all_data:
-                    self.all_data = [{} for _ in range(self.total_items)]
-
-                # Calculate the position where this page's data should be stored
-                start_index = (self.current_page - 1) * 14
-
-                # Insert the new data at the correct positions
-                for i, item in enumerate(current_page_data):
-                    self.all_data[start_index + i] = item
-                    self.pages_downloaded.add(paged_url)
-
-                return self.all_data
+                self.pages_downloaded.add(paged_url)
+                return current_page_data
 
         except Exception as e:
-            print("Error downloading API data for page {}: {}".format(self.current_page, e))
-            return self.all_data
+            print("Error downloading API data for page {}: {}".format(page, e))
+            return None
 
         self.session.openWithCallback(self.back, MessageBox, _("Server error or invalid link."), MessageBox.TYPE_ERROR, timeout=3)
-        return self.all_data
+        return None
 
     def _updateUrlPage(self, url, page):
         if "p=" in url:
@@ -1144,25 +1098,21 @@ class EStalker_StreamPlayer(
             sep = "&" if "?" in url else "?"
             return url + sep + "p=" + str(page)
 
-    def processdata(self, response):
+    def processdata(self, response, page):
         if debugs:
             print("*** processdata ***")
 
         if not response:
             return
 
-        # On first call, size the global lists to total_items
-        if not glob.currentchannellist or len(glob.currentchannellist) != self.total_items:
-            glob.currentchannellist = [None] * self.total_items
-            glob.currentepglist = [None] * self.total_items
-            glob.originalChannelList2 = [None] * self.total_items
+        start_index = (page - 1) * self.itemsperpage
+        required_length = max(self.total_items, start_index + len(response))
+        while len(self.list2) < required_length:
+            index = len(self.list2)
+            self.list2.append([index, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", False, False, False, None, None])
 
-        start_index = (self.current_page - 1) * self.itemsperpage
-
-        self.list2 = []
-
-        for index, channel in enumerate(response):
-            global_index = start_index + index
+        for page_index, channel in enumerate(response):
+            index = start_index + page_index
 
             if not isinstance(channel, dict) or not channel:
                 continue
@@ -1207,7 +1157,7 @@ class EStalker_StreamPlayer(
             else:
                 glob.active_playlist["player_info"]["livefavourites"] = []
 
-            self.list2.append([
+            self.list2[index] = [
                 index,
                 str(name),
                 str(stream_id),
@@ -1229,33 +1179,14 @@ class EStalker_StreamPlayer(
                 hidden,
                 None,
                 None
-            ])
-
-            self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
-            glob.currentchannellist = self.main_list[:]
-
-            self.updateDisplay()
-            list2_entry = [
-                global_index, name, stream_id, stream_icon, epg_channel_id,
-                number, category_id, cmd, service_ref,
-                "", "", "", "", "", "", next_url,
-                favourite, False, hidden, None, None
             ]
 
-            self.list2.append(list2_entry)
-
-            main_entry = buildLiveStreamList(
-                global_index, name, stream_id, stream_icon, number,
-                cmd, next_url, favourite, False, hidden, category_id
-            )
-            epg_entry = buildEPGListEntry(
-                global_index, name, "", "", "", "", "", "", hidden, None, None
-            )
-
-            # Merge into the global lists at the correct position
-            glob.currentchannellist[global_index] = main_entry
-            glob.currentepglist[global_index] = epg_entry
-            glob.originalChannelList2[global_index] = list2_entry
+        self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
+        self.epglist = [buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20]) for x in self.list2 if x[18] is False]
+        glob.originalChannelList2 = self.list2[:]
+        glob.currentchannellist = self.main_list[:]
+        glob.currentepglist = self.epglist[:]
+        self.updateDisplay()
 
     def updateDisplay(self):
         visible_channels = self.getVisibleChannels()
@@ -1309,104 +1240,89 @@ class EStalker_StreamPlayer(
         self.updateEPGListWithShortEPG()
 
     def updateEPGListWithShortEPG(self):
-
         def extract_main_description(descr):
             if not descr:
                 return ""
+
             descr = descr.replace("\r\n", "\n")
             match = re.search(r"Description:\s*(.+)", descr, re.DOTALL)
             if not match:
                 return descr.strip()
+
             description = match.group(1)
+
             stop_labels = ["Credits:", "Director:", "Producer:", "Actor:", "Category:"]
             for label in stop_labels:
                 index = description.find(label)
                 if index != -1:
                     description = description[:index]
                     break
+
             return description.strip()
 
-        # NEW: convert portal local time string → local timestamp
-        def parse_epg_time(timestr):
-            if not timestr:
-                return 0
-            try:
-                dt = datetime.strptime(timestr, "%Y-%m-%d %H:%M:%S")
-                return int(time.mktime(dt.timetuple()))
-            except Exception:
-                return 0
-
         now = int(time.time())
+        epgoffset_sec = 0
 
-        for channel in self.list2:
-            epg_channel_id = str(channel[4])
+        if self.list2:
+            for channel in self.list2:
+                epg_channel_id = channel[4]
 
-            if epg_channel_id not in self.short_epg_results:
-                continue
+                if epg_channel_id in self.short_epg_results:
+                    events = self.short_epg_results[epg_channel_id]
 
-            events = self.short_epg_results[epg_channel_id]
+                    for index, entry in enumerate(events):
+                        time_str = entry.get("time", "")
+                        time_to_str = entry.get("time_to", "")
 
-            for index, entry in enumerate(events):
+                        if time_str and time_to_str:
+                            try:
+                                dt_start = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                                dt_stop = datetime.strptime(time_to_str, "%Y-%m-%d %H:%M:%S")
 
-                # CHANGED: use parsed local times instead of UTC timestamps
-                start = parse_epg_time(entry.get("time"))
-                stop = parse_epg_time(entry.get("time_to"))
-
-                if not start or not stop:
-                    continue
-
-                if start < now and stop > now:
-                    channel[9] = str(entry.get("t_time") or time.strftime("%H:%M", time.localtime(start)))
-                    channel[10] = str(entry.get("name", "") or "")
-                    channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
-                    channel[19] = start
-
-                    next_entry = events[index + 1] if (index + 1) < len(events) else None
-                    if next_entry:
-                        next_start = parse_epg_time(next_entry.get("time"))
-
-                        channel[12] = str(next_entry.get("t_time") or (time.strftime("%H:%M", time.localtime(next_start)) if next_start else ""))
-                        channel[13] = str(next_entry.get("name", "") or "")
-                        channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
-                        channel[20] = next_start
-                    else:
-                        channel[12] = ""
-                        channel[13] = ""
-                        channel[14] = ""
-                        channel[20] = 0
-                    break
-
-                else:
-                    if start > now:
-                        next_entry = events[index] if index < len(events) else None
-                        if next_entry:
-                            next_start = parse_epg_time(next_entry.get("time"))
-
-                            channel[12] = str(next_entry.get("t_time") or (time.strftime("%H:%M", time.localtime(next_start)) if next_start else ""))
-                            channel[13] = str(next_entry.get("name", "") or "")
-                            channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
-                            channel[20] = next_start
+                                start = int(time.mktime(dt_start.timetuple())) + epgoffset_sec
+                                stop = int(time.mktime(dt_stop.timetuple())) + epgoffset_sec
+                            except Exception:
+                                start = 0
+                                stop = 0
                         else:
-                            channel[12] = ""
-                            channel[13] = ""
-                            channel[14] = ""
-                            channel[20] = 0
-                        break
+                            start = 0
+                            stop = 0
 
-        self.epglist = [
-            buildEPGListEntry(
-                x[0], x[1], x[9], x[10], x[11],
-                x[12], x[13], x[14], x[18], x[19], x[20]
-            )
-            for x in self.list2 if x[18] is False
-        ]
+                        next_entry = events[index + 1] if (index + 1) < len(events) else None
 
-        self["epg_list"].updateList(self.epglist)
+                        if start < now and stop > now:
+                            channel[9] = str(time.strftime("%H:%M", time.localtime(start)))
+                            channel[10] = str(entry.get("name", "") or "")
+                            channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
+                            channel[19] = start
 
-        instance = self["epg_list"].master.master.instance
-        instance.setSelectionEnable(0)
+                            if next_entry:
+                                next_start_str = next_entry.get("time", "")
+                                try:
+                                    dt_next_start = datetime.strptime(next_start_str, "%Y-%m-%d %H:%M:%S")
+                                    next_start = int(time.mktime(dt_next_start.timetuple())) + epgoffset_sec
+                                except Exception:
+                                    next_start = 0
 
-        self.refreshEPGInfo()
+                                channel[12] = str(time.strftime("%H:%M", time.localtime(next_start)) if next_start else "")
+                                channel[13] = str(next_entry.get("name", "") or "")
+                                channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
+                                channel[20] = next_start
+                            else:
+                                channel[12] = ""
+                                channel[13] = ""
+                                channel[14] = ""
+                                channel[20] = 0
+
+                            break
+
+            self.epglist = [
+                buildEPGListEntry(x[0], x[1], x[9], x[10], x[11], x[12], x[13], x[14], x[18], x[19], x[20])
+                for x in self.list2 if x[18] is False
+            ]
+
+            glob.currentepglist = self.epglist[:]
+            self.refreshInfobar()
 
 
 def buildEPGListEntry(index, title, epgNowTime, epgNowTitle, epgNowDesc, epgNextTime, epgNextTitle, epgNextDesc, hidden, epgNowUnixTime, epgNextUnixTime):

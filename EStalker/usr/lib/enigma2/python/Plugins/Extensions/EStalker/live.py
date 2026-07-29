@@ -1645,6 +1645,30 @@ class EStalker_Live_Categories(Screen):
 
         glob.nextlist[-1]["index"] = idx
 
+        # The player may have lazily downloaded another 14-channel page.
+        # Copy that state back into this screen before restoring its selection.
+        if glob.originalChannelList2:
+            self.list2 = [list(channel) for channel in glob.originalChannelList2]
+            self.all_data = [
+                {
+                    "name": channel[1],
+                    "id": channel[2],
+                    "logo": channel[3],
+                    "number": channel[5],
+                    "tv_genre_id": channel[6],
+                    "cmd": channel[7],
+                } if channel and len(channel) >= 8 and channel[2] else {}
+                for channel in self.list2
+            ]
+
+        if glob.currentchannellist:
+            self.main_list = glob.currentchannellist[:]
+            self["main_list"].setList(self.main_list)
+
+        if glob.currentepglist:
+            self.epglist = glob.currentepglist[:]
+            self["epg_list"].setList(self.epglist)
+
         # Set the index BEFORE selectionChanged so pagination calculates correctly
         self["main_list"].setIndex(idx)
         self["epg_list"].setIndex(idx)
