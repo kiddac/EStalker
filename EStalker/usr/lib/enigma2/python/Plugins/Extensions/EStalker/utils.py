@@ -371,7 +371,7 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
 
     js_data = {}
     play_token = None
-    status = 0
+    status = 1
     blocked = "0"
     returned_id = ""
     mac = ""
@@ -384,7 +384,7 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
 
         if js_data:
             play_token = js_data.get("play_token", None)
-            status = js_data.get("status", 0)
+            status = js_data.get("status", 1)
             blocked = js_data.get("blocked", "0")
             mac = js_data.get("mac", "")
             returned_id = js_data.get("id", "")
@@ -419,7 +419,7 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
 
             if js_data:
                 play_token = js_data.get("play_token", None)
-                status = js_data.get("status", 0)
+                status = js_data.get("status", 1)
                 blocked = js_data.get("blocked", "0")
                 mac = js_data.get("mac", "")
                 returned_id = js_data.get("id", "")

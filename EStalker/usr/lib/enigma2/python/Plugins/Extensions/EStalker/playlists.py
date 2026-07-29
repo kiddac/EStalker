@@ -418,71 +418,99 @@ class EStalker_Playlists(Screen):
                 "headers": headers or ""
             }
 
-    def process_downloads(self):
-        threads = min(len(self.url_list), 10)
+    def _get_download_domain(self, url_info):
+        domain = str(url_info[3] or "").strip().lower()
+        if domain:
+            return domain
+
+        host = str(url_info[2] or "").strip().lower()
+        try:
+            parsed = urlparse(host)
+            return (parsed.hostname or parsed.netloc or host).lower()
+        except Exception:
+            return host
+
+    def _group_downloads_by_domain(self):
+        domain_groups = []
+        group_indexes = {}
+
+        for url_info in self.url_list:
+            domain = self._get_download_domain(url_info)
+            if domain not in group_indexes:
+                group_indexes[domain] = len(domain_groups)
+                domain_groups.append([])
+            domain_groups[group_indexes[domain]].append(url_info)
+
+        return domain_groups
+
+    def _download_domain_group(self, url_group):
         results = []
 
-        if hasConcurrent:
+        # Entries sharing a domain deliberately run one after another. Some
+        # portals reject or throttle simultaneous handshakes for different MACs.
+        for url_info in url_group:
+            playlist_index = url_info[0]
+            try:
+                results.append(self.download_url(url_info))
+            except Exception as e:
+                print("Error processing playlist {}: {}".format(playlist_index, e))
+                results.append((playlist_index, {"valid": False}))
+
+        return results
+
+    def process_downloads(self):
+        domain_groups = self._group_downloads_by_domain()
+        threads = min(len(domain_groups), 10)
+        results = []
+
+        if hasConcurrent and threads > 1:
             # print("*** hasConcurrent ***")
             try:
                 from concurrent.futures import ThreadPoolExecutor, as_completed
 
                 with ThreadPoolExecutor(max_workers=threads) as executor:
-                    future_to_index = {
-                        executor.submit(self.download_url, url_info): idx
-                        for idx, url_info in enumerate(self.url_list)
+                    future_to_group = {
+                        executor.submit(self._download_domain_group, url_group): url_group
+                        for url_group in domain_groups
                     }
 
-                    results = [None] * len(self.url_list)
-
-                    for future in as_completed(future_to_index):
-                        idx = future_to_index[future]
+                    for future in as_completed(future_to_group):
                         try:
-                            results[idx] = future.result()
+                            results.extend(future.result())
                         except Exception as e:
-                            print("Error processing URL {}: {}".format(idx, e))
-                            results[idx] = (idx, {"valid": False})
+                            print("Error processing domain group: {}".format(e))
+                            for url_info in future_to_group[future]:
+                                results.append((url_info[0], {"valid": False}))
 
             except Exception as e:
                 print("Concurrent execution error:", e)
-                results = []
-                for idx, url_info in enumerate(self.url_list):
-                    try:
-                        results.append(self.download_url(url_info))
-                    except Exception as e:
-                        print("Error processing URL {}: {}".format(idx, e))
-                        results.append((idx, {"valid": False}))
+                results = self._download_domain_group(self.url_list)
 
-        elif hasMultiprocessing:
+        elif hasMultiprocessing and threads > 1:
             # print("*** Multiprocessing ***")
             try:
                 from multiprocessing.pool import ThreadPool
 
                 pool = ThreadPool(threads)
                 try:
-                    results = list(pool.imap(self.download_url, self.url_list))
+                    grouped_results = list(pool.imap(self._download_domain_group, domain_groups))
+                    results = [
+                        result
+                        for group_result in grouped_results
+                        for result in group_result
+                    ]
                 finally:
                     pool.close()
                     pool.join()
 
             except Exception as e:
                 print("Multiprocessing execution error:", e)
-                results = []
-                for url_info in self.url_list:
-                    try:
-                        results.append(self.download_url(url_info))
-                    except Exception as e:
-                        print("Error processing URL:", e)
-                        results.append((0, {"valid": False}))
+                results = self._download_domain_group(self.url_list)
         else:
             # print("*** fallback sequential ***")
-            for url_info in self.url_list:
-                try:
-                    results.append(self.download_url(url_info))
-                except Exception as e:
-                    print("Error processing URL:", e)
-                    results.append((0, {"valid": False}))
+            results = self._download_domain_group(self.url_list)
 
+        results.sort(key=lambda result: result[0] if result else -1)
         self.update_results(results)
 
     def update_results(self, results):
@@ -580,7 +608,9 @@ class EStalker_Playlists(Screen):
             self.getStreamTypes()
 
     def buildListEntry(self, index, domain, url, expires, message, mac, token, portal_version, portal_label, valid, status, status_label, portalpath):
-        if not valid or message not in (_("Active"), _("Unknown"), _("Expired")):
+        if message == _("Expired"):
+            pixmap_file = "led_blue.png"
+        elif not valid or message not in (_("Active"), _("Unknown")):
             pixmap_file = "led_red.png"
         elif message == _("Active"):
             pixmap_file = "led_green.png"
