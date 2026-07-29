@@ -275,28 +275,23 @@ class EStalker_Playlists(Screen):
             return portal
 
         if path_prefix == "/stalker_portal/c/":
-            xpcom_urls = [
-                host + "/stalker_portal/c/xpcom.common.js",
-                host + "/c/xpcom.common.js",
-            ]
+            xpcom_url = host + "/stalker_portal/c/xpcom.common.js"
         else:
-            xpcom_urls = [
-                host + "/c/xpcom.common.js",
-                host + "/stalker_portal/c/xpcom.common.js",
-            ]
+            xpcom_url = host + "/c/xpcom.common.js"
 
-        for url in xpcom_urls:
-            try:
-                with http.get(url, headers=headers, timeout=(3, 5), verify=False, stream=True, allow_redirects=True) as r:
-                    r.raise_for_status()
-                    portal_candidate = extract_portal_path_from_stream(r, url)
-                    if portal_candidate:
-                        if not portal_candidate.startswith("/"):
-                            portal_candidate = "/" + portal_candidate
-                        return host + portal_candidate
-            except Exception as e:
-                print("Error checking {}: {}".format(url, e))
-                continue
+        try:
+            # Keep this optional discovery request short. A two-second connect
+            # timeout plus a three-second read timeout gives it a five-second
+            # budget before falling back to the standard portal endpoint.
+            with http.get(xpcom_url, headers=headers, timeout=(2, 3), verify=False, stream=True, allow_redirects=True) as r:
+                r.raise_for_status()
+                portal_candidate = extract_portal_path_from_stream(r, xpcom_url)
+                if portal_candidate:
+                    if not portal_candidate.startswith("/"):
+                        portal_candidate = "/" + portal_candidate
+                    return host + portal_candidate
+        except Exception as e:
+            print("Error checking {}: {}".format(xpcom_url, e))
 
         return host + "/portal.php"
 
