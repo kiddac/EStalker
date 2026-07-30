@@ -10,7 +10,7 @@ import time
 
 # Third-party imports
 import requests
-from requests.adapters import HTTPAdapter, Retry
+from requests.adapters import HTTPAdapter
 
 try:
     from urllib import urlencode
@@ -77,51 +77,54 @@ def get_local_timezone():
     return default_tz
 
 
-def make_request(url, method="GET", headers=None, params=None, response_type=None):
-    with requests.Session() as http:
-        result = None
-        retry = Retry(total=0, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retry)
-        http.mount("http://", adapter)
-        http.mount("https://", adapter)
+def make_request(url, method="GET", headers=None, params=None, response_type=None, http=None):
+    own_session = http is None
 
-        try:
-            if method.upper() == "POST":
-                body = urlencode(params) if params else ""
-                post_headers = headers.copy() if headers else {}
-                if "Content-Type" not in post_headers:
-                    post_headers["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8"
-                r = http.post(url, headers=post_headers, data=body, timeout=10, verify=False, allow_redirects=True)
-            else:
-                if params:
-                    parsed_url = urlparse(url)
-                    existing_params = dict(parse_qsl(parsed_url.query))
-                    merged_params = existing_params.copy()
-                    merged_params.update(params)
-                    query_string = urlencode(merged_params)
-                    url = urlunparse(parsed_url._replace(query=query_string))
-                r = http.get(url, headers=headers, timeout=(5, 10), verify=False, allow_redirects=True)
+    if own_session:
+        http = requests.Session()
 
-            r.raise_for_status()
+    result = None
 
-            if response_type == "json":
+    try:
+        if method.upper() == "POST":
+            body = urlencode(params) if params else ""
+            post_headers = headers.copy() if headers else {}
+
+            if "Content-Type" not in post_headers:
+                post_headers["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8"
+
+            response = http.post(url, headers=post_headers, data=body, timeout=10, verify=False, allow_redirects=True)
+        else:
+            if params:
+                parsed_url = urlparse(url)
+                existing_params = dict(parse_qsl(parsed_url.query))
+                existing_params.update(params)
+                url = urlunparse(parsed_url._replace(query=urlencode(existing_params)))
+
+            response = http.get(url, headers=headers, timeout=(5, 10), verify=False, allow_redirects=True)
+
+        response.raise_for_status()
+
+        if response_type == "json":
+            try:
+                result = response.json()
+            except ValueError:
                 try:
-                    result = r.json()
-                except ValueError:
-                    try:
-                        result = json.loads(r.text)
-                    except:
-                        result = None
-            elif response_type == "text":
-                try:
-                    result = r.text
-                except:
+                    result = json.loads(response.text)
+                except (ValueError, TypeError):
                     result = None
 
-            return result
+        elif response_type == "text":
+            result = response.text
 
-        except Exception:
-            return result
+    except Exception:
+        result = None
+
+    finally:
+        if own_session:
+            http.close()
+
+    return result
 
 
 def xtream_request(url):
@@ -159,7 +162,7 @@ def xtream_request(url):
     return response
 
 
-def perform_handshake(portal, host, mac, headers):
+def perform_handshake(portal, host, mac, headers, http=None):
     handshake_url = "{}?".format(portal)
     body_params = {
         "type": "stb",
@@ -168,7 +171,7 @@ def perform_handshake(portal, host, mac, headers):
         "JsHttpRequest": "1-xml"
     }
 
-    response = make_request(handshake_url, method="GET", headers=headers, params=body_params, response_type="json")
+    response = make_request(handshake_url, method="GET", headers=headers, params=body_params, response_type="json", http=http)
 
     if not response:
         handshake_url = "{}?".format(portal)
@@ -179,7 +182,7 @@ def perform_handshake(portal, host, mac, headers):
             "JsHttpRequest": "1-xml",
             "mac": mac
         }
-        response = make_request(handshake_url, method="GET", headers=headers, params=body_params, response_type="json")
+        response = make_request(handshake_url, method="GET", headers=headers, params=body_params, response_type="json", http=http)
 
     token = None
     token_random = None
@@ -209,7 +212,7 @@ def perform_handshake(portal, host, mac, headers):
                 "prehash": prehash
             }
 
-            response = make_request(handshake_url, method="GET", headers=headers, params=prehash_params, response_type="json")
+            response = make_request(handshake_url, method="GET", headers=headers, params=prehash_params, response_type="json", http=http)
             js_data = response.get("js", {}) if response else {}
 
         token = js_data.get("token")
@@ -229,7 +232,7 @@ def perform_handshake(portal, host, mac, headers):
     return portal, token, token_random, headers
 
 
-def get_profile_data(portal, mac, token, token_random, headers, param_mode):
+def get_profile_data(portal, mac, token, token_random, headers, param_mode, http=None):
 
     profile_params = {}
 
@@ -364,7 +367,7 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
     base_profile_params.update(profile_params)
     profile_params = base_profile_params
 
-    profile_data = make_request(profile_url, method="GET", headers=headers, params=profile_params, response_type="json")
+    profile_data = make_request(profile_url, method="GET", headers=headers, params=profile_params, response_type="json", http=http)
 
     if debugs:
         print("*** profile_data ***", portal, mac, json.dumps(profile_data))
@@ -408,7 +411,7 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode):
             ('timestamp', str(int(timestamp))),
         ])
 
-        profile_data = make_request(profile_url, method="GET", headers=headers, params=fallback_params, response_type="json")
+        profile_data = make_request(profile_url, method="GET", headers=headers, params=fallback_params, response_type="json", http=http)
 
         # print("*** profile_data 2 ***", portal, mac, json.dumps(profile_data))
         if profile_data:
@@ -517,3 +520,49 @@ def clearCaches():
             drop_caches.write("3\n")
     except (IOError, OSError):
         pass
+
+
+def get_account_info(portal, headers, http=None, unknown_value="Unknown"):
+    account_info_url = "{}?".format(portal)
+    account_info_params = {
+        "type": "account_info",
+        "action": "get_main_info",
+        "JsHttpRequest": "1-xml",
+    }
+
+    account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json", http=http)
+
+    if debugs:
+        print("*** account_info ***", account_info)
+
+    if account_info and isinstance(account_info, dict):
+        js_data = account_info.get("js") or {}
+        expiry = js_data.get("phone") or js_data.get("end_date", unknown_value)
+        return expiry, True
+
+    return None, False
+
+
+def reauthorize_portal(portal, host, mac, headers, http=None):
+    own_session = http is None
+
+    if own_session:
+        http = requests.Session()
+
+    try:
+        portal, token, token_random, headers = perform_handshake(portal, host, mac, headers, http=http)
+
+        if not token:
+            return None
+
+        play_token, status, blocked, returned_mac, returned_id = get_profile_data(portal, mac, token, token_random, headers, "full", http=http)
+        expiry, account_valid = get_account_info(portal, headers, http=http)
+
+        if not account_valid:
+            play_token, status, blocked, returned_mac, returned_id = get_profile_data(portal, mac, token, token_random, headers, "basic", http=http)
+
+        return portal, token, token_random, headers, play_token, status, blocked
+
+    finally:
+        if own_session:
+            http.close()

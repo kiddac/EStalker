@@ -68,7 +68,7 @@ from . import _
 from . import estalker_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory
 from .eStaticText import StaticText
-from .utils import get_local_timezone, make_request, perform_handshake, get_profile_data,  _get_current_aspect_ratio, clearCaches
+from .utils import get_local_timezone, make_request, reauthorize_portal, _get_current_aspect_ratio, clearCaches
 
 try:
     from enigma import eAVSwitch
@@ -1034,42 +1034,18 @@ class EStalker_VodPlayer(
 
         return response
 
-    def _get_profile(self, portal, mac, token, token_random, headers, param_mode):
-        return get_profile_data(portal, mac, token, token_random, headers, param_mode)
-
-    def _get_account_info(self, portal, mac, token, token_random, headers):
-        account_info_url = "{}?".format(portal)
-        account_info_params = {
-            "type": "account_info",
-            "action": "get_main_info",
-            "JsHttpRequest": "1-xml",
-        }
-        account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json")
-
-        if account_info and isinstance(account_info, dict):
-            js_data = account_info.get("js") or {}
-            expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
-            return expiry, True
-
-        return None, False
-
     def reauthorize(self):
-        self.portal, self.token, self.token_random, self.headers = perform_handshake(portal=self.portal, host=self.host, mac=self.mac, headers=self.headers)
+        result = reauthorize_portal(self.portal, self.host, self.mac, self.headers)
 
-        if not self.token:
+        if not result:
             return
 
-        play_token, status, blocked, returned_mac, returned_id = self._get_profile(
-            self.portal, self.mac, self.token, self.token_random, self.headers, param_mode="full"
-        )
+        self.portal, self.token, self.token_random, self.headers, play_token, status, blocked = result
 
-        expiry, account_valid = self._get_account_info(self.portal, self.mac, self.token, self.token_random, self.headers)
-
-        if not account_valid:
-            play_token, status, blocked, returned_mac, returned_id = self._get_profile(self.portal, self.mac, self.token, self.token_random, self.headers, "basic")
-
-        glob.active_playlist["playlist_info"]["token"] = self.token
-        glob.active_playlist["playlist_info"]["token_random"] = self.token_random
-        glob.active_playlist["playlist_info"]["play_token"] = play_token
-        glob.active_playlist["playlist_info"]["status"] = status
-        glob.active_playlist["playlist_info"]["blocked"] = blocked
+        glob.active_playlist["playlist_info"].update({
+            "token": self.token,
+            "token_random": self.token_random,
+            "play_token": play_token,
+            "status": status,
+            "blocked": blocked,
+        })

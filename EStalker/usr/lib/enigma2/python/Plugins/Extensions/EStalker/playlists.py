@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time
+from collections import OrderedDict, deque
 
 try:
     from http.client import HTTPConnection
@@ -48,7 +49,7 @@ from . import _
 from . import estalker_globals as glob
 from .plugin import skin_directory, cfg, common_path, version, hasConcurrent, hasMultiprocessing
 from .eStaticText import StaticText
-from .utils import get_local_timezone, make_request, xtream_request, perform_handshake, get_profile_data
+from .utils import get_local_timezone, make_request, xtream_request, perform_handshake, get_profile_data, get_account_info
 from . import processfiles as loadfiles
 
 try:
@@ -232,7 +233,7 @@ class EStalker_Playlists(Screen):
             "Host": "{}:{}".format(domain, port) if port else domain,
             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
             "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "CLose",
+            "Connection": "keep-alive",
             "Referer": referer,
             "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone),
         }
@@ -252,14 +253,11 @@ class EStalker_Playlists(Screen):
             return path_prefix
 
         def try_url(url):
-            # print("*** trying url ***", url)
             try:
-                with http.get(url, headers=headers, timeout=(3, 5), verify=False, allow_redirects=True) as r:
-                    r.raise_for_status()
-                    #  print("*** success ***", url)
+                with http.get(url, headers=headers, timeout=5, verify=False, stream=True, allow_redirects=True) as response:
+                    response.raise_for_status()
                     return True
-            except Exception as e:
-                print("Error checking {}: {}".format(url, e))
+            except Exception:
                 return False
 
         if try_url(primary_url):
@@ -275,58 +273,48 @@ class EStalker_Playlists(Screen):
             return portal
 
         if path_prefix == "/stalker_portal/c/":
-            xpcom_url = host + "/stalker_portal/c/xpcom.common.js"
+            xpcom_urls = [
+                host + "/stalker_portal/c/xpcom.common.js",
+                host + "/c/xpcom.common.js",
+            ]
         else:
-            xpcom_url = host + "/c/xpcom.common.js"
+            xpcom_urls = [
+                host + "/c/xpcom.common.js",
+                host + "/stalker_portal/c/xpcom.common.js",
+            ]
 
-        try:
-            # Keep this optional discovery request short. A two-second connect
-            # timeout plus a three-second read timeout gives it a five-second
-            # budget before falling back to the standard portal endpoint.
-            with http.get(xpcom_url, headers=headers, timeout=(2, 3), verify=False, stream=True, allow_redirects=True) as r:
-                r.raise_for_status()
-                portal_candidate = extract_portal_path_from_stream(r, xpcom_url)
-                if portal_candidate:
-                    if not portal_candidate.startswith("/"):
-                        portal_candidate = "/" + portal_candidate
-                    return host + portal_candidate
-        except Exception as e:
-            print("Error checking {}: {}".format(xpcom_url, e))
+        for url in xpcom_urls:
+            try:
+                with http.get(url, headers=headers, timeout=3, verify=False, stream=True, allow_redirects=True) as response:
+                    response.raise_for_status()
+                    portal_candidate = extract_portal_path_from_stream(response, url)
+
+                    if portal_candidate:
+                        if not portal_candidate.startswith("/"):
+                            portal_candidate = "/" + portal_candidate
+
+                        return host + portal_candidate
+
+            except Exception as e:
+                print("Error checking {}: {}".format(url, e))
 
         return host + "/portal.php"
 
     def _get_portal_version(self, http, host, headers, path_prefix):
-        version_url = host + path_prefix + "version.js"
+        url = host + path_prefix + "version.js"
 
-        vresponse = make_request(version_url, method="GET", headers=headers, params=None, response_type="text")
-        if vresponse:
-            match = re.search(r"ver\s*=\s*['\"]([^'\"]+)['\"]", vresponse)
-            if match:
-                portal_version = match.group(1).strip()
-                return portal_version
+        try:
+            with http.get(url, headers=headers, timeout=3, verify=False, allow_redirects=False) as response:
+                response.raise_for_status()
+                match = re.search(r"ver\s*=\s*['\"]([^'\"]+)['\"]", response.text)
+
+                if match:
+                    return match.group(1).strip()
+
+        except Exception as e:
+            print("Error getting portal version {}: {}".format(url, e))
+
         return ""
-
-    def _do_handshake(self, portal, host, mac, headers):
-        return perform_handshake(portal, host, mac, headers)
-
-    def _get_profile(self, portal, mac, token, token_random, headers, param_mode):
-        return get_profile_data(portal, mac, token, token_random, headers, param_mode)
-
-    def _get_account_info(self, portal, mac, token, token_random, headers):
-        account_info_url = "{}?".format(portal)
-        account_info_params = {
-            "type": "account_info",
-            "action": "get_main_info",
-            "JsHttpRequest": "1-xml",
-        }
-        account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json")
-
-        if account_info and isinstance(account_info, dict):
-            js_data = account_info.get("js") or {}
-            expiry = js_data.get("phone") or js_data.get("end_date", _("Unknown"))
-            return expiry, True
-
-        return None, False
 
     def _format_expiry(self, expiry):
         if expiry == "Unlimited":
@@ -369,143 +357,160 @@ class EStalker_Playlists(Screen):
             portal_version = self._get_portal_version(http, host, headers, path_prefix)
 
             # Stage 4
-            portal, token, token_random, headers = self._do_handshake(portal, host, mac, headers)
+            portal, token, token_random, headers = perform_handshake(portal, host, mac, headers, http=http)
 
             if not token:
                 return index, {"valid": False}
 
             # Stage 5
-            play_token, status, blocked, returned_mac, returned_id = self._get_profile(portal, mac, token, token_random, headers, "full")
+            play_token, status, blocked, returned_mac, returned_id = get_profile_data(portal, mac, token, token_random, headers, "full", http=http)
 
             # Stage 6
-            expiry, account_valid = self._get_account_info(portal, mac, token, token_random, headers)
+            expiry, account_valid = get_account_info(portal, headers, http=http, unknown_value=_("Unknown"))
 
-            if not account_valid:
-                play_token, status, blocked, returned_mac, returned_id = self._get_profile(portal, mac, token, token_random, headers, "basic")
-                expiry, account_valid = self._get_account_info(portal, mac, token, token_random, headers)
+        if not account_valid:
+            play_token, status, blocked, returned_mac, returned_id = self._get_profile(portal, mac, token, token_random, headers, "basic")
+            expiry, account_valid = get_account_info(portal, headers, http=http, unknown_value=_("Unknown"))
 
-            if not account_valid:
-                return index, {"valid": False}
-            else:
+        if not account_valid:
+            return index, {"valid": False}
+        else:
 
-                valid = True
-                if not token:
-                    valid = False
+            valid = True
+            if not token:
+                valid = False
 
-                if str(blocked) == "1":
-                    valid = False
+            if str(blocked) == "1":
+                valid = False
 
-            expiry = self._format_expiry(expiry)
+        expiry = self._format_expiry(expiry)
 
-            return index, {
-                "portal": portal,
-                "version": portal_version,
-                "token": token or "",
-                "token_random": token_random or "",
-                "valid": valid,
-                "expiry": expiry,
-                "play_token": play_token or "",
-                "status": status,
-                "blocked": blocked,
-                "path_prefix": path_prefix,
-                "active_connections": "",
-                "max_connections": "",
-                "headers": headers or ""
-            }
+        return index, {
+            "portal": portal,
+            "version": portal_version,
+            "token": token or "",
+            "token_random": token_random or "",
+            "valid": valid,
+            "expiry": expiry,
+            "play_token": play_token or "",
+            "status": status,
+            "blocked": blocked,
+            "path_prefix": path_prefix,
+            "active_connections": "",
+            "max_connections": "",
+            "headers": headers or ""
+        }
 
     def _get_download_domain(self, url_info):
-        domain = str(url_info[3] or "").strip().lower()
+        domain = str(url_info[3] or "").strip().lower().rstrip(".")
         if domain:
             return domain
 
-        host = str(url_info[2] or "").strip().lower()
+        host = str(url_info[2] or "").strip()
         try:
-            parsed = urlparse(host)
-            return (parsed.hostname or parsed.netloc or host).lower()
+            parsed_host = urlparse(host)
+            domain = parsed_host.hostname or parsed_host.netloc
         except Exception:
-            return host
+            domain = host
 
-    def _group_downloads_by_domain(self):
-        domain_groups = []
-        group_indexes = {}
+        # Keep entries without a parsed domain grouped by their complete host.
+        return str(domain or host).strip().lower().rstrip("/")
 
-        for url_info in self.url_list:
+    def _build_domain_rounds(self):
+        domain_queues = OrderedDict()
+
+        for position, url_info in enumerate(self.url_list):
             domain = self._get_download_domain(url_info)
-            if domain not in group_indexes:
-                group_indexes[domain] = len(domain_groups)
-                domain_groups.append([])
-            domain_groups[group_indexes[domain]].append(url_info)
+            domain_queues.setdefault(domain, deque()).append((position, url_info))
 
-        return domain_groups
+        rounds = []
+        while True:
+            current_round = []
 
-    def _download_domain_group(self, url_group):
-        results = []
+            # Take no more than one download from each domain per round.
+            for domain_queue in domain_queues.values():
+                if domain_queue:
+                    current_round.append(domain_queue.popleft())
 
-        # Entries sharing a domain deliberately run one after another. Some
-        # portals reject or throttle simultaneous handshakes for different MACs.
-        for url_info in url_group:
-            playlist_index = url_info[0]
-            try:
-                results.append(self.download_url(url_info))
-            except Exception as e:
-                print("Error processing playlist {}: {}".format(playlist_index, e))
-                results.append((playlist_index, {"valid": False}))
+            if not current_round:
+                break
 
-        return results
+            rounds.append(current_round)
+
+        return rounds
+
+    def _download_url_safe(self, download_item):
+        position, url_info = download_item
+        try:
+            return position, self.download_url(url_info)
+        except Exception as e:
+            print("Error processing URL {}: {}".format(position, e))
+            return position, (url_info[0], {"valid": False})
+
+    def _process_rounds_sequentially(self, download_rounds, results):
+        for current_round in download_rounds:
+            for download_item in current_round:
+                position = download_item[0]
+                if results[position] is not None:
+                    continue
+
+                result_position, result = self._download_url_safe(download_item)
+                results[result_position] = result
 
     def process_downloads(self):
-        domain_groups = self._group_downloads_by_domain()
-        threads = min(len(domain_groups), 10)
-        results = []
+        max_threads = 30
+        download_rounds = self._build_domain_rounds()
+        domain_count = len(download_rounds[0]) if download_rounds else 0
+        threads = min(domain_count, max_threads)
+        results = [None] * len(self.url_list)
 
-        if hasConcurrent and threads > 1:
+        if hasConcurrent and threads:
             # print("*** hasConcurrent ***")
             try:
                 from concurrent.futures import ThreadPoolExecutor, as_completed
 
                 with ThreadPoolExecutor(max_workers=threads) as executor:
-                    future_to_group = {
-                        executor.submit(self._download_domain_group, url_group): url_group
-                        for url_group in domain_groups
-                    }
+                    for current_round in download_rounds:
+                        future_to_item = {
+                            executor.submit(self.download_url, url_info): (position, url_info)
+                            for position, url_info in current_round
+                        }
 
-                    for future in as_completed(future_to_group):
-                        try:
-                            results.extend(future.result())
-                        except Exception as e:
-                            print("Error processing domain group: {}".format(e))
-                            for url_info in future_to_group[future]:
-                                results.append((url_info[0], {"valid": False}))
+                        # Finish the whole domain round before reusing any domain.
+                        for future in as_completed(future_to_item):
+                            position, url_info = future_to_item[future]
+                            try:
+                                results[position] = future.result()
+                            except Exception as e:
+                                print("Error processing URL {}: {}".format(position, e))
+                                results[position] = (url_info[0], {"valid": False})
 
             except Exception as e:
                 print("Concurrent execution error:", e)
-                results = self._download_domain_group(self.url_list)
+                self._process_rounds_sequentially(download_rounds, results)
 
-        elif hasMultiprocessing and threads > 1:
+        elif hasMultiprocessing and threads:
             # print("*** Multiprocessing ***")
             try:
                 from multiprocessing.pool import ThreadPool
 
                 pool = ThreadPool(threads)
                 try:
-                    grouped_results = list(pool.imap(self._download_domain_group, domain_groups))
-                    results = [
-                        result
-                        for group_result in grouped_results
-                        for result in group_result
-                    ]
+                    for current_round in download_rounds:
+                        # imap completes this round before the next domain item.
+                        for position, result in pool.imap(self._download_url_safe, current_round):
+                            results[position] = result
                 finally:
                     pool.close()
                     pool.join()
 
             except Exception as e:
                 print("Multiprocessing execution error:", e)
-                results = self._download_domain_group(self.url_list)
+                self._process_rounds_sequentially(download_rounds, results)
         else:
             # print("*** fallback sequential ***")
-            results = self._download_domain_group(self.url_list)
+            self._process_rounds_sequentially(download_rounds, results)
 
-        results.sort(key=lambda result: result[0] if result else -1)
         self.update_results(results)
 
     def update_results(self, results):
