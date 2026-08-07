@@ -369,7 +369,7 @@ class EStalker_Playlists(Screen):
             expiry, account_valid = get_account_info(portal, headers, http=http, unknown_value=_("Unknown"))
 
         if not account_valid:
-            play_token, status, blocked, returned_mac, returned_id = self._get_profile(portal, mac, token, token_random, headers, "basic")
+            play_token, status, blocked, returned_mac, returned_id = get_profile_data(portal, mac, token, token_random, headers, "basic")
             expiry, account_valid = get_account_info(portal, headers, http=http, unknown_value=_("Unknown"))
 
         if not account_valid:
