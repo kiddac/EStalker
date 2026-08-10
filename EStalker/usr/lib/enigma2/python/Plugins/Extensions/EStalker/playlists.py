@@ -847,6 +847,8 @@ class EStalker_UserInfo(Screen):
             self.skin = f.read()
 
         self.setup_title = _("User Information")
+        self.playlist_file = cfg.playlist_file.value
+        self.playlists_json = cfg.playlists_json.value
         self.playlists_all = []
 
         self["portalversion"] = Label(_("Unavailable"))
