@@ -10,7 +10,7 @@ import os
 import re
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from itertools import cycle, islice
 
 import hashlib
@@ -319,25 +319,17 @@ class EStalker_Live_Categories(Screen):
         glob.nextlist = []
         glob.nextlist.append({"next_url": next_url, "index": 0, "level": self.level, "sort": self.sortText, "filter": ""})
 
-        self.timer = eTimer()
-
         self.timerImage = eTimer()
         try:
             self.timerImage.callback.append(self.downloadImage)
         except:
             self.timerImage_conn = self.timerImage.timeout.connect(self.downloadImage)
 
-        self.timerrefresh = eTimer()
+        self.timerGetEPG = eTimer()
         try:
-            self.timerrefresh.callback.append(self.updateDisplay)
+            self.timerGetEPG.callback.append(self.getEPG)
         except:
-            self.timerrefresh_conn = self.timerrefresh.timeout.connect(self.updateDisplay)
-
-        self.timerEPGUpdate = eTimer()
-        try:
-            self.timerEPGUpdate.callback.append(self.updateEPGListWithShortEPG)
-        except:
-            self.timerEPGUpdate_conn = self.timerEPGUpdate.timeout.connect(self.updateEPGListWithShortEPG)
+            self.timerGetEPG_conn = self.timerGetEPG.timeout.connect(self.getEPG)
 
         self.onFirstExecBegin.append(self.createSetup)
         self.onLayoutFinish.append(self.__layoutFinished)
@@ -345,21 +337,34 @@ class EStalker_Live_Categories(Screen):
     def __layoutFinished(self):
         self.setTitle(self.setup_title)
 
-    def _stopTimerImage(self):
-        if debugs:
-            print("*** _stopTimerImage ***")
-        # Stop any scheduled timer fire
+    def _stopTimer(self, name):
+        t = getattr(self, name, None)
+        if t:
+            try:
+                t.stop()
+            except:
+                pass
+        if name == "timerImage":
+            try:
+                self._picon_req_id += 1
+            except:
+                self._picon_req_id = 1
+
+    def _cleanupTimer(self, name):
+        t = getattr(self, name, None)
+        if t:
+            try:
+                t.stop()
+            except:
+                pass
+            try:
+                t.callback[:] = []
+            except:
+                pass
         try:
-            if self.timerImage:
-                self.timerImage.stop()
+            setattr(self, name, None)
         except:
             pass
-
-        # Invalidate any in-flight downloadPage callbacks (zap protection)
-        try:
-            self._picon_req_id += 1
-        except:
-            self._picon_req_id = 1
 
     def createSetup(self, data=None):
         if debugs:
@@ -440,10 +445,6 @@ class EStalker_Live_Categories(Screen):
     def getLevel2(self, response):
         if debugs:
             print("*** getLevel2 ***")
-
-        # Rebuilding list2 clears its embedded EPG fields. Cached EPG must be
-        # reapplied once after the page/list has been reconstructed.
-        self.epg_cache_dirty = True
 
         if self.chosen_category == "favourites":
             response = glob.active_playlist["player_info"].get("livefavourites", [])
@@ -552,8 +553,6 @@ class EStalker_Live_Categories(Screen):
             self.firstlist = False
 
         self.buildLists()
-        if self.short_epg_results:
-            self.updateEPGListWithShortEPG()
 
     def downloadApiData(self, url, page=1):
         if debugs:
@@ -615,6 +614,8 @@ class EStalker_Live_Categories(Screen):
         return self.all_data
 
     def _updateUrlPage(self, url, page):
+        if debugs:
+            print("*** _updateUrlPage ***")
         if "p=" in url:
             return re.sub(r"p=\d+", "p=" + str(page), url)
         else:
@@ -831,7 +832,7 @@ class EStalker_Live_Categories(Screen):
                     self["epg_list"].setIndex(current_index)
 
                 if cfg.channelpicons.value:
-                    self._stopTimerImage()
+                    self._stopTimer("timerImage")
                     self.timerImage.start(250, True)
 
                 if self["key_blue"].getText() != _("Reset Search"):
@@ -840,8 +841,8 @@ class EStalker_Live_Categories(Screen):
                         response = self.downloadApiData(glob.nextlist[-1]["next_url"])
                         self.getLevel2(response)
 
-                self.timerrefresh.stop()
-                self.timerrefresh.start(260, True)
+                self._stopTimer("timerGetEPG")
+                self.timerGetEPG.start(260, True)
 
         else:
             position = 0
@@ -855,44 +856,188 @@ class EStalker_Live_Categories(Screen):
             self["key_blue"].setText("")
             self.hideEPG()
 
-    def updateDisplay(self):
-        self.refreshEPGInfo()
+    def getEPG(self):
+        if debugs:
+            print("*** getEPG ***")
 
-        visible_channels = self.getVisibleChannels()
+        # get visible channels
+        current_index = self["main_list"].getIndex()
+        position = current_index + 1
+        page = (position - 1) // self.itemsperpage + 1
+        start = (page - 1) * self.itemsperpage
+        end = start + self.itemsperpage
+
+        channel_list = self.main_list if hasattr(self, "main_list") else []
+        visible_channels = [
+            item[4]
+            for item in channel_list[start:end]
+            if len(item) > 4
+        ]
+
         channels_to_fetch = [ch_id for ch_id in visible_channels if ch_id not in self.epg_downloaded_channels]
 
         if not channels_to_fetch:
-            if self.epg_cache_dirty:
-                self.updateEPGListWithShortEPG()
+            self.updateEPGList()
             return
 
         for ch_id in channels_to_fetch:
             self.epg_downloaded_channels.add(ch_id)
 
         from .getshortepg import EStalker_EPG_Short
-        # EStalker_EPG_Short(channels_to_fetch, done_callback=self.handle_epg_done)
+        EStalker_EPG_Short(channels_to_fetch, done_callback=self.handle_epg_done)
 
-        EStalker_EPG_Short(channels_to_fetch, done_callback=self.handle_epg_done, partial_callback=self.handle_epg_partial)
+    def handle_epg_done(self, epg_data):
+        if debugs:
+            print("*** handle_epg_done ***")
+        if not epg_data or "js" not in epg_data:
+            return
 
-    def handle_epg_partial(self, result):
-        if self._store_short_epg(result.get("js", [])):
-            # Coalesce responses arriving close together into one list rebuild.
-            self.timerEPGUpdate.stop()
-            self.timerEPGUpdate.start(100, True)
-
-    def _store_short_epg(self, entries):
-        grouped_entries = {}
-        for entry in entries:
+        for entry in epg_data["js"]:
             ch_id = str(entry.get("ch_id"))
-            if not ch_id or ch_id == "None":
+            if not ch_id:
                 continue
+            if ch_id not in self.short_epg_results:
+                self.short_epg_results[ch_id] = []
+            self.short_epg_results[ch_id].append(entry)
 
-            grouped_entries.setdefault(ch_id, []).append(entry)
+        if debugs:
+            print("*** self.short_epg_results ***", self.short_epg_results)
+        self.updateEPGList()
 
-        for ch_id, channel_entries in grouped_entries.items():
-            self.short_epg_results[ch_id] = channel_entries
+    def updateEPGList(self):
 
-        return bool(grouped_entries)
+        def extract_main_description(descr):
+            if not descr:
+                return ""
+            descr = descr.replace("\r\n", "\n")
+            match = re.search(r"Description:\s*(.+)", descr, re.DOTALL)
+            if not match:
+                return descr.strip()
+            description = match.group(1)
+            stop_labels = ["Credits:", "Director:", "Producer:", "Actor:", "Category:"]
+            for label in stop_labels:
+                index = description.find(label)
+                if index != -1:
+                    description = description[:index]
+                    break
+            return description.strip()
+
+        now = int(time.time())
+        epgoffset_sec = 0
+
+        for channel in self.list2:
+            epg_channel_id = channel[4]
+
+            if epg_channel_id in self.short_epg_results:
+                events = self.short_epg_results[epg_channel_id]
+
+                for index, entry in enumerate(events):
+                    time_str = entry.get("time", "")
+                    time_to_str = entry.get("time_to", "")
+
+                    if time_str and time_to_str:
+                        try:
+                            dt_start = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                            dt_stop = datetime.strptime(time_to_str, "%Y-%m-%d %H:%M:%S")
+
+                            start = int(time.mktime(dt_start.timetuple())) + epgoffset_sec
+                            stop = int(time.mktime(dt_stop.timetuple())) + epgoffset_sec
+                        except Exception:
+                            start = 0
+                            stop = 0
+                    else:
+                        start = 0
+                        stop = 0
+
+                    next_entry = events[index + 1] if (index + 1) < len(events) else None
+
+                    if start < now and stop > now:
+                        channel[9] = str(time.strftime("%H:%M", time.localtime(start)))
+                        channel[10] = str(entry.get("name", "") or "")
+                        channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
+                        channel[19] = start
+
+                        if next_entry:
+                            next_start_str = next_entry.get("time", "")
+                            try:
+                                dt_next_start = datetime.strptime(next_start_str, "%Y-%m-%d %H:%M:%S")
+                                next_start = int(time.mktime(dt_next_start.timetuple())) + epgoffset_sec
+                            except Exception:
+                                next_start = 0
+
+                            channel[12] = str(time.strftime("%H:%M", time.localtime(next_start)) if next_start else "")
+                            channel[13] = str(next_entry.get("name", "") or "")
+                            channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
+                            channel[20] = next_start
+                        else:
+                            channel[12] = ""
+                            channel[13] = ""
+                            channel[14] = ""
+                            channel[20] = 0
+
+                        break
+
+        self.epglist = [
+            buildEPGListEntry(
+                x[0], x[1], x[9], x[10], x[11],
+                x[12], x[13], x[14], x[18], x[19], x[20]
+            )
+            for x in self.list2 if x[18] is False
+        ]
+
+        self["epg_list"].updateList(self.epglist)
+
+        instance = self["epg_list"].master.master.instance
+        instance.setSelectionEnable(0)
+
+        self.displayEPGDescription()
+
+    def displayEPGDescription(self):
+        if debugs:
+            print("*** displayEPGDescription ***", self["main_list"].getCurrent()[0])
+
+        current_item = self["epg_list"].getCurrent()
+        if not current_item:
+            return
+
+        instance = self["epg_list"].master.master.instance
+        instance.setSelectionEnable(1)
+
+        titlenow = current_item[3]
+        descriptionnow = current_item[4]
+        startnowtime = current_item[2]
+        startnexttime = current_item[5]
+        startnowunixtime = current_item[9]
+        startnextunixtime = current_item[10]
+
+        if titlenow:
+            nowTitle = "{} - {}  {}".format(startnowtime, startnexttime, titlenow)
+            self["key_epg"].setText(_("Next Info"))
+        else:
+            nowTitle = ""
+            self["key_epg"].setText("")
+            instance.setSelectionEnable(0)
+
+        self["x_title"].setText(nowTitle)
+        self["x_description"].setText(descriptionnow)
+
+        percent = 0
+
+        if startnowunixtime and startnextunixtime:
+            self["progress"].show()
+
+            now = int(time.time())
+            total_time = startnextunixtime - startnowunixtime
+            elapsed = now - startnowunixtime
+
+            percent = int(elapsed / total_time * 100) if total_time > 0 else 0
+
+            # Clamp percent between 0 and 100
+            percent = max(0, min(percent, 100))
+
+            self["progress"].setValue(percent)
+        else:
+            self["progress"].hide()
 
     def downloadImage(self):
         if debugs:
@@ -1457,6 +1602,10 @@ class EStalker_Live_Categories(Screen):
         if debugs:
             print("*** next ***")
 
+        self._stopTimer("timerImage")
+        self._stopTimer("timerGetEPG")
+        # self._stopTimer("timerEPGUpdate")
+
         if self["main_list"].getCurrent():
             current_index = self["main_list"].getIndex()
             glob.nextlist[-1]["index"] = current_index
@@ -1635,50 +1784,9 @@ class EStalker_Live_Categories(Screen):
     def reload(self):
         if debugs:
             print("*** reload ***")
-
-        idx = glob.currentchannellistindex
-        position = idx + 1
-        self.current_page = (position - 1) // self.itemsperpage + 1
-
-        glob.nextlist[-1]["index"] = idx
-
-        # The player may have lazily downloaded another 14-channel page.
-        # Copy that state back into this screen before restoring its selection.
-        if glob.originalChannelList2:
-            self.list2 = [list(channel) for channel in glob.originalChannelList2]
-            self.all_data = [
-                {
-                    "name": channel[1],
-                    "id": channel[2],
-                    "logo": channel[3],
-                    "number": channel[5],
-                    "tv_genre_id": channel[6],
-                    "cmd": channel[7],
-                } if channel and len(channel) >= 8 and channel[2] else {}
-                for channel in self.list2
-            ]
-
-        if glob.currentchannellist:
-            self.main_list = glob.currentchannellist[:]
-            self["main_list"].setList(self.main_list)
-
-        if glob.currentepglist:
-            self.epglist = glob.currentepglist[:]
-            self["epg_list"].setList(self.epglist)
-
-        # Set the index BEFORE selectionChanged so pagination calculates correctly
-        self["main_list"].setIndex(idx)
-        self["epg_list"].setIndex(idx)
-
+        self.setIndex()
         self.selectionChanged()
-
-        self.setWatchingIcon(idx)
-
-        # Re-apply index after setWatchingIcon since it calls setList which resets to 0
-        self["main_list"].setIndex(idx)
-        self["epg_list"].setIndex(idx)
-
-        self.downloadImage()
+        self.setWatchingIcon(glob.currentchannellistindex)
 
     def setWatchingIcon(self, idx):
         if debugs:
@@ -1693,9 +1801,15 @@ class EStalker_Live_Categories(Screen):
         except (IndexError, TypeError):
             return
 
-        # Clear all watching flags in list2
+        # Clear all watching flags
         for channel in self.list2:
             channel[17] = False
+
+        # Set watching for currently active channel index
+        try:
+            self.list2[idx][17] = True
+        except:
+            pass
 
         # Set watching flag by stream_id match, not raw index
         for channel in self.list2:
@@ -1736,13 +1850,6 @@ class EStalker_Live_Categories(Screen):
         if debugs:
             print("*** back ***")
 
-        self._stopTimerImage()
-        try:
-            self.timerrefresh.stop()
-            self.timerEPGUpdate.stop()
-        except Exception:
-            pass
-
         self.showfav = False
         self.chosen_category = ""
         self.group_title = ""
@@ -1756,6 +1863,9 @@ class EStalker_Live_Categories(Screen):
 
         if not glob.nextlist:
             self.stopStream()
+            self._cleanupTimer("timerImage")
+            self._cleanupTimer("timerGetEPG")
+            # self._cleanupTimer("timerEPGUpdate")
             self.close()
         else:
             self["x_title"].setText("")
@@ -1871,53 +1981,6 @@ class EStalker_Live_Categories(Screen):
             self["epg_bg"].show()
             self["progress"].show()
 
-    def refreshEPGInfo(self):
-        if debugs:
-            print("*** refreshEPGInfo ***")
-
-        current_item = self["epg_list"].getCurrent()
-        if not current_item:
-            return
-
-        instance = self["epg_list"].master.master.instance
-        instance.setSelectionEnable(1)
-
-        titlenow = current_item[3]
-        descriptionnow = current_item[4]
-        startnowtime = current_item[2]
-        startnexttime = current_item[5]
-        startnowunixtime = current_item[9]
-        startnextunixtime = current_item[10]
-
-        if titlenow:
-            nowTitle = "{} - {}  {}".format(startnowtime, startnexttime, titlenow)
-            self["key_epg"].setText(_("Next Info"))
-        else:
-            nowTitle = ""
-            self["key_epg"].setText("")
-            instance.setSelectionEnable(0)
-
-        self["x_title"].setText(nowTitle)
-        self["x_description"].setText(descriptionnow)
-
-        percent = 0
-
-        if startnowunixtime and startnextunixtime:
-            self["progress"].show()
-
-            now = int(time.time())
-            total_time = startnextunixtime - startnowunixtime
-            elapsed = now - startnowunixtime
-
-            percent = int(elapsed / total_time * 100) if total_time > 0 else 0
-
-            # Clamp percent between 0 and 100
-            percent = max(0, min(percent, 100))
-
-            self["progress"].setValue(percent)
-        else:
-            self["progress"].hide()
-
     def nownext(self):
         if debugs:
             print("*** nownext ***")
@@ -1957,21 +2020,11 @@ class EStalker_Live_Categories(Screen):
                 return datetime.strptime(datetime_str, time_format)
             except ValueError:
                 pass
-        return ""  # Return None if none of the formats match
+        return ""
 
     def shortEPG(self):
         if debugs:
             print("*** shortEPG ***")
-
-        # helper: parse local portal time
-        def parse_epg_time(timestr):
-            if not timestr:
-                return 0
-            try:
-                dt = datetime.strptime(timestr, "%Y-%m-%d %H:%M:%S")
-                return int(time.mktime(dt.timetuple()))
-            except Exception:
-                return 0
 
         if self["main_list"].getCurrent():
             self.showingshortEPG = not self.showingshortEPG
@@ -1986,63 +2039,59 @@ class EStalker_Live_Categories(Screen):
 
                 if self.level == 2:
                     try:
-                        stream_id = str(self["main_list"].getCurrent()[4])
+                        stream_id = self["main_list"].getCurrent()[4]
+                        url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&limit=10&size=10".format(stream_id)
 
-                        url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&limit=10&size=10&JsHttpRequest=1-xml".format(stream_id)
                         response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
 
-                        listings = response.get("js", []) if response else []
+                        listings = []
+
+                        if response:
+                            listings = response.get("js", [])
 
                         if listings:
-                            now_ts = int(time.time())
+                            first_start = listings[0].get("start_timestamp", 0)
+                            first_start_dt = datetime.utcfromtimestamp(first_start)
+
+                            now = datetime.now()
+
                             self.epgshortlist = []
                             duplicatecheck = []
 
                             for index, listing in enumerate(listings):
                                 try:
-                                    # USE STRING TIMES INSTEAD OF UTC TIMESTAMPS
-                                    start_ts = parse_epg_time(listing.get("time"))
-                                    stop_ts = parse_epg_time(listing.get("time_to"))
-
-                                    if not start_ts or not stop_ts:
-                                        continue
-
-                                    # skip past events
-                                    if stop_ts < now_ts:
-                                        continue
-
-                                    start_datetime = datetime.fromtimestamp(start_ts)
-                                    end_datetime = datetime.fromtimestamp(stop_ts)
-
                                     title = listing.get("name", "")
                                     description = listing.get("descr", "")
+                                    t_time = listing.get("t_time")
+                                    t_time_to = listing.get("t_time_to")
+
+                                    if not t_time or not t_time_to:
+                                        continue
+
+                                    # Build datetime objects using the date from first_start_dt and t_time fields
+                                    date_base = first_start_dt.date()
+                                    start_datetime = datetime.strptime("{} {}".format(date_base, t_time), "%Y-%m-%d %H:%M")
+                                    end_datetime = datetime.strptime("{} {}".format(date_base, t_time_to), "%Y-%m-%d %H:%M")
+
+                                    # If t_time_to is before t_time, assume it passes midnight
+                                    if end_datetime < start_datetime:
+                                        end_datetime += timedelta(days=1)
 
                                     epg_date_all = start_datetime.strftime("%a %d/%m")
-                                    epg_time_all = "{} - {}".format(
-                                        start_datetime.strftime("%H:%M"),
-                                        end_datetime.strftime("%H:%M")
-                                    )
+                                    epg_time_all = "{} - {}".format(start_datetime.strftime("%H:%M"), end_datetime.strftime("%H:%M"))
 
-                                    if [epg_date_all, epg_time_all] not in duplicatecheck:
+                                    if [epg_date_all, epg_time_all] not in duplicatecheck and end_datetime >= now:
                                         duplicatecheck.append([epg_date_all, epg_time_all])
-
                                         self.epgshortlist.append(buildShortEPGListEntry(
-                                            str(epg_date_all),
-                                            str(epg_time_all),
-                                            str(title),
-                                            str(description),
-                                            index,
-                                            start_datetime,
-                                            end_datetime,
-                                            start_ts,
-                                            stop_ts
+                                            str(epg_date_all), str(epg_time_all), str(title), str(description),
+                                            index, start_datetime, end_datetime,
+                                            int(start_datetime.strftime("%s")), int(end_datetime.strftime("%s"))
                                         ))
 
                                 except Exception as e:
-                                    print("Error processing short EPG entry: {}".format(e))
+                                    print("Error processing short EPG entry using t_time:", e)
 
                             self["epg_short_list"].setList(self.epgshortlist)
-
                             instance = self["epg_short_list"].master.master.instance
                             instance.setSelectionEnable(1)
 
@@ -2058,7 +2107,6 @@ class EStalker_Live_Categories(Screen):
 
                     except Exception as e:
                         print("Error fetching short EPG:", e)
-
             else:
                 self["epg_short_list"].setList([])
                 self.selectedlist = self["main_list"]
@@ -2074,149 +2122,6 @@ class EStalker_Live_Categories(Screen):
             timeall = str(self["epg_short_list"].getCurrent()[2])
             self["x_title"].setText(timeall + " " + title)
             self["x_description"].setText(description)
-
-    def getVisibleChannels(self):
-        current_index = self["main_list"].getIndex()
-        position = current_index + 1
-        page = (position - 1) // self.itemsperpage + 1
-        start = (page - 1) * self.itemsperpage
-        end = start + self.itemsperpage
-        channel_list = self.main_list if hasattr(self, 'main_list') else []
-
-        visible_ids = []
-        seen_ids = set()
-        for item in channel_list[start:end]:
-            if len(item) <= 4 or not item[4]:
-                continue
-            ch_id = str(item[4])
-            if ch_id not in seen_ids:
-                seen_ids.add(ch_id)
-                visible_ids.append(ch_id)
-        return visible_ids
-
-    def handle_epg_done(self, epg_data):
-        if not epg_data:
-            return
-
-        for ch_id in epg_data.get("failed_ids", []):
-            self.epg_downloaded_channels.discard(str(ch_id))
-
-        if self._store_short_epg(epg_data.get("js", [])):
-            self.timerEPGUpdate.stop()
-            self.updateEPGListWithShortEPG()
-
-    def updateEPGListWithShortEPG(self):
-
-        def extract_main_description(descr):
-            if not descr:
-                return ""
-            descr = descr.replace("\r\n", "\n")
-            match = re.search(r"Description:\s*(.+)", descr, re.DOTALL)
-            if not match:
-                return descr.strip()
-            description = match.group(1)
-            stop_labels = ["Credits:", "Director:", "Producer:", "Actor:", "Category:"]
-            for label in stop_labels:
-                index = description.find(label)
-                if index != -1:
-                    description = description[:index]
-                    break
-            return description.strip()
-
-        # NEW: convert portal local time string → local timestamp
-        def parse_epg_time(timestr):
-            if not timestr:
-                return 0
-            try:
-                dt = datetime.strptime(timestr, "%Y-%m-%d %H:%M:%S")
-                return int(time.mktime(dt.timetuple()))
-            except Exception:
-                return 0
-
-        """
-        if not hasattr(self, 'epg_cache') or not self.epg_cache:
-            return
-            """
-
-        now = int(time.time())
-
-        for channel in self.list2:
-            epg_channel_id = str(channel[4])
-
-            """
-            if epg_channel_id not in self.epg_cache:
-                continue
-                """
-
-            # events = self.epg_cache[epg_channel_id]
-
-            if epg_channel_id not in self.short_epg_results:
-                continue
-
-            events = self.short_epg_results[epg_channel_id]
-
-            for index, entry in enumerate(events):
-
-                # CHANGED: use parsed local times instead of UTC timestamps
-                start = parse_epg_time(entry.get("time"))
-                stop = parse_epg_time(entry.get("time_to"))
-
-                if not start or not stop:
-                    continue
-
-                if start < now and stop > now:
-                    channel[9] = str(entry.get("t_time") or time.strftime("%H:%M", time.localtime(start)))
-                    channel[10] = str(entry.get("name", "") or "")
-                    channel[11] = str(extract_main_description(entry.get("descr", "") or ""))
-                    channel[19] = start
-
-                    next_entry = events[index + 1] if (index + 1) < len(events) else None
-                    if next_entry:
-                        next_start = parse_epg_time(next_entry.get("time"))
-
-                        channel[12] = str(next_entry.get("t_time") or (time.strftime("%H:%M", time.localtime(next_start)) if next_start else ""))
-                        channel[13] = str(next_entry.get("name", "") or "")
-                        channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
-                        channel[20] = next_start
-                    else:
-                        channel[12] = ""
-                        channel[13] = ""
-                        channel[14] = ""
-                        channel[20] = 0
-                    break
-
-                else:
-                    if start > now:
-                        next_entry = events[index] if index < len(events) else None
-                        if next_entry:
-                            next_start = parse_epg_time(next_entry.get("time"))
-
-                            channel[12] = str(next_entry.get("t_time") or (time.strftime("%H:%M", time.localtime(next_start)) if next_start else ""))
-                            channel[13] = str(next_entry.get("name", "") or "")
-                            channel[14] = str(extract_main_description(next_entry.get("descr", "") or ""))
-                            channel[20] = next_start
-                        else:
-                            channel[12] = ""
-                            channel[13] = ""
-                            channel[14] = ""
-                            channel[20] = 0
-                        break
-
-        self.epglist = [
-            buildEPGListEntry(
-                x[0], x[1], x[9], x[10], x[11],
-                x[12], x[13], x[14], x[18], x[19], x[20]
-            )
-            for x in self.list2 if x[18] is False
-        ]
-
-        self["epg_list"].updateList(self.epglist)
-        self.epg_cache_dirty = False
-
-        instance = self["epg_list"].master.master.instance
-        instance.setSelectionEnable(0)
-
-        self.refreshEPGInfo()
 
 
 def buildEPGListEntry(index, title, epgNowTime, epgNowTitle, epgNowDesc, epgNextTime, epgNextTitle, epgNextDesc, hidden, epgNowUnixTime, epgNextUnixTime):
