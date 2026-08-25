@@ -54,6 +54,7 @@ from . import estalker_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory, debugs, isDreambox
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, reauthorize_portal
+from .getshortepg import EStalker_EPG_Short
 
 # HTTPS twisted client hack
 try:
@@ -214,6 +215,7 @@ class EStalker_Live_Categories(Screen):
         self.portal = glob.active_playlist["playlist_info"].get("portal", None)
         self.portal_version = glob.active_playlist["playlist_info"].get("version", "5.3.1")
         self.path_prefix = glob.active_playlist["playlist_info"].get("path_prefix", "")
+        self.force_ch_link_check = glob.active_playlist["playlist_info"].get("force_ch_link_check", "0")
 
         self.referer = self.host + self.path_prefix + "index.html"
 
@@ -232,31 +234,29 @@ class EStalker_Live_Categories(Screen):
         # self.prehash = hashlib.sha1((self.sn + self.mac).encode()).hexdigest()
         # prehash = 0
 
-        self.headers = {
-            "Pragma": "no-cache",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "Close",
-            "Referer": self.referer,
-        }
+        saved_headers = glob.active_playlist["playlist_info"].get("headers", {})
+        self.headers = saved_headers.copy() if isinstance(saved_headers, dict) else {}
 
-        if self.portal and "/stalker_portal/" in self.portal:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
-            }
-        else:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
-            }
+        # Compatibility fallback for playlists saved before authenticated
+        # xpcom-derived headers were persisted.
+        if not self.headers:
+            cookie = "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
+            if self.portal and "/stalker_portal/" in self.portal:
+                cookie += "; adid={}".format(self.adid)
 
-        self.headers.update(host_headers)
+            self.headers = {
+                "Pragma": "no-cache",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
+                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                "X-User-Agent": "Model: MAG250; Link: WiFi",
+                "Connection": "Close",
+                "Referer": self.referer,
+                "Cookie": cookie,
+            }
 
         self.headers["Authorization"] = "Bearer " + self.token
-
-        self.retry = False
 
         self.sortby = "number"
 
@@ -452,11 +452,12 @@ class EStalker_Live_Categories(Screen):
             response = glob.active_playlist["player_info"].get("liverecents", [])
 
         self.list2 = []
+        glob.live_link_metadata = {}
 
         if response:
             for index, channel in enumerate(response):
                 if not isinstance(channel, dict) or not channel:
-                    self.list2.append([index, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", False, False, False, None, None])
+                    self.list2.append([index, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", False, False, False, None, None, {}])
                     continue
 
                 stream_id = str(channel.get("id", ""))
@@ -488,6 +489,13 @@ class EStalker_Live_Categories(Screen):
 
                 epg_channel_id = str(channel.get("id", ""))
                 category_id = str(channel.get("tv_genre_id", ""))
+                link_metadata = {
+                    "available": any(key in channel for key in ("use_http_tmp_link", "use_load_balancing", "disable_ad")),
+                    "use_http_tmp_link": channel.get("use_http_tmp_link", "0"),
+                    "use_load_balancing": channel.get("use_load_balancing", "0"),
+                    "disable_ad": channel.get("disable_ad", "0"),
+                }
+                glob.live_link_metadata[str(stream_id)] = link_metadata
                 service_ref = ""
                 next_url = ""
                 favourite = False
@@ -522,6 +530,7 @@ class EStalker_Live_Categories(Screen):
                 18 = hidden
                 19 = nowunixtime
                 20 = nextunixtime
+                21 = link metadata used by create_link
                 """
 
                 self.list2.append([
@@ -545,7 +554,8 @@ class EStalker_Live_Categories(Screen):
                     False,
                     hidden,
                     None,
-                    None
+                    None,
+                    link_metadata
                 ])
 
         if self.firstlist:
@@ -573,8 +583,7 @@ class EStalker_Live_Categories(Screen):
         try:
             data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
-            if not data and self.retry is False:
-                self.retry = True
+            if not data:
                 self.reauthorize()
                 data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
@@ -622,19 +631,18 @@ class EStalker_Live_Categories(Screen):
             sep = "&" if "?" in url else "?"
             return url + sep + "p=" + str(page)
 
-    def createLink(self, url):
+    def createLink(self, url, params):
         if debugs:
             print("*** createLink ***", url)
 
-        response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+        response = make_request(url, method="GET", headers=self.headers, params=params, response_type="json")
 
         if debugs:
             print("*** createlink response ***", response)
 
-        if not response and self.retry is False:
-            self.retry = True
+        if not response:
             self.reauthorize()
-            response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+            response = make_request(url, method="GET", headers=self.headers, params=params, response_type="json")
             if debugs:
                 print("*** createlink response 2 ***", response)
 
@@ -652,12 +660,34 @@ class EStalker_Live_Categories(Screen):
         self.portal, self.token, self.token_random, self.headers, play_token, status, blocked = result
 
         glob.active_playlist["playlist_info"].update({
+            "portal": self.portal,
             "token": self.token,
             "token_random": self.token_random,
+            "headers": self.headers,
             "play_token": play_token,
             "status": status,
             "blocked": blocked,
         })
+
+        # Persist the refreshed bearer token and token cookie so subsequent
+        # screens do not reopen with stale authentication data.
+        try:
+            with open(self.playlists_json, "r") as f:
+                playlists_all = json.load(f)
+
+            for index, playlist in enumerate(playlists_all):
+                playlist_info = playlist.get("playlist_info", {})
+                if (
+                    playlist_info.get("domain") == glob.active_playlist["playlist_info"].get("domain")
+                    and playlist_info.get("mac") == glob.active_playlist["playlist_info"].get("mac")
+                ):
+                    playlists_all[index] = glob.active_playlist
+                    break
+
+            with open(self.playlists_json, "w") as f:
+                json.dump(playlists_all, f, indent=4)
+        except (IOError, OSError, ValueError, TypeError):
+            pass
 
     def buildList1(self):
         if debugs:
@@ -883,7 +913,6 @@ class EStalker_Live_Categories(Screen):
         for ch_id in channels_to_fetch:
             self.epg_downloaded_channels.add(ch_id)
 
-        from .getshortepg import EStalker_EPG_Short
         EStalker_EPG_Short(channels_to_fetch, done_callback=self.handle_epg_done)
 
     def handle_epg_done(self, epg_data):
@@ -1063,6 +1092,10 @@ class EStalker_Live_Categories(Screen):
             desc_image = self["main_list"].getCurrent()[5]
         except:
             desc_image = ""
+
+        # Category rows use this position for their numeric sort value. A
+        # delayed image timer can fire just after returning from the player.
+        desc_image = str(desc_image or "")
 
         if not desc_image or str(desc_image).lower() == "n/a":
             self.loadDefaultImage()
@@ -1312,8 +1345,8 @@ class EStalker_Live_Categories(Screen):
             self.current_page = 1
 
             if self.list2:
-                glob.nextlist[-1]["next_url"] = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(
-                    self.portal, self.current_category, self.sortby
+                glob.nextlist[-1]["next_url"] = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&force_ch_link_check={3}&JsHttpRequest=1-xml".format(
+                    self.portal, self.current_category, self.sortby, self.force_ch_link_check
                 )
                 response = self.downloadApiData(glob.nextlist[-1]["next_url"])
                 self.getLevel2(response)
@@ -1407,7 +1440,7 @@ class EStalker_Live_Categories(Screen):
             self.current_page = 1
 
             if self.list2:
-                glob.nextlist[-1]["next_url"] = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(self.portal, self.current_category, self.sortby)
+                glob.nextlist[-1]["next_url"] = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&force_ch_link_check={3}&JsHttpRequest=1-xml".format(self.portal, self.current_category, self.sortby, self.force_ch_link_check)
                 response = self.downloadApiData(glob.nextlist[-1]["next_url"])
                 self.getLevel2(response)
 
@@ -1622,7 +1655,7 @@ class EStalker_Live_Categories(Screen):
                     self.sortby = "number"
                     self.current_category = category_id
 
-                    next_url = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&JsHttpRequest=1-xml".format(self.portal, category_id, self.sortby)
+                    next_url = "{0}?type=itv&action=get_ordered_list&genre={1}&sortby={2}&p=1&force_ch_link_check={3}&JsHttpRequest=1-xml".format(self.portal, category_id, self.sortby, self.force_ch_link_check)
                     self.chosen_category = ""
 
                     if self.showfav:
@@ -1663,18 +1696,68 @@ class EStalker_Live_Categories(Screen):
                         print("*** original command **", command)
 
                     if isinstance(command, str):
-                        if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
-                            url = "{0}?type=itv&action=create_link&cmd={1}&series=0&forced_storage=0&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
-                            self.retry = False
-                            response = self.createLink(url)
-                            next_url = ""
+                        link_metadata = {}
+                        for channel in self.list2:
+                            if str(channel[2]) == str(stream_id):
+                                if len(channel) > 21 and isinstance(channel[21], dict):
+                                    link_metadata = channel[21]
+                                break
 
-                            if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                                next_url = str(response["js"]["cmd"])
+                        use_http_tmp_link = str(link_metadata.get("use_http_tmp_link", "0")).lower() in ("1", "true", "yes")
+                        use_load_balancing = str(link_metadata.get("use_load_balancing", "0")).lower() in ("1", "true", "yes")
+                        disable_ad = str(link_metadata.get("disable_ad", "0")).lower() in ("1", "true", "yes")
+                        force_ch_link_check = str(self.force_ch_link_check).lower() in ("1", "true", "yes")
+
+                        # Old saved favourites do not contain the channel link
+                        # flags. Keep their previous command-based behaviour as
+                        # a compatibility fallback only.
+                        if link_metadata.get("available"):
+                            create_link_required = use_http_tmp_link or use_load_balancing or force_ch_link_check
+                        else:
+                            create_link_required = (
+                                force_ch_link_check
+                                or "localhost" in command
+                                or "///" in command
+                                or "/ch/" in command
+                                or "http" not in command
+                            )
+
+                        if create_link_required:
+                            params = {
+                                "type": "itv",
+                                "action": "create_link",
+                                "cmd": command,
+                                "series": "0",
+                                "forced_storage": "0",
+                                "disable_ad": "1" if disable_ad else "0",
+                                "download": "0",
+                                "force_ch_link_check": "1" if force_ch_link_check else "0",
+                                "JsHttpRequest": "1-xml",
+                            }
+                            response = self.createLink(self.portal, params)
+                            next_url = ""
+                            link_error = ""
+
+                            if isinstance(response, dict):
+                                link_data = response.get("js", {})
+                                if isinstance(link_data, dict):
+                                    next_url = str(link_data.get("cmd", ""))
+                                    link_error = str(link_data.get("error", ""))
+
+                            if not next_url:
+                                error_messages = {
+                                    "limit": _("Maximum number of connections reached."),
+                                    "nothing_to_play": _("Nothing to play."),
+                                    "link_fault": _("Server error or invalid link."),
+                                }
+                                message = error_messages.get(link_error, _("Server error or invalid link."))
+                                self.session.open(MessageBox, message, MessageBox.TYPE_ERROR, timeout=3)
+                                return
                         else:
                             next_url = command
 
                     if isinstance(next_url, str):
+                        next_url = re.sub(r"%mac%", self.mac, next_url, flags=re.IGNORECASE)
                         parts = next_url.split(None, 1)
                         if len(parts) == 2:
                             next_url = parts[1].lstrip()
@@ -1932,7 +2015,10 @@ class EStalker_Live_Categories(Screen):
                 "xmltv_id": self.list2[current_index][4],
                 "number": self.list2[current_index][5],
                 "tv_genre_id": self.list2[current_index][6],
-                "cmd": self.list2[current_index][7]
+                "cmd": self.list2[current_index][7],
+                "use_http_tmp_link": self.list2[current_index][21].get("use_http_tmp_link", "0") if len(self.list2[current_index]) > 21 else "0",
+                "use_load_balancing": self.list2[current_index][21].get("use_load_balancing", "0") if len(self.list2[current_index]) > 21 else "0",
+                "disable_ad": self.list2[current_index][21].get("disable_ad", "0") if len(self.list2[current_index]) > 21 else "0",
             }
 
             glob.active_playlist["player_info"]["livefavourites"].insert(0, newfavourite)
@@ -2040,9 +2126,12 @@ class EStalker_Live_Categories(Screen):
                 if self.level == 2:
                     try:
                         stream_id = self["main_list"].getCurrent()[4]
-                        url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&limit=10&size=10".format(stream_id)
-
+                        url = self.portal + "?type=itv&action=get_short_epg&ch_id={}&size=10&JsHttpRequest=1-xml".format(stream_id)
                         response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+
+                        if not response:
+                            self.reauthorize()
+                            response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
 
                         listings = []
 

@@ -216,31 +216,27 @@ class EStalker_Vod_Categories(Screen):
         encoded_mac = quote(self.mac, safe='')
         encoded_timezone = quote(self.timezone, safe='')
 
-        self.headers = {
-            "Pragma": "no-cache",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "Close",
-            "Referer": self.referer,
-        }
+        saved_headers = glob.active_playlist["playlist_info"].get("headers", {})
+        self.headers = saved_headers.copy() if isinstance(saved_headers, dict) else {}
 
-        if self.portal and "/stalker_portal/" in self.portal:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
-            }
-        else:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
-            }
+        if not self.headers:
+            cookie = "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
+            if self.portal and "/stalker_portal/" in self.portal:
+                cookie += "; adid={}".format(self.adid)
 
-        self.headers.update(host_headers)
+            self.headers = {
+                "Pragma": "no-cache",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
+                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                "X-User-Agent": "Model: MAG250; Link: WiFi",
+                "Connection": "Close",
+                "Referer": self.referer,
+                "Cookie": cookie,
+            }
 
         self.headers["Authorization"] = "Bearer " + self.token
-
-        self.retry = False
 
         self.apitoken = "ZUp6enk4cko4ZzBKTlBMTFNxN3djd25MOHEzeU5Zak1Bdkd6S3lPTmdqSjhxeUxMSTBNOFRhUGNBMjBCVmxBTzlBPT0K"
 
@@ -674,7 +670,7 @@ class EStalker_Vod_Categories(Screen):
         if response:
             for index, channel in enumerate(response):
                 if not isinstance(channel, dict) or not channel:
-                    self.list2.append([index, "", "", "", "", "", "", False, "", "", False, "", "", "", "", "", "", "", ""])
+                    self.list2.append([index, "", "", "", "", "", "", False, "", "", False, "", "", "", "", "", "", "", "", "", {}])
                     continue
 
                 stream_id = str(channel.get("id", ""))
@@ -732,6 +728,12 @@ class EStalker_Vod_Categories(Screen):
                 tmdb = ""
                 trailer = ""
                 next_url = ""
+                link_metadata = {
+                    "protocol": str(channel.get("protocol", "")),
+                    "forced_storage": channel.get("forced_storage", ""),
+                    "disable_ad": channel.get("disable_ad", "0"),
+                    "download": channel.get("download", "0"),
+                }
 
                 favourite = False
 
@@ -781,7 +783,8 @@ class EStalker_Vod_Categories(Screen):
                     "",
                     "",
                     "",
-                    ""
+                    "",
+                    link_metadata
                 ])
 
         if self.firstlist:
@@ -806,8 +809,7 @@ class EStalker_Vod_Categories(Screen):
         try:
             data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
-            if not data and self.retry is False:
-                self.retry = True
+            if not data:
                 self.reauthorize()
                 data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
@@ -850,19 +852,18 @@ class EStalker_Vod_Categories(Screen):
             sep = "&" if "?" in url else "?"
             return url + sep + "p=" + str(page)
 
-    def createLink(self, url):
+    def createLink(self, url, params):
         if debugs:
             print("*** createLink ***", url)
 
-        response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+        response = make_request(url, method="GET", headers=self.headers, params=params, response_type="json")
 
         if debugs:
             print("*** createlink response ***", response)
 
-        if not response and self.retry is False:
-            self.retry = True
+        if not response:
             self.reauthorize()
-            response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+            response = make_request(url, method="GET", headers=self.headers, params=params, response_type="json")
             if debugs:
                 print("*** createlink response 2 ***", response)
 
@@ -880,12 +881,32 @@ class EStalker_Vod_Categories(Screen):
         self.portal, self.token, self.token_random, self.headers, play_token, status, blocked = result
 
         glob.active_playlist["playlist_info"].update({
+            "portal": self.portal,
             "token": self.token,
             "token_random": self.token_random,
+            "headers": self.headers,
             "play_token": play_token,
             "status": status,
             "blocked": blocked,
         })
+
+        try:
+            with open(self.playlists_json, "r") as f:
+                playlists_all = json.load(f)
+
+            for index, playlist in enumerate(playlists_all):
+                playlist_info = playlist.get("playlist_info", {})
+                if (
+                    playlist_info.get("domain") == glob.active_playlist["playlist_info"].get("domain")
+                    and playlist_info.get("mac") == glob.active_playlist["playlist_info"].get("mac")
+                ):
+                    playlists_all[index] = glob.active_playlist
+                    break
+
+            with open(self.playlists_json, "w") as f:
+                json.dump(playlists_all, f, indent=4)
+        except (IOError, OSError, ValueError, TypeError):
+            pass
 
     def buildCategories(self):
         if debugs:
@@ -987,7 +1008,7 @@ class EStalker_Vod_Categories(Screen):
                     self.current_page = page
 
                     if self["key_blue"].getText() == _("Reset Search"):
-                        search_url = "{0}?type=vod&action=get_ordered_list&search={1}&genre=*&sortby=number&JsHttpRequest=1-xml".format(self.portal, self.query)
+                        search_url = "{0}?type=vod&action=get_ordered_list&search={1}&genre=*&sortby=number&JsHttpRequest=1-xml".format(self.portal, quote(self.query, safe=""))
                         response = self.downloadApiData(search_url)
                     else:
                         response = self.downloadApiData(glob.nextlist[-1]["next_url"])
@@ -2268,7 +2289,7 @@ class EStalker_Vod_Categories(Screen):
 
                 self.query = quote_plus(result.encode('utf-8'))
 
-                paged_url = "{0}?type=vod&action=get_ordered_list&search={1}&genre=*&sortby=name&JsHttpRequest=1-xml".format(self.portal, self.query)
+                paged_url = "{0}?type=vod&action=get_ordered_list&search={1}&genre=*&sortby=name&JsHttpRequest=1-xml".format(self.portal, quote(self.query, safe=""))
 
                 response = self.downloadApiData(paged_url)
 
@@ -2404,39 +2425,97 @@ class EStalker_Vod_Categories(Screen):
                     if debugs:
                         print("*** original command **", command)
 
-                    if str(command).startswith("/media/"):
-                        pre_vod_url = (str(self.portal) + "?type=vod&action=get_ordered_list&movie_id={}&category=1&sortby=&p=1&JsHttpRequest=1-xml").format(stream_id)
+                    link_metadata = {}
+                    for item in self.list2:
+                        if str(item[2]) == str(stream_id):
+                            if len(item) > 20 and isinstance(item[20], dict):
+                                link_metadata = item[20]
+                            break
 
-                        pre_response = make_request(pre_vod_url, method="GET", headers=self.headers, params=None, response_type="json")
-
-                        movie_id = None
-
-                        js_data = pre_response.get("js", {}).get("data", [])
-
-                        if isinstance(js_data, list) and len(js_data) > 0:
-                            movie_id = js_data[0].get("id")
-                        if movie_id:
-                            # Extract the file extension from the original command
-                            ext = ""
-                            if "." in command:
-                                ext = command[command.rfind("."):]
-
-                            command = "/media/file_{}{}".format(movie_id, ext)
-
+                    storage_id = ""
                     if isinstance(command, str):
-                        if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
-                            url = "{0}?type=vod&action=create_link&cmd={1}&series=&forced_storage=&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
-                            self.retry = False
-                            response = self.createLink(url)
+                        # Some Stalker portals return a generic /media/<id> command
+                        # in the VOD listing. Resolve the movie again and use the
+                        # /media/file_<id> form expected by create_link.
+                        if command.startswith("/media/"):
+                            media_params = {
+                                "type": "vod",
+                                "action": "get_ordered_list",
+                                "movie_id": str(stream_id),
+                                "category": "1",
+                                "sortby": "",
+                                "p": "1",
+                                "JsHttpRequest": "1-xml",
+                            }
+                            media_response = make_request(
+                                self.portal,
+                                method="GET",
+                                headers=self.headers,
+                                params=media_params,
+                                response_type="json"
+                            )
+                            if not media_response:
+                                self.reauthorize()
+                                media_response = make_request(
+                                    self.portal,
+                                    method="GET",
+                                    headers=self.headers,
+                                    params=media_params,
+                                    response_type="json"
+                                )
+
+                            media_js = media_response.get("js", {}) if isinstance(media_response, dict) else {}
+                            media_items = media_js.get("data", []) if isinstance(media_js, dict) else media_js
+                            if isinstance(media_items, list) and media_items:
+                                media_item = media_items[0] if isinstance(media_items[0], dict) else {}
+                                media_id = media_item.get("id")
+                                if media_id:
+                                    extension = os.path.splitext(command)[1]
+                                    command = "/media/file_{}{}".format(media_id, extension)
+
+                        create_link_required = "://" not in command or link_metadata.get("protocol") == "custom"
+                        if create_link_required:
+                            params = {
+                                "type": "vod",
+                                "action": "create_link",
+                                "cmd": command,
+                                "series": "",
+                                "forced_storage": link_metadata.get("forced_storage", ""),
+                                "disable_ad": link_metadata.get("disable_ad", "0"),
+                                "download": link_metadata.get("download", "0"),
+                                "force_ch_link_check": "0",
+                                "JsHttpRequest": "1-xml",
+                            }
+                            response = self.createLink(self.portal, params)
                             next_url = ""
+                            link_error = ""
+                            link_data = response.get("js", {}) if isinstance(response, dict) else {}
 
-                            if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                                next_url = str(response["js"]["cmd"])
+                            if isinstance(link_data, list):
+                                for candidate in link_data:
+                                    if isinstance(candidate, dict) and candidate.get("type") != "ad" and candidate.get("cmd"):
+                                        next_url = str(candidate.get("cmd"))
+                                        storage_id = str(candidate.get("storage_id", ""))
+                                        break
+                            elif isinstance(link_data, dict):
+                                next_url = str(link_data.get("cmd", ""))
+                                storage_id = str(link_data.get("storage_id", ""))
+                                link_error = str(link_data.get("error", ""))
 
+                            if not next_url:
+                                error_messages = {
+                                    "limit": _("Maximum number of connections reached."),
+                                    "nothing_to_play": _("Nothing to play."),
+                                    "link_fault": _("Server error or invalid link."),
+                                    "access_denied": _("Access denied."),
+                                }
+                                self.session.open(MessageBox, error_messages.get(link_error, _("Server error or invalid link.")), MessageBox.TYPE_ERROR, timeout=3)
+                                return
                         else:
                             next_url = command
 
                     if isinstance(next_url, str):
+                        next_url = re.sub(r"%mac%", self.mac, next_url, flags=re.IGNORECASE)
                         parts = next_url.split(None, 1)
                         if len(parts) == 2:
                             next_url = parts[1].lstrip()
@@ -2453,7 +2532,7 @@ class EStalker_Vod_Categories(Screen):
 
                     self.reference = eServiceReference(int(streamtype), 0, str(next_url))
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
-                    self.session.openWithCallback(self.setIndex, vodplayer.EStalker_VodPlayer, str(next_url), str(streamtype), stream_id)
+                    self.session.openWithCallback(self.setIndex, vodplayer.EStalker_VodPlayer, str(next_url), str(streamtype), stream_id, storage_id, link_metadata)
 
                 else:
                     self.createSetup()
@@ -2507,7 +2586,7 @@ class EStalker_Vod_Categories(Screen):
             current_list = self.list1 if self.level == 1 else self.list2
             if self.level == 1 or (self.level == 2 and self.chosen_category != "favourites"):
                 self.do_sort = True
-                self.session.openWithCallback(self.setIndex, hidden.EStalker_HiddenCategories, "vod", current_list, self.level)
+                self.session.openWithCallback(self.createSetup, hidden.EStalker_HiddenCategories, "vod", current_list, self.level)
 
     def clearWatched(self):
         if debugs:
@@ -2587,12 +2666,18 @@ class EStalker_Vod_Categories(Screen):
             newfavourite = {
                 "name": self.list2[current_index][1],
                 "id": self.list2[current_index][2],
+                "pic": self.list2[current_index][3],
                 "stream_icon": self.list2[current_index][3],
                 "added": self.list2[current_index][4],
                 "rating": self.list2[current_index][5],
                 "container_extension": self.list2[current_index][8],
                 "year": self.list2[current_index][9],
-                "cmd": self.list2[current_index][14]
+                "category_id": self.list2[current_index][13],
+                "cmd": self.list2[current_index][14],
+                "protocol": self.list2[current_index][20].get("protocol", "") if len(self.list2[current_index]) > 20 else "",
+                "forced_storage": self.list2[current_index][20].get("forced_storage", "") if len(self.list2[current_index]) > 20 else "",
+                "disable_ad": self.list2[current_index][20].get("disable_ad", "0") if len(self.list2[current_index]) > 20 else "0",
+                "download": self.list2[current_index][20].get("download", "0") if len(self.list2[current_index]) > 20 else "0",
             }
 
             glob.active_playlist["player_info"]["vodfavourites"].insert(0, newfavourite)

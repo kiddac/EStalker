@@ -65,7 +65,7 @@ from . import _
 from . import estalker_globals as glob
 from .plugin import (cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory, debugs, isDreambox)
 from .eStaticText import StaticText
-from .utils import get_local_timezone, make_request,  perform_handshake, get_profile_data
+from .utils import get_local_timezone, make_request, reauthorize_portal
 
 
 Factory.noisy = False
@@ -218,31 +218,29 @@ class EStalker_Series_Categories(Screen):
         encoded_mac = quote(self.mac, safe='')
         encoded_timezone = quote(self.timezone, safe='')
 
-        self.headers = {
-            "Pragma": "no-cache",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "Close",
-            "Referer": self.referer,
-        }
+        saved_headers = glob.active_playlist["playlist_info"].get("headers", {})
+        self.headers = saved_headers.copy() if isinstance(saved_headers, dict) else {}
 
-        if self.portal and "/stalker_portal/" in self.portal:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
-            }
-        else:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
-            }
+        if not self.headers:
+            cookie = "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
+            if self.portal and "/stalker_portal/" in self.portal:
+                cookie += "; adid={}".format(self.adid)
 
-        self.headers.update(host_headers)
+            self.headers = {
+                "Pragma": "no-cache",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
+                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                "X-User-Agent": "Model: MAG250; Link: WiFi",
+                "Connection": "Close",
+                "Referer": self.referer,
+                "Cookie": cookie,
+            }
 
         self.headers["Authorization"] = "Bearer " + self.token
 
-        self.retry = False
+        self.episode_link_metadata = {}
 
         self.apitoken = "ZUp6enk4cko4ZzBKTlBMTFNxN3djd25MOHEzeU5Zak1Bdkd6S3lPTmdqSjhxeUxMSTBNOFRhUGNBMjBCVmxBTzlBPT0K"
 
@@ -1009,6 +1007,12 @@ class EStalker_Series_Categories(Screen):
 
             episode_numbers = target_season.get("series", [])
             cmd = target_season.get("cmd", "")
+            self.episode_link_metadata[str(season_id)] = {
+                "protocol": str(target_season.get("protocol", "")),
+                "forced_storage": target_season.get("forced_storage", ""),
+                "disable_ad": target_season.get("disable_ad", "0"),
+                "download": target_season.get("download", "0"),
+            }
 
             for index, episode_num in enumerate(episode_numbers):
                 episode_id = episode_num
@@ -1059,8 +1063,7 @@ class EStalker_Series_Categories(Screen):
 
             try:
                 data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
-                if not data and self.retry is False:
-                    self.retry = True
+                if not data:
                     self.reauthorize()
                     data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
@@ -1109,8 +1112,7 @@ class EStalker_Series_Categories(Screen):
             try:
                 data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
-                if not data and self.retry is False:
-                    self.retry = True
+                if not data:
                     self.reauthorize()
                     data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
@@ -1158,8 +1160,7 @@ class EStalker_Series_Categories(Screen):
             try:
                 data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
-                if not data and self.retry is False:
-                    self.retry = True
+                if not data:
                     self.reauthorize()
                     data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
@@ -1213,8 +1214,7 @@ class EStalker_Series_Categories(Screen):
             try:
                 data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
-                if not data and self.retry is False:
-                    self.retry = True
+                if not data:
                     self.reauthorize()
                     data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
@@ -1260,19 +1260,18 @@ class EStalker_Series_Categories(Screen):
             sep = "&" if "?" in url else "?"
             return url + sep + "p=" + str(page)
 
-    def createLink(self, url):
+    def createLink(self, url, params):
         if debugs:
             print("*** createLink ***", url)
 
-        response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+        response = make_request(url, method="GET", headers=self.headers, params=params, response_type="json")
 
         if debugs:
             print("*** createlink response ***", response)
 
-        if not response and self.retry is False:
-            self.retry = True
+        if not response:
             self.reauthorize()
-            response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+            response = make_request(url, method="GET", headers=self.headers, params=params, response_type="json")
             if debugs:
                 print("*** createlink response 2 ***", response)
 
@@ -1290,12 +1289,32 @@ class EStalker_Series_Categories(Screen):
         self.portal, self.token, self.token_random, self.headers, play_token, status, blocked = result
 
         glob.active_playlist["playlist_info"].update({
+            "portal": self.portal,
             "token": self.token,
             "token_random": self.token_random,
+            "headers": self.headers,
             "play_token": play_token,
             "status": status,
             "blocked": blocked,
         })
+
+        try:
+            with open(self.playlists_json, "r") as f:
+                playlists_all = json.load(f)
+
+            for index, playlist in enumerate(playlists_all):
+                playlist_info = playlist.get("playlist_info", {})
+                if (
+                    playlist_info.get("domain") == glob.active_playlist["playlist_info"].get("domain")
+                    and playlist_info.get("mac") == glob.active_playlist["playlist_info"].get("mac")
+                ):
+                    playlists_all[index] = glob.active_playlist
+                    break
+
+            with open(self.playlists_json, "w") as f:
+                json.dump(playlists_all, f, indent=4)
+        except (IOError, OSError, ValueError, TypeError):
+            pass
 
     def buildCategories(self):
         if debugs:
@@ -2968,41 +2987,94 @@ class EStalker_Series_Categories(Screen):
                     if debugs:
                         print("*** original command **", command)
 
-                    if str(command).startswith("/media/"):
-                        pre_vod_url = (str(self.portal) + "?type=series&action=get_ordered_list&movie_id={}&season_id=0&episode_id=0&category=1&sortby=&p=1&JsHttpRequest=1-xml").format(stream_id)
-
-                        pre_response = make_request(pre_vod_url, method="GET", headers=self.headers, params=None, response_type="json")
-
-                        movie_id = None
-
-                        js_data = pre_response.get("js", {}).get("data", [])
-
-                        if isinstance(js_data, list) and len(js_data) > 0:
-                            movie_id = js_data[0].get("id")
-                        if movie_id:
-                            # Extract the file extension from the original command
-                            ext = ""
-                            if "." in command:
-                                ext = command[command.rfind("."):]
-
-                            command = "/media/file_{}{}".format(movie_id, ext)
-
+                    link_metadata = self.episode_link_metadata.get(str(stream_id), {})
+                    storage_id = ""
                     if isinstance(command, str):
-                        if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
+                        # Series seasons can use the same generic /media/<id>
+                        # command as VOD. Resolve the season media id before
+                        # asking the portal to create the episode link.
+                        if command.startswith("/media/"):
+                            media_params = {
+                                "type": "series",
+                                "action": "get_ordered_list",
+                                "movie_id": str(stream_id),
+                                "season_id": "0",
+                                "episode_id": "0",
+                                "category": "1",
+                                "sortby": "",
+                                "p": "1",
+                                "JsHttpRequest": "1-xml",
+                            }
+                            media_response = make_request(
+                                self.portal,
+                                method="GET",
+                                headers=self.headers,
+                                params=media_params,
+                                response_type="json"
+                            )
+                            if not media_response:
+                                self.reauthorize()
+                                media_response = make_request(
+                                    self.portal,
+                                    method="GET",
+                                    headers=self.headers,
+                                    params=media_params,
+                                    response_type="json"
+                                )
 
-                            # must be type=vod for create_link in series
-                            url = "{0}?type=vod&action=create_link&cmd={1}&series={2}&forced_storage=&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command, episode_id)
-                            self.retry = False
-                            response = self.createLink(url)
+                            media_js = media_response.get("js", {}) if isinstance(media_response, dict) else {}
+                            media_items = media_js.get("data", []) if isinstance(media_js, dict) else media_js
+                            if isinstance(media_items, list) and media_items:
+                                media_item = media_items[0] if isinstance(media_items[0], dict) else {}
+                                media_id = media_item.get("id")
+                                if media_id:
+                                    extension = os.path.splitext(command)[1]
+                                    command = "/media/file_{}{}".format(media_id, extension)
+
+                        create_link_required = "://" not in command or link_metadata.get("protocol") == "custom"
+                        if create_link_required:
+                            params = {
+                                "type": "vod",
+                                "action": "create_link",
+                                "cmd": command,
+                                "series": str(episode_id),
+                                "forced_storage": link_metadata.get("forced_storage", ""),
+                                "disable_ad": link_metadata.get("disable_ad", "0"),
+                                "download": link_metadata.get("download", "0"),
+                                "force_ch_link_check": "0",
+                                "JsHttpRequest": "1-xml",
+                            }
+                            response = self.createLink(self.portal, params)
                             next_url = ""
+                            link_error = ""
+                            link_data = response.get("js", {}) if isinstance(response, dict) else {}
 
-                            if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                                next_url = str(response["js"]["cmd"])
+                            if isinstance(link_data, list):
+                                for candidate in link_data:
+                                    if isinstance(candidate, dict) and candidate.get("type") != "ad" and candidate.get("cmd"):
+                                        next_url = str(candidate.get("cmd"))
+                                        storage_id = str(candidate.get("storage_id", ""))
+                                        break
+                            elif isinstance(link_data, dict):
+                                next_url = str(link_data.get("cmd", ""))
+                                storage_id = str(link_data.get("storage_id", ""))
+                                link_error = str(link_data.get("error", ""))
+
+                            if not next_url:
+                                error_messages = {
+                                    "limit": _("Maximum number of connections reached."),
+                                    "nothing_to_play": _("Nothing to play."),
+                                    "link_fault": _("Server error or invalid link."),
+                                    "access_denied": _("Access denied."),
+                                }
+                                self.session.open(MessageBox, error_messages.get(link_error, _("Server error or invalid link.")), MessageBox.TYPE_ERROR, timeout=3)
+                                return
 
                         else:
                             next_url = command
 
                         if isinstance(next_url, str):
+                            next_url = re.sub(r"%mac%", self.mac, next_url, flags=re.IGNORECASE)
                             parts = next_url.split(None, 1)
                             if len(parts) == 2:
                                 next_url = parts[1].lstrip()
@@ -3019,7 +3091,7 @@ class EStalker_Series_Categories(Screen):
 
                     self.reference = eServiceReference(int(streamtype), 0, str(next_url))
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
-                    self.session.openWithCallback(self.setIndex, vodplayer.EStalker_VodPlayer, str(next_url), str(streamtype), stream_id)
+                    self.session.openWithCallback(self.setIndex, vodplayer.EStalker_VodPlayer, str(next_url), str(streamtype), stream_id, storage_id, link_metadata)
 
                 else:
                     self.createSetup()

@@ -44,6 +44,15 @@ if pythonVer == 3:
     )
 
 
+SUPPORTED_MODULES = {
+    "tv",
+    "vclub",
+    "sclub",
+    "audioclub",
+    "tv_archive",
+}
+
+
 def normalize_superscripts(text):
     return text.translate(superscript_to_normal)
 
@@ -115,6 +124,7 @@ class EStalker_Menu(Screen):
         self.live_categories_url = portal + "?type=itv&action=get_genres&sortby=number&JsHttpRequest=1-xml"
         self.vod_categories_url = portal + "?type=vod&action=get_categories&sortby=number&JsHttpRequest=1-xml"
         self.series_categories_url = portal + "?type=series&action=get_categories&sortby=number&JsHttpRequest=1-xml"
+        self.modules_url = portal + "?type=stb&action=get_modules&JsHttpRequest=1-xml"
 
         glob.active_playlist["data"]["live_streams"] = {}
         glob.active_playlist["data"]["data_downloaded"] = False
@@ -154,7 +164,8 @@ class EStalker_Menu(Screen):
         self.url_list = [
             [self.live_categories_url, 0],
             [self.vod_categories_url, 1],
-            [self.series_categories_url, 2]
+            [self.series_categories_url, 2],
+            [self.modules_url, 4]
         ]
 
         self.process_downloads()
@@ -182,40 +193,38 @@ class EStalker_Menu(Screen):
         encoded_mac = quote(mac, safe="")
         encoded_timezone = quote(timezone, safe="")
 
-        headers = {
-            "Pragma": "no-cache",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "Host": "{}:{}".format(
-                domain,
-                port
-            ) if port else domain,
-            "User-Agent": (
-                "Mozilla/5.0 (QtEmbedded; U; Linux; C) "
-                "AppleWebKit/533.3 (KHTML, like Gecko) "
-                "MAG200 stbapp ver: 2 rev: 250 Safari/533.3"
-            ),
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "Close",
-            "Referer": referer,
-        }
+        # Prefer the authenticated headers discovered from xpcom.common.js
+        # and saved by the playlist validation screen.
+        saved_headers = glob.active_playlist["playlist_info"].get("headers", {})
+        headers = saved_headers.copy() if isinstance(saved_headers, dict) else {}
 
-        if portal and "/stalker_portal/" in portal:
-            headers["Cookie"] = (
-                "mac={}; stb_lang=en; timezone={}; adid={}"
-            ).format(
-                encoded_mac,
-                encoded_timezone,
-                adid
-            )
-        else:
-            headers["Cookie"] = (
-                "mac={}; stb_lang=en; timezone={}"
-            ).format(
+        # Preserve compatibility with JSON created before headers were saved.
+        if not headers:
+            cookie = "mac={}; stb_lang=en; timezone={}".format(
                 encoded_mac,
                 encoded_timezone
             )
+            if portal and "/stalker_portal/" in portal:
+                cookie += "; adid={}".format(adid)
 
+            headers = {
+                "Pragma": "no-cache",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "Host": "{}:{}".format(domain, port) if port else domain,
+                "User-Agent": (
+                    "Mozilla/5.0 (QtEmbedded; U; Linux; C) "
+                    "AppleWebKit/533.3 (KHTML, like Gecko) "
+                    "MAG200 stbapp ver: 2 rev: 250 Safari/533.3"
+                ),
+                "X-User-Agent": "Model: MAG250; Link: WiFi",
+                "Connection": "Close",
+                "Referer": referer,
+                "Cookie": cookie,
+            }
+
+        # Always use the current token in case this screen was reopened after
+        # reauthorisation.
         headers["Authorization"] = "Bearer " + token
 
         self.timezone = timezone
@@ -237,7 +246,12 @@ class EStalker_Menu(Screen):
 
         response = make_request(url[0], method="GET", headers=headers, params=None, response_type="json")
 
-        if pythonVer == 3:
+        """
+        if debugs and category == 4:
+            print("*** modules ***", response)
+            """
+
+        if pythonVer == 3 and category in (0, 1, 2):
             response = clean_names(response)
 
         return category, response
@@ -254,6 +268,7 @@ class EStalker_Menu(Screen):
         glob.active_playlist["data"]["live_categories"] = {}
         glob.active_playlist["data"]["vod_categories"] = {}
         glob.active_playlist["data"]["series_categories"] = {}
+        glob.active_playlist["data"]["available_modules"] = []
 
         for url in self.url_list:
             if url[1] == 3:
@@ -294,7 +309,8 @@ class EStalker_Menu(Screen):
                 if not response:
                     continue
 
-                success = True
+                if category != 4:
+                    success = True
 
                 if category == 0:
                     glob.active_playlist["data"][
@@ -316,13 +332,26 @@ class EStalker_Menu(Screen):
                         "live_streams"
                     ] = response
 
+                elif category == 4:
+                    module_data = response.get("js", response) if isinstance(response, dict) else {}
+                    if isinstance(module_data, dict):
+                        all_modules = module_data.get("all_modules") or []
+                        disabled_modules = set(module_data.get("disabled_modules") or [])
+                        glob.active_playlist["data"]["available_modules"] = [
+                            name for name in all_modules
+                            if name in SUPPORTED_MODULES
+                            and name not in disabled_modules
+                        ]
+
             failed_urls = []
 
             for url in pending_urls:
                 category = url[1]
                 response = responses.get(category)
 
-                if not response:
+                # Module discovery is optional. A failed modules call should
+                # not force reauthorisation when the content calls worked.
+                if not response and category != 4:
                     failed_urls.append(url)
 
                     if debugs:
@@ -390,6 +419,7 @@ class EStalker_Menu(Screen):
         show_live = glob.active_playlist["player_info"].get("showlive", False)
         show_vod = glob.active_playlist["player_info"].get("showvod", False)
         show_series = glob.active_playlist["player_info"].get("showseries", False)
+        available_modules = set(glob.active_playlist["data"].get("available_modules", []))
 
         glob.active_playlist["data"]["live_streams"] = {}
 
@@ -401,6 +431,10 @@ class EStalker_Menu(Screen):
 
         if show_series:
             add_category_to_list(_("TV Series"), "series_categories", 2)
+
+        if "tv_archive" in available_modules:
+            self.index += 1
+            self.list.append([self.index, _("TV Archive"), 5, ""])
 
         self.index += 1
         self.list.append([self.index, _("Playlist Settings"), 4, ""])
@@ -434,6 +468,9 @@ class EStalker_Menu(Screen):
                 self.session.openWithCallback(lambda: self.start, series.EStalker_Series_Categories)
             elif category == 4:
                 self.settings()
+            elif category == 5:
+                from . import catchup
+                self.session.openWithCallback(lambda: self.start, catchup.EStalker_Catchup_Categories)
 
     def settings(self):
         if debugs:
@@ -459,6 +496,7 @@ class EStalker_Menu(Screen):
             "play_token": play_token,
             "status": status,
             "blocked": blocked,
+            "headers": self.headers,
         })
 
 
@@ -468,7 +506,7 @@ def buildListEntry(index, title, category_id, playlisturl):
         1: "vod.png",
         2: "series.png",
         4: "settings.png",
-        5: "epg_download.png"
+        5: "catchup.png",
     }
 
     png = None

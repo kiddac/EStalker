@@ -47,7 +47,7 @@ from Components.Label import Label
 # Local application/library-specific imports
 from . import _
 from . import estalker_globals as glob
-from .plugin import skin_directory, cfg, common_path, version, hasConcurrent, hasMultiprocessing
+from .plugin import skin_directory, cfg, common_path, version, hasConcurrent, hasMultiprocessing, debugs
 from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, xtream_request, perform_handshake, get_profile_data, get_account_info
 from . import processfiles as loadfiles
@@ -78,6 +78,8 @@ def parse_date_safe(date_str):
 
 
 def extract_portal_path_from_stream(resp, url):
+    if debugs:
+        print("*** extract_portal_path_from_stream ***")
     try:
         portal_prefix = ""
 
@@ -130,6 +132,8 @@ class EStalker_Playlists(Screen):
     ALLOW_SUSPEND = True
 
     def __init__(self, session):
+        if debugs:
+            print("*** __init__ ***")
         Screen.__init__(self, session)
         self.session = session
 
@@ -141,6 +145,7 @@ class EStalker_Playlists(Screen):
         self.playlist_file = cfg.playlist_file.value
         self.playlists_json = cfg.playlists_json.value
         self.playlists_all = []
+        self._xpcom_cache = {}
 
         self.setup_title = _("Manage Playlists")
 
@@ -182,6 +187,9 @@ class EStalker_Playlists(Screen):
         self.setTitle(self.setup_title)
 
     def start(self, answer=None):
+        if debugs:
+            print("*** start ***")
+
         loadfiles.process_files()
 
         # check if playlists.json file exists in specified location
@@ -199,6 +207,9 @@ class EStalker_Playlists(Screen):
             self.close()
 
     def delayedDownload(self):
+        if debugs:
+            print("*** delayedDownload ***")
+
         self.timer = eTimer()
         try:
             self.timer_conn = self.timer.timeout.connect(self.makeUrlList)
@@ -210,6 +221,9 @@ class EStalker_Playlists(Screen):
         self.timer.start(10, True)
 
     def makeUrlList(self):
+        if debugs:
+            print("***  makeUrlList ***")
+
         self.url_list = []
 
         for index, playlist in enumerate(self.playlists_all):
@@ -223,84 +237,119 @@ class EStalker_Playlists(Screen):
         if self.url_list:
             self.process_downloads()
 
-    def _build_headers(self, domain, port, mac, timezone, referer):
-        encoded_mac = quote(mac, safe='')
-        encoded_timezone = quote(timezone, safe='')
-        return {
-            "Pragma": "no-cache",
-            "Accept": "*/*",
-            "Accept-Encoding": "gzip, deflate",
-            "Host": "{}:{}".format(domain, port) if port else domain,
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "keep-alive",
-            "Referer": referer,
-            "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone),
-        }
+    def _get_xpcom_common(self, http, host, default_headers, path_prefix):
+        if debugs:
+            print("*** _get_xpcom_common ***")
 
-    def _get_path_prefix(self, http, host, headers, path_prefix):
-        if path_prefix == "/stalker_portal/c/":
-            primary_url = host + "/stalker_portal/c/"
-            primary_prefix = "/stalker_portal/c/"
-            fallback_url = host + "/c/"
-            fallback_prefix = "/c/"
-        elif path_prefix == "/c/":
-            primary_url = host + "/c/"
-            primary_prefix = "/c/"
-            fallback_url = host + "/stalker_portal/c/"
-            fallback_prefix = "/stalker_portal/c/"
-        else:
-            return path_prefix
+        """Locate and read xpcom.common.js before constructing API headers."""
+        cached_xpcom = self._xpcom_cache.get(host)
+        if cached_xpcom:
+            return cached_xpcom
 
-        def try_url(url):
+        prefixes = []
+        if path_prefix:
+            normalised_prefix = "/{}/".format(path_prefix.strip("/"))
+            prefixes.append(normalised_prefix)
+
+        for prefix in ("/c/", "/stalker_portal/c/"):
+            if prefix not in prefixes:
+                prefixes.append(prefix)
+
+        for prefix in prefixes:
+            xpcom_url = host + prefix + "xpcom.common.js"
             try:
-                with http.get(url, headers=headers, timeout=5, verify=False, stream=True, allow_redirects=True) as response:
+                with http.get(xpcom_url, headers=default_headers, timeout=3, verify=False, allow_redirects=True) as response:
                     response.raise_for_status()
-                    return True
-            except Exception:
-                return False
+                    # Avoid response.text here: without a response charset it
+                    # runs chardet over the complete script, twice in this block.
+                    if response.content:
+                        xpcom_text = response.content.decode("utf-8", "ignore")
+                        final_url = response.url or xpcom_url
+                        final_path = urlparse(final_url).path
+                        final_prefix = final_path.rsplit("/", 1)[0] + "/"
+                        xpcom_result = (final_prefix, final_url, xpcom_text)
+                        self._xpcom_cache[host] = xpcom_result
+                        return xpcom_result
+            except Exception as e:
+                print("Error checking {}: {}".format(xpcom_url, e))
 
-        if try_url(primary_url):
-            return primary_prefix
+        fallback_prefix = path_prefix or "/c/"
+        fallback_prefix = "/{}/".format(fallback_prefix.strip("/"))
+        return fallback_prefix, "", ""
 
-        if try_url(fallback_url):
-            return fallback_prefix
+    def _build_computed_headers(self, default_headers, host, mac, timezone, referer, xpcom_text):
+        if debugs:
+            print("*** _build_computed_headers ***")
 
-        return primary_prefix
+        """Add the identity headers and cookies used by xpcom.common.js."""
+        headers = default_headers.copy()
+        parsed_host = urlparse(host)
+        cookie_values = {
+            "mac": mac,
+            "stb_lang": "en",
+            "timezone": timezone,
+            # The portal returns an empty ad ID when gSTB is unavailable.
+            "adid": "",
+        }
+        cookie_names = re.findall(
+            r"(?:this|stb)\.set_cookie\(\s*['\"]([^'\"]+)['\"]",
+            xpcom_text or ""
+        )
+        required_cookie_names = [
+            name for name in ("mac", "stb_lang", "timezone")
+            if not cookie_names or name in cookie_names
+        ]
+        if "adid" in cookie_names:
+            required_cookie_names.append("adid")
 
-    def _get_portal_url(self, http, host, headers, path_prefix, portal):
+        header_names = re.findall(
+            r"setRequestHeader\(\s*['\"]([^'\"]+)['\"]",
+            xpcom_text or "",
+            flags=re.IGNORECASE
+        )
+        required_header_names = []
+        for name in header_names:
+            if name.lower() in ("x-user-agent", "authorization") and name not in required_header_names:
+                required_header_names.append(name)
+        cookie_parts = []
+
+        for name in required_cookie_names:
+            cookie_parts.append("{}={}".format(name, quote(str(cookie_values[name]), safe='')))
+
+        headers.update({
+            "Host": parsed_host.netloc,
+            "X-User-Agent": "Model: MAG250; Link: WiFi",
+            "Referer": referer,
+            "Cookie": "; ".join(cookie_parts),
+        })
+        return headers, cookie_values, required_cookie_names, required_header_names
+
+    def _get_portal_url(self, host, xpcom_text, xpcom_url, portal):
+        if debugs:
+            print("*** _get_portal_url ***")
+
+        portal_candidate = None
+        if xpcom_text:
+            class XpcomResponse(object):
+                def iter_lines(self_inner):
+                    return xpcom_text.splitlines()
+
+            portal_candidate = extract_portal_path_from_stream(XpcomResponse(), xpcom_url)
+
+        if portal_candidate:
+            if not portal_candidate.startswith("/"):
+                portal_candidate = "/" + portal_candidate
+            return host + portal_candidate
+
         if portal:
             return portal
-
-        if path_prefix == "/stalker_portal/c/":
-            xpcom_urls = [
-                host + "/stalker_portal/c/xpcom.common.js",
-                host + "/c/xpcom.common.js",
-            ]
-        else:
-            xpcom_urls = [
-                host + "/c/xpcom.common.js",
-                host + "/stalker_portal/c/xpcom.common.js",
-            ]
-
-        for url in xpcom_urls:
-            try:
-                with http.get(url, headers=headers, timeout=3, verify=False, stream=True, allow_redirects=True) as response:
-                    response.raise_for_status()
-                    portal_candidate = extract_portal_path_from_stream(response, url)
-
-                    if portal_candidate:
-                        if not portal_candidate.startswith("/"):
-                            portal_candidate = "/" + portal_candidate
-
-                        return host + portal_candidate
-
-            except Exception as e:
-                print("Error checking {}: {}".format(url, e))
 
         return host + "/portal.php"
 
     def _get_portal_version(self, http, host, headers, path_prefix):
+        if debugs:
+            print("*** _get_portal_version ***")
+
         url = host + path_prefix + "version.js"
 
         try:
@@ -316,20 +365,14 @@ class EStalker_Playlists(Screen):
 
         return ""
 
-    def _format_expiry(self, expiry):
-        if expiry == "Unlimited":
-            return _("Unlimited")
-
-        elif expiry and str(expiry).isdigit():
-            return _("Unknown")
-
-        return expiry or ""
-
     def download_url(self, url_info):
+        if debugs:
+            print("*** download_url ***")
+
         index = url_info[0]
         mac = str(url_info[1]).strip().upper()
         host = url_info[2].rstrip("/")
-        domain = url_info[3]
+        # domain = url_info[3]
         timezone = url_info[4]
 
         playlist_info = self.playlists_all[index]["playlist_info"]
@@ -337,7 +380,11 @@ class EStalker_Playlists(Screen):
         path_prefix = playlist_info.get("path_prefix", "")
         portal_version = playlist_info.get("version", "")
         original_url = playlist_info.get("url", "")
-        port = playlist_info.get("port", "")
+        # port = playlist_info.get("port", "")
+        token = ""
+        token_random = ""
+        not_valid = 0
+        account_valid = ""
 
         with requests.Session() as http:
             adapter = HTTPAdapter(max_retries=0)
@@ -345,31 +392,63 @@ class EStalker_Playlists(Screen):
             http.mount("https://", adapter)
 
             referer = os.path.join(original_url, "index.html")
-            headers = self._build_headers(domain, port, mac, timezone, referer)
 
-            # Stage 1
-            path_prefix = self._get_path_prefix(http, host, headers, path_prefix)
+            # Neutral headers used until xpcom.common.js reveals portal needs.
+            default_headers = {
+                "Pragma": "no-cache",
+                "Accept": "*/*",
+                "Accept-Encoding": "gzip, deflate",
+                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                "Connection": "keep-alive",
+            }
 
-            # Stage 2
-            portal = self._get_portal_url(http, host, headers, path_prefix, portal)
+            # Stage 1: locate and read xpcom.common.js with neutral headers.
+            path_prefix, xpcom_url, xpcom_text = self._get_xpcom_common(
+                http, host, default_headers, path_prefix
+            )
+
+            # Stage 2: derive the API endpoint, identity headers and cookies.
+            portal = self._get_portal_url(host, xpcom_text, xpcom_url, portal)
+
+            computed_headers, cookies, required_cookie_names, required_header_names = self._build_computed_headers(
+                default_headers, host, mac, timezone, referer, xpcom_text
+            )
+
+            headers = computed_headers.copy()
 
             # Stage 3
             portal_version = self._get_portal_version(http, host, headers, path_prefix)
 
             # Stage 4
-            portal, token, token_random, headers = perform_handshake(portal, host, mac, headers, http=http)
+            portal, token, token_random, not_valid, headers = perform_handshake(portal, host, mac, headers, http=http)
 
+            # not_valid does not invalidate this handshake. The original
+            # portal forwards it to get_profile as not_valid_token=1.
             if not token:
-                return index, {"valid": False}
+                return index, {
+                    "portal": portal,
+                    "version": portal_version,
+                    "token": token or "",
+                    "token_random": token_random or "",
+                    "not_valid": not_valid,
+                    "valid": False,
+                    "path_prefix": path_prefix,
+                    "xpcom_url": xpcom_url,
+                    "default_headers": default_headers,
+                    "computed_headers": computed_headers,
+                    "cookies": cookies,
+                    "required_cookie_names": required_cookie_names,
+                    "required_header_names": required_header_names,
+                    "headers": headers or "",
+                }
 
             # Stage 5
-            play_token, status, blocked, returned_mac, returned_id = get_profile_data(portal, mac, token, token_random, headers, "full", http=http)
+            play_token, status, blocked, returned_mac, returned_id, force_ch_link_check = get_profile_data(
+                portal, mac, token, token_random, headers, http=http,
+                not_valid=not_valid, portal_version=portal_version
+            )
 
             # Stage 6
-            expiry, account_valid = get_account_info(portal, headers, http=http, unknown_value=_("Unknown"))
-
-        if not account_valid:
-            play_token, status, blocked, returned_mac, returned_id = get_profile_data(portal, mac, token, token_random, headers, "basic")
             expiry, account_valid = get_account_info(portal, headers, http=http, unknown_value=_("Unknown"))
 
         if not account_valid:
@@ -383,44 +462,56 @@ class EStalker_Playlists(Screen):
             if str(blocked) == "1":
                 valid = False
 
-        expiry = self._format_expiry(expiry)
+        if expiry == "Unlimited":
+            expiry = _("Unlimited")
+        elif expiry and str(expiry).isdigit():
+            expiry = _("Unknown")
+        else:
+            expiry = expiry or ""
 
         return index, {
             "portal": portal,
             "version": portal_version,
             "token": token or "",
             "token_random": token_random or "",
+            "not_valid": not_valid,
             "valid": valid,
             "expiry": expiry,
             "play_token": play_token or "",
             "status": status,
             "blocked": blocked,
+            "force_ch_link_check": force_ch_link_check,
             "path_prefix": path_prefix,
             "active_connections": "",
             "max_connections": "",
+            "xpcom_url": xpcom_url,
+            "default_headers": default_headers,
+            "computed_headers": computed_headers,
+            "cookies": cookies,
+            "required_cookie_names": required_cookie_names,
+            "required_header_names": required_header_names,
             "headers": headers or ""
         }
 
-    def _get_download_domain(self, url_info):
-        domain = str(url_info[3] or "").strip().lower().rstrip(".")
-        if domain:
-            return domain
-
-        host = str(url_info[2] or "").strip()
-        try:
-            parsed_host = urlparse(host)
-            domain = parsed_host.hostname or parsed_host.netloc
-        except Exception:
-            domain = host
-
-        # Keep entries without a parsed domain grouped by their complete host.
-        return str(domain or host).strip().lower().rstrip("/")
-
     def _build_domain_rounds(self):
+        if debugs:
+            print("*** _build_domain_rounds ***")
+
         domain_queues = OrderedDict()
 
         for position, url_info in enumerate(self.url_list):
-            domain = self._get_download_domain(url_info)
+            domain = str(url_info[3] or "").strip().lower().rstrip(".")
+            if not domain:
+                host = str(url_info[2] or "").strip()
+                try:
+                    parsed_host = urlparse(host)
+                    domain = parsed_host.hostname or parsed_host.netloc
+                except Exception:
+                    domain = host
+
+                # Group unparsed entries by their complete host.
+                domain = str(domain or host).strip().lower().rstrip("/")
+
             domain_queues.setdefault(domain, deque()).append((position, url_info))
 
         rounds = []
@@ -440,6 +531,9 @@ class EStalker_Playlists(Screen):
         return rounds
 
     def _download_url_safe(self, download_item):
+        if debugs:
+            print("*** _download_url_safe  ***")
+
         position, url_info = download_item
         try:
             return position, self.download_url(url_info)
@@ -448,6 +542,9 @@ class EStalker_Playlists(Screen):
             return position, (url_info[0], {"valid": False})
 
     def _process_rounds_sequentially(self, download_rounds, results):
+        if debugs:
+            print("*** _process_rounds_sequentiall ***")
+
         for current_round in download_rounds:
             for download_item in current_round:
                 position = download_item[0]
@@ -458,6 +555,9 @@ class EStalker_Playlists(Screen):
                 results[result_position] = result
 
     def process_downloads(self):
+        if debugs:
+            print("*** process_downloads ***")
+
         max_threads = 30
         download_rounds = self._build_domain_rounds()
         domain_count = len(download_rounds[0]) if download_rounds else 0
@@ -514,6 +614,9 @@ class EStalker_Playlists(Screen):
         self.update_results(results)
 
     def update_results(self, results):
+        if debugs:
+            print("*** update_results ***")
+
         for result in results:
             if not result:
                 continue
@@ -526,14 +629,22 @@ class EStalker_Playlists(Screen):
                         "version": response.get("version", ""),
                         "token": response.get("token", ""),
                         "token_random": response.get("token_random", ""),
+                        "not_valid": response.get("not_valid", 0),
                         "valid": response.get("valid", False),
                         "expiry": response.get("expiry", ""),
                         "play_token": response.get("play_token", ""),
                         "status": response.get("status", 0),
                         "blocked": response.get("blocked", "0"),
+                        "force_ch_link_check": response.get("force_ch_link_check", "0"),
                         "path_prefix": response.get("path_prefix", ""),
                         "active_connections": response.get("active_connections", ""),
                         "max_connections": response.get("max_connections", ""),
+                        "xpcom_url": response.get("xpcom_url", ""),
+                        "default_headers": response.get("default_headers", {}),
+                        "computed_headers": response.get("computed_headers", {}),
+                        "cookies": response.get("cookies", {}),
+                        "required_cookie_names": response.get("required_cookie_names", []),
+                        "required_header_names": response.get("required_header_names", []),
                         "headers": response.get("headers", ""),
                         "params": response.get("params", ""),
 
@@ -544,11 +655,13 @@ class EStalker_Playlists(Screen):
                         "version": "",
                         "token": "",
                         "token_random": "",
+                        "not_valid": 0,
                         "valid": False,
                         "expiry": "",
                         "play_token": "",
                         "status": 0,
                         "blocked": "0",
+                        "force_ch_link_check": "0",
                         "path_prefix": "",
                         "active_connections": "",
                         "max_connections": "",
@@ -560,10 +673,16 @@ class EStalker_Playlists(Screen):
         self.createSetup()
 
     def writeJsonFile(self):
+        if debugs:
+            print("*** writeJsonFile ***")
+
         with open(self.playlists_json, "w") as f:
             json.dump(self.playlists_all, f, indent=4)
 
     def createSetup(self):
+        if debugs:
+            print("*** createSetup ***")
+
         self["splash"].hide()
         self.list = []
 
@@ -705,6 +824,9 @@ class EStalker_Playlists(Screen):
             glob.active_playlist = {}
 
     def getStreamTypes(self):
+        if debugs:
+            print("*** getStreamTypes ***")
+
         if glob.active_playlist["playlist_info"]["valid"] is True:
             glob.current_selection = self["playlists"].getIndex()
             glob.active_playlist = self.playlists_all[glob.current_selection]

@@ -264,6 +264,7 @@ def process_files():
                         "path_prefix": path_prefix,
                         "token": "",
                         "token_random": "",
+                        "not_valid": 0,
                         "valid": True,
                         "expiry": "",
                         "version": "",

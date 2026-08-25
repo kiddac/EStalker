@@ -379,8 +379,6 @@ class EStalker_StreamPlayer(
         else:
             self.picon_size = (147, 88)
 
-        self.retry = False
-
         self.timezone = get_local_timezone()
         self.token = glob.active_playlist["playlist_info"]["token"]
         self.token_random = glob.active_playlist["playlist_info"]["token_random"]
@@ -391,6 +389,7 @@ class EStalker_StreamPlayer(
         self.portal = glob.active_playlist["playlist_info"].get("portal", None)
         self.portal_version = glob.active_playlist["playlist_info"].get("version", "5.3.1")
         self.path_prefix = glob.active_playlist["playlist_info"].get("path_prefix", "")
+        self.force_ch_link_check = glob.active_playlist["playlist_info"].get("force_ch_link_check", "0")
 
         self.referer = self.host + self.path_prefix + "index.html"
 
@@ -400,27 +399,27 @@ class EStalker_StreamPlayer(
         encoded_mac = quote(self.mac, safe='')
         encoded_timezone = quote(self.timezone, safe='')
 
-        self.headers = {
-            "Pragma": "no-cache",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
-            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-            "X-User-Agent": "Model: MAG250; Link: WiFi",
-            "Connection": "Close",
-            "Referer": self.referer,
-        }
+        saved_headers = glob.active_playlist["playlist_info"].get("headers", {})
+        self.headers = saved_headers.copy() if isinstance(saved_headers, dict) else {}
 
-        if self.portal and "/stalker_portal/" in self.portal:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}; adid={}".format(encoded_mac, encoded_timezone, self.adid)
-            }
-        else:
-            host_headers = {
-                "Cookie": "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
-            }
+        # Compatibility fallback for playlists saved before authenticated
+        # xpcom-derived headers were persisted.
+        if not self.headers:
+            cookie = "mac={}; stb_lang=en; timezone={}".format(encoded_mac, encoded_timezone)
+            if self.portal and "/stalker_portal/" in self.portal:
+                cookie += "; adid={}".format(self.adid)
 
-        self.headers.update(host_headers)
+            self.headers = {
+                "Pragma": "no-cache",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "Host": "{}:{}".format(self.domain, self.port) if self.port else self.domain,
+                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                "X-User-Agent": "Model: MAG250; Link: WiFi",
+                "Connection": "Close",
+                "Referer": self.referer,
+                "Cookie": cookie,
+            }
 
         self.headers["Authorization"] = "Bearer " + self.token
 
@@ -474,6 +473,8 @@ class EStalker_StreamPlayer(
         self.sortby = "number"
         self.epg_downloaded_channels = set()
         self.short_epg_results = {}
+        self.last_tv_id = ""
+        self.watchdog_initialized = False
 
         self.onFirstExecBegin.append(boundFunction(self.playStream, self.servicetype, self.streamurl))
 
@@ -481,11 +482,40 @@ class EStalker_StreamPlayer(
         if debugs:
             print("*** sendWatchdog ***")
 
-        watchdog_url = "{0}?type=watchdog&action=get_events&cur_play_type=0&event_active_id=0&init=0&JsHttpRequest=1-xml".format(self.portal)
-        make_request(watchdog_url, method="GET", headers=self.headers, params=None, response_type="json")
+        init = "0" if self.watchdog_initialized else "1"
+        watchdog_url = "{0}?type=watchdog&action=get_events&cur_play_type=1&event_active_id=0&init={1}&JsHttpRequest=1-xml".format(self.portal, init)
+        response = make_request(watchdog_url, method="GET", headers=self.headers, params=None, response_type="json")
+        if not response:
+            self.reauthorize()
+            response = make_request(watchdog_url, method="GET", headers=self.headers, params=None, response_type="json")
+
+        if response:
+            self.watchdog_initialized = True
 
         # restart timer for next ping
         # self.timerWatchdog.start(30000, True)
+
+    def sendLastTVId(self):
+        if not glob.currentchannellist:
+            return
+
+        channel_id = str(glob.currentchannellist[glob.currentchannellistindex][4])
+        if not channel_id or channel_id == self.last_tv_id:
+            return
+
+        params = {
+            "type": "itv",
+            "action": "set_last_id",
+            "id": channel_id,
+            "JsHttpRequest": "1-xml",
+        }
+        response = make_request(self.portal, method="GET", headers=self.headers, params=params, response_type="json")
+        if not response:
+            self.reauthorize()
+            response = make_request(self.portal, method="GET", headers=self.headers, params=params, response_type="json")
+
+        if response:
+            self.last_tv_id = channel_id
 
     def _stopTimer(self, name):
         t = getattr(self, name, None)
@@ -679,6 +709,7 @@ class EStalker_StreamPlayer(
         if nowref:
             glob.newPlayingServiceRef = nowref
             glob.newPlayingServiceRefString = nowref.toString()
+            self.sendLastTVId()
 
         if cfg.infobarpicons.value is True:
             self._stopTimer("timerImage")
@@ -690,6 +721,8 @@ class EStalker_StreamPlayer(
 
         # start watchdog
         self._stopTimer("timerWatchdog")
+        if not self.watchdog_initialized:
+            self.sendWatchdog()
         self.timerWatchdog.start(80000, False)
 
         self.originalservicetype = self.servicetype
@@ -883,23 +916,92 @@ class EStalker_StreamPlayer(
         else:
             self.loadDefaultImage()
 
-    def createLink(self, url):
+    def createLink(self, url, params):
         if debugs:
             print("*** createLink ***", url)
 
-        response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+        response = make_request(url, method="GET", headers=self.headers, params=params, response_type="json")
 
         if debugs:
             print("*** createlink response ***", response)
 
-        if not response and self.retry is False:
-            self.retry = True
+        if not response:
             self.reauthorize()
-            response = make_request(url, method="GET", headers=self.headers, params=None, response_type="json")
+            response = make_request(url, method="GET", headers=self.headers, params=params, response_type="json")
             if debugs:
                 print("*** createlink response 2 ***", response)
 
         return response
+
+    def resolveStreamCommand(self, command, channel):
+        if not isinstance(command, str):
+            return ""
+
+        metadata_by_id = getattr(glob, "live_link_metadata", {})
+        link_metadata = metadata_by_id.get(str(channel[4]), {}) if isinstance(metadata_by_id, dict) else {}
+        use_http_tmp_link = str(link_metadata.get("use_http_tmp_link", "0")).lower() in ("1", "true", "yes")
+        use_load_balancing = str(link_metadata.get("use_load_balancing", "0")).lower() in ("1", "true", "yes")
+        disable_ad = str(link_metadata.get("disable_ad", "0")).lower() in ("1", "true", "yes")
+        force_ch_link_check = str(self.force_ch_link_check).lower() in ("1", "true", "yes")
+
+        if link_metadata.get("available"):
+            create_link_required = use_http_tmp_link or use_load_balancing or force_ch_link_check
+        else:
+            create_link_required = (
+                force_ch_link_check
+                or "localhost" in command
+                or "///" in command
+                or "/ch/" in command
+                or "http" not in command
+            )
+
+        stream_url = command
+        if create_link_required:
+            params = {
+                "type": "itv",
+                "action": "create_link",
+                "cmd": command,
+                "series": "0",
+                "forced_storage": "0",
+                "disable_ad": "1" if disable_ad else "0",
+                "download": "0",
+                "force_ch_link_check": "1" if force_ch_link_check else "0",
+                "JsHttpRequest": "1-xml",
+            }
+            response = self.createLink(self.portal, params)
+            stream_url = ""
+            link_error = ""
+
+            if isinstance(response, dict):
+                link_data = response.get("js", {})
+                if isinstance(link_data, dict):
+                    stream_url = str(link_data.get("cmd", ""))
+                    link_error = str(link_data.get("error", ""))
+
+            if not stream_url:
+                error_messages = {
+                    "limit": _("Maximum number of connections reached."),
+                    "nothing_to_play": _("Nothing to play."),
+                    "link_fault": _("Server error or invalid link."),
+                }
+                self.session.open(
+                    MessageBox,
+                    error_messages.get(link_error, _("Server error or invalid link.")),
+                    MessageBox.TYPE_ERROR,
+                    timeout=3
+                )
+                return ""
+
+        stream_url = re.sub(r"%mac%", self.mac, stream_url, flags=re.IGNORECASE)
+        parts = stream_url.split(None, 1)
+        if len(parts) == 2:
+            stream_url = parts[1].lstrip()
+
+        parsed = urlparse(stream_url)
+        if parsed.scheme in ("http", "https"):
+            stream_url = parsed.geturl()
+
+        return stream_url
 
     def reauthorize(self):
         if debugs:
@@ -913,12 +1015,32 @@ class EStalker_StreamPlayer(
         self.portal, self.token, self.token_random, self.headers, play_token, status, blocked = result
 
         glob.active_playlist["playlist_info"].update({
+            "portal": self.portal,
             "token": self.token,
             "token_random": self.token_random,
+            "headers": self.headers,
             "play_token": play_token,
             "status": status,
             "blocked": blocked,
         })
+
+        try:
+            with open(self.playlists_json, "r") as f:
+                playlists_all = json.load(f)
+
+            for index, playlist in enumerate(playlists_all):
+                playlist_info = playlist.get("playlist_info", {})
+                if (
+                    playlist_info.get("domain") == glob.active_playlist["playlist_info"].get("domain")
+                    and playlist_info.get("mac") == glob.active_playlist["playlist_info"].get("mac")
+                ):
+                    playlists_all[index] = glob.active_playlist
+                    break
+
+            with open(self.playlists_json, "w") as f:
+                json.dump(playlists_all, f, indent=4)
+        except (IOError, OSError, ValueError, TypeError):
+            pass
 
     def __next__(self):
         if debugs:
@@ -938,35 +1060,17 @@ class EStalker_StreamPlayer(
                 glob.currentchannellistindex = 0
                 glob.nextlist[-1]["index"] = glob.currentchannellistindex
 
-            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
+            channel = glob.currentchannellist[glob.currentchannellistindex]
+            command = str(channel[7])
 
             if not command:
                 self.load_page_data()
-                command = str(glob.currentchannellist[glob.currentchannellistindex][7])
+                channel = glob.currentchannellist[glob.currentchannellistindex]
+                command = str(channel[7])
 
-            if isinstance(command, str):
-                if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
-                    url = "{0}?type=itv&action=create_link&cmd={1}&series=0&forced_storage=0&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
-                    self.retry = False
-                    response = self.createLink(url)
-                    self.streamurl = ""
-
-                    if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                        self.streamurl = str(response["js"]["cmd"])
-                else:
-                    self.streamurl = command
-
-            if isinstance(self.streamurl, str):
-                parts = self.streamurl.split(None, 1)
-                if len(parts) == 2:
-                    self.streamurl = parts[1].lstrip()
-
-                parsed = urlparse(self.streamurl)
-                if parsed.scheme in ["http", "https"]:
-                    self.streamurl = parsed.geturl()
-
-            else:
-                self.streamurl = ""
+            self.streamurl = self.resolveStreamCommand(command, channel)
+            if not self.streamurl:
+                return
 
             str_servicetype = str(self.servicetype)
             str_streamurl = str(self.streamurl) if self.streamurl else ""
@@ -986,34 +1090,17 @@ class EStalker_StreamPlayer(
                 glob.currentchannellistindex = list_length - 1
                 glob.nextlist[-1]["index"] = glob.currentchannellistindex
 
-            command = str(glob.currentchannellist[glob.currentchannellistindex][7])
+            channel = glob.currentchannellist[glob.currentchannellistindex]
+            command = str(channel[7])
 
             if not command:
                 self.load_page_data()
-                command = str(glob.currentchannellist[glob.currentchannellistindex][7])
+                channel = glob.currentchannellist[glob.currentchannellistindex]
+                command = str(channel[7])
 
-            if isinstance(command, str):
-                if ("localhost" in command or "///" in command or "/ch/" in command or "http" not in command):
-                    url = "{0}?type=itv&action=create_link&cmd={1}&series=0&forced_storage=0&disable_ad=0&download=0&force_ch_link_check=0&JsHttpRequest=1-xml".format(self.portal, command)
-                    self.retry = False
-                    response = self.createLink(url)
-                    self.streamurl = ""
-
-                    if isinstance(response, dict) and "js" in response and "cmd" in response["js"]:
-                        self.streamurl = str(response["js"]["cmd"])
-                else:
-                    self.streamurl = command
-
-            if isinstance(self.streamurl, str):
-                parts = self.streamurl.split(None, 1)
-                if len(parts) == 2:
-                    self.streamurl = parts[1].lstrip()
-
-                parsed = urlparse(self.streamurl)
-                if parsed.scheme in ["http", "https"]:
-                    self.streamurl = parsed.geturl()
-            else:
-                self.streamurl = ""
+            self.streamurl = self.resolveStreamCommand(command, channel)
+            if not self.streamurl:
+                return
 
             str_servicetype = str(self.servicetype)
             str_streamurl = str(self.streamurl) if self.streamurl else ""
@@ -1046,8 +1133,6 @@ class EStalker_StreamPlayer(
             print("*** load_page_data ***")
 
         self.pages_downloaded = set()
-        self.retry = False
-
         self.itemsperpage = 14
         current_index = glob.currentchannellistindex
         position = current_index + 1
@@ -1077,8 +1162,7 @@ class EStalker_StreamPlayer(
         try:
             data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
-            if not data and self.retry is False:
-                self.retry = True
+            if not data:
                 self.reauthorize()
                 data = make_request(paged_url, method="GET", headers=self.headers, params=None, response_type="json")
 
@@ -1132,7 +1216,7 @@ class EStalker_StreamPlayer(
         if response:
             for index, channel in enumerate(response):
                 if not isinstance(channel, dict) or not channel:
-                    self.list2.append([index, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", False, False, False, None, None])
+                    self.list2.append([index, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", False, False, False, None, None, {}])
                     continue
 
                 stream_id = str(channel.get("id", ""))
@@ -1164,6 +1248,13 @@ class EStalker_StreamPlayer(
 
                 epg_channel_id = str(channel.get("id", ""))
                 category_id = str(channel.get("tv_genre_id", ""))
+                link_metadata = {
+                    "available": any(key in channel for key in ("use_http_tmp_link", "use_load_balancing", "disable_ad")),
+                    "use_http_tmp_link": channel.get("use_http_tmp_link", "0"),
+                    "use_load_balancing": channel.get("use_load_balancing", "0"),
+                    "disable_ad": channel.get("disable_ad", "0"),
+                }
+                glob.live_link_metadata[str(stream_id)] = link_metadata
                 service_ref = ""
                 next_url = ""
                 favourite = False
@@ -1198,7 +1289,8 @@ class EStalker_StreamPlayer(
                     False,
                     hidden,
                     None,
-                    None
+                    None,
+                    link_metadata
                 ])
 
         self.main_list = [buildLiveStreamList(x[0], x[1], x[2], x[3], x[5], x[7], x[15], x[16], x[17], x[18], x[6]) for x in self.list2 if x[18] is False]
@@ -1261,8 +1353,6 @@ class EStalker_StreamPlayer(
                 self.short_epg_results[ch_id] = []
             self.short_epg_results[ch_id].append(entry)
 
-        if debugs:
-            print("*** self.short_epg_results ***", self.short_epg_results)
         self.updateEPGList()
 
     def updateEPGList(self):

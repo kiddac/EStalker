@@ -12,6 +12,7 @@ originalChannelList1 = []
 originalChannelList2 = []
 originalChannelList3 = []
 originalChannelList4 = []
+live_link_metadata = {}
 catchupdata = []
 pintime = 0
 adultChannel = False

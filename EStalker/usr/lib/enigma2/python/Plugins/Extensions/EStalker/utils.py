@@ -101,7 +101,7 @@ def make_request(url, method="GET", headers=None, params=None, response_type=Non
                 existing_params.update(params)
                 url = urlunparse(parsed_url._replace(query=urlencode(existing_params)))
 
-            response = http.get(url, headers=headers, timeout=(5, 10), verify=False, allow_redirects=True)
+            response = http.get(url, headers=headers, timeout=(8, 8), verify=False, allow_redirects=True)
 
         response.raise_for_status()
 
@@ -141,7 +141,7 @@ def xtream_request(url):
         http.mount("https://", adapter)
 
         try:
-            r = http.get(url, headers=hdr, timeout=(5, 5), verify=False)
+            r = http.get(url, headers=hdr, timeout=(8, 8), verify=False)
             r.raise_for_status()
 
             try:
@@ -163,11 +163,22 @@ def xtream_request(url):
 
 
 def perform_handshake(portal, host, mac, headers, http=None):
+    # A handshake starts without a previous bearer token. Remove any stale
+    # token cookie; the newly returned token is added after the handshake.
+    headers.pop("Authorization", None)
+    cookie_parts = []
+    for cookie_part in headers.get("Cookie", "").split(";"):
+        cookie_part = cookie_part.strip()
+        if cookie_part and cookie_part.split("=", 1)[0].strip().lower() != "token":
+            cookie_parts.append(cookie_part)
+    headers["Cookie"] = "; ".join(cookie_parts)
+
     handshake_url = "{}?".format(portal)
     body_params = {
         "type": "stb",
         "action": "handshake",
         "token": "",
+        "prehash": "0",
         "JsHttpRequest": "1-xml"
     }
 
@@ -179,6 +190,7 @@ def perform_handshake(portal, host, mac, headers, http=None):
             "type": "stb",
             "action": "handshake",
             "token": "",
+            "prehash": "0",
             "JsHttpRequest": "1-xml",
             "mac": mac
         }
@@ -186,13 +198,18 @@ def perform_handshake(portal, host, mac, headers, http=None):
 
     token = None
     token_random = None
+    not_valid = 0
 
     # print("*** handshake response ***", response)
 
     if response and isinstance(response, dict):
-        js_data = response.get("js", {})
+        js_data = response.get("js") or {}
 
-        if "msg" in js_data and "missing" in js_data["msg"].lower():
+        # print("*** js ***", js_data)
+        if not isinstance(js_data, dict):
+            js_data = {}
+
+        if "missing" in str(js_data.get("msg") or "").lower():
 
             def generate_token():
                 return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
@@ -213,13 +230,18 @@ def perform_handshake(portal, host, mac, headers, http=None):
             }
 
             response = make_request(handshake_url, method="GET", headers=headers, params=prehash_params, response_type="json", http=http)
-            js_data = response.get("js", {}) if response else {}
+            js_data = response.get("js", {}) if isinstance(response, dict) else {}
+            if not isinstance(js_data, dict):
+                js_data = {}
 
         token = js_data.get("token")
         token_random = js_data.get("random", "")
+        not_valid_value = js_data.get("not_valid", 0)
+        not_valid = 1 if str(not_valid_value).strip().lower() in ("1", "true", "yes") else 0
 
         if not token:
-            return portal, None, None, headers
+            headers.pop("Authorization", None)
+            return portal, None, token_random, not_valid, headers
 
         headers["Authorization"] = "Bearer " + token
         headers["Cookie"] = headers.get("Cookie", "") + "; token=" + token
@@ -229,10 +251,10 @@ def perform_handshake(portal, host, mac, headers, http=None):
         print("Invalid handshake response:", portal)
         """
 
-    return portal, token, token_random, headers
+    return portal, token, token_random, not_valid, headers
 
 
-def get_profile_data(portal, mac, token, token_random, headers, param_mode, http=None):
+def get_profile_data(portal, mac, token, token_random, headers, http=None, not_valid=0, portal_version=""):
 
     profile_params = {}
 
@@ -242,14 +264,15 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode, http
     # print("***token***", token)
     # print("***token_random***", token_random)
     # print("***headers***", json.dumps(headers))
-    # print("***param_mode***", param_mode)
 
     sn = hashlib.md5(mac.encode()).hexdigest().upper()[:13]
     device_id = hashlib.sha256(mac.encode()).hexdigest().upper()
-    device_id2 = hashlib.sha256(device_id.encode()).hexdigest().upper()
+    # device_id2 = hashlib.sha256(device_id.encode()).hexdigest().upper()
     hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
     # hw_version_2 = hashlib.sha1(mac.lower().encode()).hexdigest()
     # hw_version_2 = hashlib.sha1(mac.replace(":", "").lower().encode()).hexdigest()
+    # Preserve the established EStalker identity used when the device was
+    # registered with portals.
     prehash = hashlib.sha1((sn + mac).encode()).hexdigest()
     # signature = hashlib.sha256((device_id + device_id2).encode()).hexdigest().upper()
     signature2 = hashlib.sha256((device_id + device_id).encode()).hexdigest().upper()
@@ -273,93 +296,41 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode, http
         ("JsHttpRequest", "1-xml"),
     ])
 
-    if "/stalker_portal/" in portal:
-        host_metrics = {
-            "type": "stb",
-            "model": "MAG254",
-            "mac": mac,
-            "sn": sn,
-            "uid": device_id2,
-            "random": token_random
-        }
+    host_metrics = {
+        "mac": mac,
+        "sn": sn,
+        "model": "MAG250",
+        "type": "STB",
+        "uid": "",
+        "random": token_random or ""
+    }
+    metrics_json = json.dumps(host_metrics, separators=(',', ':'))
+    encoded_once = quote(metrics_json)
+    reported_portal_version = "5.3.0"
 
-        metrics_json = json.dumps(host_metrics, separators=(',', ':'))
-        encoded_once = quote(metrics_json)
+    host_params = OrderedDict([
+        ('hd', '1'),
+        ('ver', 'ImageDescription: 0.2.18-r23-250; ImageDate: Thu Sep 13 11:31:16 EEST 2018; PORTAL version: {}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c'.format(reported_portal_version)),
+        ('num_banks', '2'),
+        ('sn', sn),
+        ('stb_type', 'MAG250'),
+        ('client_type', 'STB'),
+        ('image_version', '218'),
+        ('video_out', 'hdmi'),
+        ('device_id', device_id),
+        ('device_id2', device_id),
+        ('signature', signature2),
+        ('auth_second_step', '1'),
+        ('hw_version', '1.7-BD-00'),
+        ('not_valid_token', '1' if not_valid else '0'),
+        ('metrics', encoded_once),
+        ('hw_version_2', hw_version_2),
+        ('timestamp', str(int(timestamp))),
+        ('api_signature', '262'),
+        ('prehash', prehash),
+    ])
 
-        host_params = OrderedDict([
-            ('hd', '1'),
-            ('ver', 'ImageDescription: 0.2.18-r23-250; ImageDate: Thu Sep 13 11:31:16 EEST 2018; PORTAL version: 5.3.0; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c'),
-            ('num_banks', '2'),
-            ('sn', sn),
-            ('stb_type', 'MAG250'),
-            ('client_type', 'STB'),
-            ('image_version', '218'),
-            ('video_out', 'hdmi'),
-            ('device_id', device_id),
-            ('device_id2', device_id),
-            ('signature', signature2),
-            ('auth_second_step', '1'),
-            ('hw_version', '1.7-BD-00'),
-            ('not_valid_token', '0'),
-            ('metrics', encoded_once),
-            ('hw_version_2', hw_version_2),
-            ('timestamp', str(int(timestamp))),
-            ('api_signature', '262'),
-            ('prehash', prehash),
-        ])
-
-        profile_params = host_params
-
-    else:
-        host_metrics = {
-            "mac": mac,
-            "sn": sn,
-            "type": "STB",
-            "model": "MAG250",
-            "uid": "",
-            "random": ""
-        }
-
-        metrics_json = json.dumps(host_metrics, separators=(',', ':'))
-
-        # print("*** metrics_json ***",  metrics_json)
-
-        # url encode metrics
-        encoded_once = quote(metrics_json)
-
-        # print("*** metrix encoded_once ***", encoded_once)
-
-        if param_mode == "full":
-            host_params = OrderedDict([
-                ('hd', '1'),
-                ('ver', 'ImageDescription: 0.2.18-r23-250; ImageDate: Thu Sep 13 11:31:16 EEST 2018; PORTAL version: 5.3.0; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c'),
-                ('num_banks', '2'),
-                ('sn', sn),
-                ('stb_type', 'MAG250'),
-                ('client_type', 'STB'),
-                ('image_version', '218'),
-                ('video_out', 'hdmi'),
-                ('device_id', device_id),
-                ('device_id2', device_id),
-                ('signature', signature2),
-                ('auth_second_step', '1'),
-                ('hw_version', '1.7-BD-00'),
-                ('not_valid_token', '0'),
-                ('metrics', encoded_once),
-                ('hw_version_2', hw_version_2),
-                ('timestamp', str(int(timestamp))),
-                ('api_signature', '262'),
-                ('prehash', prehash),
-            ])
-
-        if param_mode == "basic":
-            host_params = OrderedDict([
-                # ('sn', sn),
-                # ('device_id', ''),
-                # ('timestamp', str(int(timestamp))),
-            ])
-
-        profile_params = host_params
+    profile_params = host_params
 
     # print("*** headers ***", json.dumps(headers))
     # print("*** params ***", json.dumps(profile_params))
@@ -369,14 +340,37 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode, http
 
     profile_data = make_request(profile_url, method="GET", headers=headers, params=profile_params, response_type="json", http=http)
 
+    """
     if debugs:
         print("*** profile_data ***", portal, mac, json.dumps(profile_data))
+        """
+
+    profile = profile_data.get("js") if isinstance(profile_data, dict) else None
+
+    if not isinstance(profile, dict) or not profile.get("id"):
+        print("** full params failed ***", profile_url, mac)
+        fallback_params = OrderedDict([
+            ("type", "stb"),
+            ("action", "get_profile"),
+            ("JsHttpRequest", "1-xml"),
+            ('sn', sn),
+            ('device_id', ''),
+            ('timestamp', str(int(timestamp))),
+        ])
+
+        profile_data = make_request(profile_url, method="GET", headers=headers, params=fallback_params, response_type="json", http=http)
+
+        """
+        if debugs:
+            print("*** profile_data 2 ***", portal, mac, json.dumps(profile_data))
+            """
 
     js_data = {}
     play_token = None
     status = 1
     blocked = "0"
     returned_id = ""
+    force_ch_link_check = "0"
     mac = ""
 
     if profile_data:
@@ -391,41 +385,7 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode, http
             blocked = js_data.get("blocked", "0")
             mac = js_data.get("mac", "")
             returned_id = js_data.get("id", "")
-
-            # If we got an error message and no play_token, try basic fallback
-            msg = js_data.get("msg", "")
-            if msg and not play_token:
-                print("*** profile_data error msg, trying basic fallback ***", msg)
-                profile_data = None  # force fallback below
-
-    if not profile_data:
-        # print("*** trying profile data basic ***")
-        # Fallback: try with no params
-
-        fallback_params = OrderedDict([
-            ("type", "stb"),
-            ("action", "get_profile"),
-            ("JsHttpRequest", "1-xml"),
-            ('sn', sn),
-            ('device_id', ''),
-            ('timestamp', str(int(timestamp))),
-        ])
-
-        profile_data = make_request(profile_url, method="GET", headers=headers, params=fallback_params, response_type="json", http=http)
-
-        # print("*** profile_data 2 ***", portal, mac, json.dumps(profile_data))
-        if profile_data:
-            js_data = profile_data.get("js", {})
-
-            if not isinstance(js_data, dict):
-                js_data = {}
-
-            if js_data:
-                play_token = js_data.get("play_token", None)
-                status = js_data.get("status", 1)
-                blocked = js_data.get("blocked", "0")
-                mac = js_data.get("mac", "")
-                returned_id = js_data.get("id", "")
+            force_ch_link_check = js_data.get("force_ch_link_check", "0")
 
     # print("*** play_token ***", play_token)
     # print("*** status ***", status)
@@ -433,7 +393,7 @@ def get_profile_data(portal, mac, token, token_random, headers, param_mode, http
     # print("*** mac ***", mac)
     # print("*** returned_id ***", returned_id)
 
-    return play_token, status, blocked, mac, returned_id
+    return play_token, status, blocked, mac, returned_id, force_ch_link_check
 
 
 def _get_current_aspect_ratio():
@@ -489,7 +449,7 @@ def _get_current_aspect_ratio():
                 with open("/sys/class/video/screen_mode", "r") as f:
                     mode = f.read().strip()
 
-                print("*** AR via DreamOS ***", mode)
+                # print("*** AR via DreamOS ***", mode)
 
                 if "letterbox" in mode:
                     current_ar = 0
@@ -533,7 +493,7 @@ def get_account_info(portal, headers, http=None, unknown_value="Unknown"):
     account_info = make_request(account_info_url, method="GET", headers=headers, params=account_info_params, response_type="json", http=http)
 
     if debugs:
-        print("*** account_info ***", account_info)
+        print("*** account_info ***", account_info_url, account_info)
 
     if account_info and isinstance(account_info, dict):
         js_data = account_info.get("js") or {}
@@ -550,16 +510,16 @@ def reauthorize_portal(portal, host, mac, headers, http=None):
         http = requests.Session()
 
     try:
-        portal, token, token_random, headers = perform_handshake(portal, host, mac, headers, http=http)
+        portal, token, token_random, not_valid, headers = perform_handshake(portal, host, mac, headers, http=http)
 
+        # not_valid is consumed by get_profile; it is not a handshake failure.
         if not token:
             return None
 
-        play_token, status, blocked, returned_mac, returned_id = get_profile_data(portal, mac, token, token_random, headers, "full", http=http)
+        play_token, status, blocked, returned_mac, returned_id, force_ch_link_check = get_profile_data(
+            portal, mac, token, token_random, headers, http=http, not_valid=not_valid
+        )
         expiry, account_valid = get_account_info(portal, headers, http=http)
-
-        if not account_valid:
-            play_token, status, blocked, returned_mac, returned_id = get_profile_data(portal, mac, token, token_random, headers, "basic", http=http)
 
         return portal, token, token_random, headers, play_token, status, blocked
 
