@@ -4,7 +4,7 @@
 import os
 
 from . import _
-from .plugin import cfg, skin_directory, isDreambox
+from .plugin import cfg, skin_directory, isDreambox, refresh_playlist_choices, refresh_playlist_paths
 from .eStaticText import StaticText
 
 from Components.ActionMap import ActionMap
@@ -115,14 +115,14 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
             return
 
         restart_needed = (
-            self.org_main != cfg.main.value or
-            self.location != cfg.location.value
+            self.org_main != cfg.main.value
         )
 
         if self["config"].isChanged():
             for x in self["config"].list:
                 x[1].save()
 
+            refresh_playlist_paths()
             cfg.save()
             configfile.save()
 
@@ -145,8 +145,10 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
             self.close()
 
     def initConfig(self):
+        refresh_playlist_choices()
         self.cfg_skin = getConfigListEntry(_("Select skin"), cfg.skin)
-        self.cfg_location = getConfigListEntry(_("e-portals.txt location") + _(" *Restart GUI Required"), cfg.location)
+        self.cfg_location = getConfigListEntry(_("Playlist files location"), cfg.location)
+        self.cfg_playlist_name = getConfigListEntry(_("Active playlist file"), cfg.playlist_name)
         self.cfg_livetype = getConfigListEntry(_("Default LIVE stream type"), cfg.livetype)
         self.cfg_vodtype = getConfigListEntry(_("Default VOD/SERIES stream type"), cfg.vodtype)
         self.cfg_livepreview = getConfigListEntry(_("Preview LIVE streams in mini tv"), cfg.livepreview)
@@ -166,7 +168,6 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
         self.cfg_ar_id_player = getConfigListEntry(_("Default screen aspect ratio"), cfg.ar_id_player)
 
         self.org_main = cfg.main.value
-        self.location = cfg.location.value
 
         self.createSetup()
 
@@ -174,6 +175,7 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
         config_entries = [
             self.cfg_skin,
             self.cfg_location,
+            self.cfg_playlist_name,
             self.cfg_skipplaylistsscreen,
             self.cfg_ar_id_player,
             self.cfg_livetype,
@@ -276,4 +278,6 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
         def callback(path):
             if path is not None:
                 config_entry.setValue(str(path))
+                refresh_playlist_choices(str(path))
+                self.createSetup()
         return callback

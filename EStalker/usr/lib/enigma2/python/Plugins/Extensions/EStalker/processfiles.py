@@ -13,11 +13,11 @@ except ImportError:
 
 from .plugin import cfg
 
-playlist_file = cfg.playlist_file.value
-playlists_json = cfg.playlists_json.value
-
 
 def process_files():
+    playlist_file = cfg.playlist_file.value
+    playlists_json = cfg.playlists_json.value
+
     if not os.path.isfile(playlist_file):
         with open(playlist_file, "a"):
             pass
@@ -238,9 +238,8 @@ def process_files():
                 existing_entry = existing_lookup[key]
                 existing_entry["playlist_info"]["index"] = index
 
-                # Ensure "url" is added if missing
-                if "url" not in existing_entry["playlist_info"]:
-                    existing_entry["playlist_info"]["url"] = url
+                # Keep the cached source URL in sync with the current text block.
+                existing_entry["playlist_info"]["url"] = url
 
                 # Add path_prefix if missing
                 existing_entry["playlist_info"]["path_prefix"] = path_prefix

@@ -765,19 +765,47 @@ class EStalker_Playlists(Screen):
         with open(self.playlist_file, "r") as f:
             lines = f.readlines()
 
+        target_parsed = urlparse(url_to_delete)
+        target_port = target_parsed.port
+        target_url_key = (
+            target_parsed.scheme.lower(),
+            (target_parsed.hostname or "").lower(),
+            str(target_port or ""),
+            (target_parsed.path or "").rstrip("/"),
+            target_parsed.query or ""
+        )
+
+        mac_regex = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
         new_lines = []
-        inside_block = False
+        inside_target_block = False
 
         for line in lines:
             stripped = line.strip()
-            if stripped.startswith(("http://", "https://")):
-                current_url = stripped.rstrip('/')
-                inside_block = (current_url == url_to_delete)
+            content = stripped[1:].lstrip() if stripped.startswith("#") else stripped
+
+            # Active and commented URLs both mark the start of a new server block.
+            if content.startswith(("http://", "https://")):
+                url_part = content.split(" #", 1)[0].strip()
+                parsed = urlparse(url_part)
+                port = parsed.port
+                current_url_key = (
+                    parsed.scheme.lower(),
+                    (parsed.hostname or "").lower(),
+                    str(port or ""),
+                    (parsed.path or "").rstrip("/"),
+                    parsed.query or ""
+                )
+                inside_target_block = current_url_key == target_url_key
                 new_lines.append(line)
                 continue
 
-            if inside_block and stripped.lower() == mac_to_delete:
-                new_lines.append("#" + line)
+            commented = stripped.startswith("#")
+            mac_part = content.split("#", 1)[0].strip()
+            if inside_target_block and not commented and mac_regex.match(mac_part) and mac_part.lower() == mac_to_delete:
+                body = line.rstrip("\r\n")
+                line_ending = line[len(body):]
+                indentation = body[:len(body) - len(body.lstrip())]
+                new_lines.append("{}# {}{}".format(indentation, body.lstrip(), line_ending))
             else:
                 new_lines.append(line)
 

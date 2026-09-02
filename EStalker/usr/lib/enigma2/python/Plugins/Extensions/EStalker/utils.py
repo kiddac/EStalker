@@ -41,24 +41,30 @@ try:
 except Exception:
     pass
 
-playlist_file = cfg.playlist_file.value
-playlists_json = cfg.playlists_json.value
-
 PROTOCOL_PATTERN = re.compile(r"this\.portal_protocol\s*=\s*document\.URL\.replace\(pattern,\s*\"([^\"]+)\"\)")
 IP_PATTERN = re.compile(r"this\.portal_ip\s*=\s*document\.URL\.replace\(pattern,\s*\"([^\"]+)\"\)")
 PATH_PATTERN = re.compile(r"this\.portal_path\s*=\s*document\.URL\.replace\(pattern,\s*\"([^\"]+)\"\)")
 LOADER_PATTERN = re.compile(r"this\.ajax_loader\s*=\s*(.*?\.php);")
 URL_PATTERN = re.compile(r"(https?):\/\/([^\/]*)\/([^\/]*)")
 
-playlists_all = []
 
-if os.path.isfile(playlists_json):
-    with open(playlists_json, "r") as f:
-        try:
-            playlists_all = json.load(f)
-            playlists_all.sort(key=lambda e: e["playlist_info"]["index"], reverse=False)
-        except:
-            os.remove(playlists_json)
+def load_playlists_all():
+    """Load playlist data using the currently selected playlist cache."""
+    playlists_all = []
+    playlists_json = cfg.playlists_json.value
+
+    if os.path.isfile(playlists_json):
+        with open(playlists_json, "r") as f:
+            try:
+                playlists_all = json.load(f)
+                playlists_all.sort(key=lambda e: e["playlist_info"]["index"], reverse=False)
+            except Exception:
+                os.remove(playlists_json)
+
+    return playlists_all
+
+
+playlists_all = load_playlists_all()
 
 
 def get_local_timezone():

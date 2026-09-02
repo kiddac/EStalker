@@ -26,10 +26,6 @@ from . import _
 from .plugin import skin_directory, cfg, debugs, isDreambox
 from .eStaticText import StaticText
 
-playlist_file = cfg.playlist_file.value
-playlists_json = cfg.playlists_json.value
-
-
 class EStalker_AddServer(ConfigListScreen, Screen):
 
     def __init__(self, session):
@@ -168,10 +164,10 @@ class EStalker_AddServer(ConfigListScreen, Screen):
         host = "{}{}:{}".format(protocol, domain, port) if port else "{}{}".format(protocol, domain)
         urlline = "{}".format(host)
 
-        # Write to e-portals.txt
+        # Write to the currently selected playlist file
 
         try:
-            with open(playlist_file, 'a') as f:
+            with open(cfg.playlist_file.value, 'a') as f:
                 f.write('\n' + urlline + '\n')
                 for item in self.mac_addresses:
                     mac = item.get("mac", "")
@@ -187,7 +183,7 @@ class EStalker_AddServer(ConfigListScreen, Screen):
             self.close()
 
         except IOError as e:
-            print("Error writing to e-portals.txt:", e)
+            print("Error writing to playlist file:", e)
             self.session.open(MessageBox, _("Error saving playlist"), MessageBox.TYPE_ERROR, timeout=5)
 
     def cancel(self, answer=None):
@@ -248,6 +244,7 @@ class EStalker_AddServer(ConfigListScreen, Screen):
             print("*** getPlaylistJson ***")
 
         playlists_all = []
+        playlists_json = cfg.playlists_json.value
 
         # Check if the playlist file exists and is not empty
         if os.path.exists(playlists_json) and os.path.getsize(playlists_json) > 0:

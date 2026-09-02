@@ -118,9 +118,6 @@ if os.path.exists("/usr/bin/exteplayer3"):
 if os.path.exists("/usr/bin/apt-get"):
     vodstreamtypelist.append("8193")
 
-playlists_json = cfg.playlists_json.value
-
-
 class IPTVInfoBarShowHide():
     STATE_HIDDEN = 0
     STATE_HIDING = 1
@@ -605,6 +602,7 @@ class EStalker_VodPlayer(
                     self.archive_hist_id = str(history_id or "")
 
         self.playlists_all = []
+        playlists_json = cfg.playlists_json.value
         if os.path.exists(playlists_json):
             try:
                 with open(playlists_json, "r") as f:

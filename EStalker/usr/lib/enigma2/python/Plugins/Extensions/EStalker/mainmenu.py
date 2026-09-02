@@ -131,6 +131,7 @@ class EStalker_MainMenu(Screen):
             self.start()
 
     def start(self, answer=None):
+        self.playlists_json = cfg.playlists_json.value
         self.playlists_all = loadfiles.process_files()
         self.createSetup()
 

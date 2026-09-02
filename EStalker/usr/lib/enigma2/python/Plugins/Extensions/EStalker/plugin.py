@@ -162,35 +162,92 @@ if os.path.exists(old_playlists_json) and not os.path.exists(new_playlists_json)
         print("Failed to rename playlists-data-2.json:", e)
 
 
-# Set default file paths
-playlist_file = os.path.join(dir_etc, "e-portals.txt")
-playlists_json = os.path.join(dir_etc, "e-portals-data.json")
-
 # Set skin and font paths
 skin_path = os.path.join(skin_directory, cfg.skin.value)
 common_path = os.path.join(skin_directory, "common/")
 
-location = cfg.location.value
 
-if location:
+def get_playlist_choices(location=None):
+    """Return selectable text files from the configured playlist directory."""
+    location = location or cfg.location.value or dir_etc
+    filenames = []
+
     try:
-        if os.path.exists(location):
-            playlist_file = os.path.join(cfg.location.value, "e-portals.txt")
-            cfg.location_valid.setValue(True)
-        else:
-            os.makedirs(location)  # Create directory if it doesn't exist
-            playlist_file = os.path.join(location, "e-portals.txt")
+        if os.path.isdir(location):
+            filenames = [
+                filename for filename in os.listdir(location)
+                if filename.lower().endswith(".txt") and
+                os.path.isfile(os.path.join(location, filename))
+            ]
+    except Exception:
+        filenames = []
 
-            cfg.location_valid.setValue(True)
-    except:
-        pass
-else:
+    filenames = sorted(set(filenames), key=lambda filename: filename.lower())
+    if "e-portals.txt" in filenames:
+        filenames.remove("e-portals.txt")
+    filenames.insert(0, "e-portals.txt")
 
-    cfg.location.setValue(dir_etc)
-    cfg.location_valid.setValue(False)
+    return [(filename, filename) for filename in filenames]
 
-cfg.playlist_file = ConfigText(playlist_file)
-cfg.playlists_json = ConfigText(playlists_json)
+
+cfg.playlist_name = ConfigSelection(default="e-portals.txt", choices=get_playlist_choices())
+
+
+def refresh_playlist_choices(location=None):
+    """Refresh the filename selector while preserving a valid selection."""
+    choices = get_playlist_choices(location)
+    filenames = [choice[0] for choice in choices]
+    selected = os.path.basename(cfg.playlist_name.value or "e-portals.txt")
+
+    if selected not in filenames:
+        selected = "e-portals.txt"
+
+    cfg.playlist_name.setChoices(choices, default="e-portals.txt")
+    cfg.playlist_name.setValue(selected)
+    return choices
+
+
+def refresh_playlist_paths(create_files=True):
+    """Update the active text and JSON paths without requiring a GUI restart."""
+    location = cfg.location.value or dir_etc
+
+    try:
+        if not os.path.isdir(location):
+            os.makedirs(location)
+        cfg.location_valid.setValue(True)
+    except Exception:
+        location = dir_etc
+        cfg.location.setValue(location)
+        cfg.location_valid.setValue(False)
+        if not os.path.isdir(location):
+            os.makedirs(location)
+
+    refresh_playlist_choices(location)
+    filename = os.path.basename(cfg.playlist_name.value or "e-portals.txt")
+    if not filename.lower().endswith(".txt"):
+        filename = "e-portals.txt"
+        cfg.playlist_name.setValue(filename)
+
+    playlist_file = os.path.join(location, filename)
+    file_stem = os.path.splitext(filename)[0]
+    json_filename = "e-portals-data.json" if filename == "e-portals.txt" else "{}-data.json".format(file_stem)
+    playlists_json = os.path.join(dir_etc, json_filename)
+
+    cfg.playlist_file.setValue(playlist_file)
+    cfg.playlists_json.setValue(playlists_json)
+
+    if create_files:
+        for path in (playlist_file, playlists_json):
+            if not os.path.isfile(path):
+                with open(path, "a"):
+                    pass
+
+    return playlist_file, playlists_json
+
+
+cfg.playlist_file = ConfigText(default=os.path.join(dir_etc, "e-portals.txt"))
+cfg.playlists_json = ConfigText(default=os.path.join(dir_etc, "e-portals-data.json"))
+refresh_playlist_paths()
 
 cfg.save()
 configfile.save()
@@ -209,17 +266,6 @@ if os.path.exists("/tmp/estalker"):
 # create temporary folder for downloaded files
 if not os.path.exists(dir_tmp):
     os.makedirs(dir_tmp)
-
-# check if e-portals.txt file exists in specified location
-if not os.path.isfile(cfg.playlist_file.value):
-    with open(cfg.playlist_file.value, "a") as f:
-        f.close()
-
-# check if playlists-data.json file exists in specified location
-if not os.path.isfile(cfg.playlists_json.value):
-    with open(cfg.playlists_json.value, "a") as f:
-        f.close()
-
 
 def main(session, **kwargs):
     from . import mainmenu
