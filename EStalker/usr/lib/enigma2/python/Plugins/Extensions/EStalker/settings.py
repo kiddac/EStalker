@@ -187,7 +187,10 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
             # self.cfg_catchupend,
             self.cfg_adult,
             self.cfg_adultpin if cfg.adult.value else None,
-            self.cfg_subs if os.path.isdir("/usr/lib/enigma2/python/Plugins/Extensions/SubsSupport") else None,
+            self.cfg_subs if any(os.path.isdir(path) for path in (
+                "/usr/lib/enigma2/python/Plugins/Extensions/SubsSupportPro",
+                "/usr/lib/enigma2/python/Plugins/Extensions/SubsSupport",
+            )) else None,
             self.cfg_main,
             self.cfg_channelpicons,
             self.cfg_channelcovers,

@@ -545,9 +545,22 @@ class EStalker_StreamPlayer(
         if debugs:
             print("*** restartStream ***")
 
-        if self.session:
-            self.session.nav.stopService()
-            self.playStream(self.servicetype, self.streamurl)
+        if not self.session:
+            return
+
+        channel = glob.currentchannellist[glob.currentchannellistindex]
+        command = str(channel[7])
+
+        if not command:
+            return
+
+        self.streamurl = self.resolveStreamCommand(command, channel)
+
+        if not self.streamurl:
+            return
+
+        self.session.nav.stopService()
+        self.playStream(self.servicetype, self.streamurl)
 
     def OKButton(self):
         if debugs:

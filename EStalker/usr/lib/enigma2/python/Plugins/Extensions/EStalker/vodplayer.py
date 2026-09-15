@@ -78,15 +78,19 @@ except Exception:
 
 if cfg.subs.value is True:
     try:
-        from Plugins.Extensions.SubsSupport import SubsSupport, SubsSupportStatus
+        from Plugins.Extensions.SubsSupportPro import SubsProSupport as SubsSupport
+        from Plugins.Extensions.SubsSupportPro import SubsProSupportStatus as SubsSupportStatus
     except ImportError:
-        class SubsSupport(object):
-            def __init__(self, *args, **kwargs):
-                pass
+        try:
+            from Plugins.Extensions.SubsSupport import SubsSupport, SubsSupportStatus
+        except ImportError:
+            class SubsSupport(object):
+                def __init__(self, *args, **kwargs):
+                    pass
 
-        class SubsSupportStatus(object):
-            def __init__(self, *args, **kwargs):
-                pass
+            class SubsSupportStatus(object):
+                def __init__(self, *args, **kwargs):
+                    pass
 else:
     class SubsSupport(object):
         def __init__(self, *args, **kwargs):
@@ -95,6 +99,7 @@ else:
     class SubsSupportStatus(object):
         def __init__(self, *args, **kwargs):
             pass
+
 
 VIDEO_ASPECT_RATIO_MAP = {
     0: "4:3 Letterbox",
@@ -117,6 +122,7 @@ if os.path.exists("/usr/bin/exteplayer3"):
 
 if os.path.exists("/usr/bin/apt-get"):
     vodstreamtypelist.append("8193")
+
 
 class IPTVInfoBarShowHide():
     STATE_HIDDEN = 0
