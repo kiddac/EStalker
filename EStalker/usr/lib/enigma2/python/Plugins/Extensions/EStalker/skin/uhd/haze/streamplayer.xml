@@ -1,14 +1,14 @@
 <screen name="EStalkerStreamPlayer" position="0,0" size="2560,1440" backgroundColor="#ff000000" flags="wfNoBorder">
 	<!-- top background -->
 	<eLabel position="0,0" size="2560,288" backgroundColor="#40000000" zPosition="1"/>
-	<eLabel position="0,290" size="2560,2" backgroundColor="#fffffff" zPosition="1"/>
+	<eLabel position="0,290" size="2560,2" backgroundColor="#ffffff" zPosition="1"/>
 	<!-- logo -->
 	<ePixmap pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/logo.png" position="56,48" size="267,194" alphatest="blend" zPosition="1"/>
 	<!-- epg description -->
 	<widget source="x_description" render="EStalkerRunningText" options="movetype=running,startpoint=0,direction=top,steptime=80,repeat=0,always=0,oneshot=0,startdelay=6000,wrap" position="428,48" size="2078,176" font="estalkerregular;40" foregroundColor="#ffffff" backgroundColor="#40000000" halign="left" transparent="1" zPosition="2"/>
 	<!-- bottom background -->
 	<eLabel position="0,1152" size="2560,288" backgroundColor="#40000000" zPosition="1"/>
-	<eLabel position="0,1151" size="2560,2" backgroundColor="#fffffff" zPosition="1"/>
+	<eLabel position="0,1151" size="2560,2" backgroundColor="#ffffff" zPosition="1"/>
 	<!-- picon -->
 	<widget name="picon" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/picon.png" position="40,1192" size="294,176" alphatest="blend" zPosition="2"/>
 	<!-- channel -->
@@ -16,9 +16,9 @@
 	<widget name="speed" position="1824,1184" size="72,64" font="estalkerregular;40" foregroundColor="#ffffff" backgroundColor="#40000000" halign="right" valign="center" transparent="1" zPosition="3"/>
 	<widget name="statusicon" position="1904,1192" size="51,51" zPosition="5" alphatest="blend" pixmaps="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/state_play.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/state_pause.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/state_stop.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/state_ff.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/state_rw.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/state_slow.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/common/state_blank.png"/>
 	<!-- left divider -->
-	<eLabel position="374,1192" size="2,208" backgroundColor="#fffffff" zPosition="1"/>
+	<eLabel position="374,1192" size="2,208" backgroundColor="#ffffff" zPosition="1"/>
 	<!-- right divider -->
-	<eLabel position="2016,1192" size="2,208" backgroundColor="#fffffff" zPosition="1"/>
+	<eLabel position="2016,1192" size="2,208" backgroundColor="#ffffff" zPosition="1"/>
 	<!-- now title -->
 	<widget source="nowtitle" render="Label" position="428,1275" size="1200,64" font="estalkerregular;40" noWrap="1" foregroundColor="#ffffff" backgroundColor="#40000000" transparent="1" zPosition="3"/>
 	<!-- now time -->

@@ -1,7 +1,7 @@
 <screen name="EStalkerVodPlayer" position="0,0" size="1920,1080" backgroundColor="#ff000000" flags="wfNoBorder">
 	<!-- bottom background -->
 	<eLabel position="0,864" size="1920,216" backgroundColor="#40000000" zPosition="1"/>
-	<eLabel position="0,863" size="1920,1" backgroundColor="#fffffff" zPosition="1"/>
+	<eLabel position="0,863" size="1920,1" backgroundColor="#ffffff" zPosition="1"/>
 	<!-- picon -->
 	<widget name="cover" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/cover.png" position="30,720" size="220,330" alphatest="blend" zPosition="2"/>
 	<widget name="speed" position="1368,888" size="54,48" font="estalkerregular;36" foregroundColor="#ffffff" backgroundColor="#40000000" halign="right" valign="center" transparent="1" zPosition="3"/>
@@ -10,9 +10,9 @@
 	</widget>
 	<widget name="statusicon" position="1428,894" size="38,38" zPosition="5" alphatest="blend" pixmaps="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/state_play.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/state_pause.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/state_stop.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/state_ff.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/state_rw.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/state_slow.png,/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/state_blank.png"/>
 	<!-- left divider -->
-	<eLabel position="280,894" size="1,156" backgroundColor="#fffffff" zPosition="1"/>
+	<eLabel position="280,894" size="1,156" backgroundColor="#ffffff" zPosition="1"/>
 	<!-- right divider -->
-	<eLabel position="1512,894" size="1,156" backgroundColor="#fffffff" zPosition="1"/>
+	<eLabel position="1512,894" size="1,156" backgroundColor="#ffffff" zPosition="1"/>
 	<widget source="session.CurrentService" render="Progress" position="321,1002" size="1143,12" borderWidth="1" borderColor="#ffffff" foregroundColor="#2a70a4" backgroundColor="#1a000000" zPosition="3">
 		<convert type="EStalkerServicePosition">Position</convert>
 	</widget>

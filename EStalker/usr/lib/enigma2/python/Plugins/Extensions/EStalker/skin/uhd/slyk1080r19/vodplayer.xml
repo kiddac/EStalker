@@ -13,8 +13,8 @@
 	<widget source="session.CurrentService" render="Label" position="603,1200" size="652,76" font="slykbold;51" foregroundColor="#133171" backgroundColor="#f2d320" transparent="1" valign="center" halign="left" noWrap="1">
 		<convert type="ServiceName">Name</convert>
 	</widget>
-	<eLabel text="View time remaining" position="1307,1200" size="652,76" font="slykregular;48" foregroundColor="#ffffff" backgroundColor="#13317" valign="center" halign="left" transparent="1" zPosition="3"/>
-	<widget source="session.CurrentService" render="Label" position="1751,1200" size="200,76" font="slykregular;48" valign="center" halign="left" foregroundColor="#ffffff" backgroundColor="#13317" transparent="1" zPosition="3">
+	<eLabel text="View time remaining" position="1307,1200" size="652,76" font="slykregular;48" foregroundColor="#ffffff" backgroundColor="#133171" valign="center" halign="left" transparent="1" zPosition="3"/>
+	<widget source="session.CurrentService" render="Label" position="1751,1200" size="200,76" font="slykregular;48" valign="center" halign="left" foregroundColor="#ffffff" backgroundColor="#133171" transparent="1" zPosition="3">
 		<convert type="EStalkerServicePosition">Remaining, ShowHours</convert>
 	</widget>
 	<ePixmap position="907,1156" size="751,12" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/slyk1080r19/images/750-15-bg.png" alphatest="blend" transparent="1" zPosition="3"/>
@@ -22,32 +22,32 @@
 		<convert type="ServicePosition">Gauge</convert>
 	</widget>
 	<ePixmap position="583,1292" size="83,40" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/slyk1080r19/images/prev-next.png" alphatest="blend" transparent="1" zPosition="3"/>
-	<eLabel text="Hold to Seek" position="672,1271" size="300,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#13317" valign="center" halign="left" transparent="1" zPosition="3"/>
-	<widget text="DD" render="FixedLabel" source="session.CurrentService" position="1682,1124" size="68,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#13317" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
+	<eLabel text="Hold to Seek" position="672,1271" size="300,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#133171" valign="center" halign="left" transparent="1" zPosition="3"/>
+	<widget text="DD" render="FixedLabel" source="session.CurrentService" position="1682,1124" size="68,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#133171" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
 		<convert type="EStalkerServiceInfo">IsMultichannel</convert>
 		<convert type="ConditionalShowHide"/>
 	</widget>
-	<widget text="UHD" render="FixedLabel" source="session.CurrentService" position="1766,1124" size="107,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#13317" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
+	<widget text="UHD" render="FixedLabel" source="session.CurrentService" position="1766,1124" size="107,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#133171" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
 		<convert type="EStalkerServiceInfo">IsUHD</convert>
 		<convert type="ConditionalShowHide"/>
 	</widget>
-	<widget text="FHD" render="FixedLabel" source="session.CurrentService" position="1766,1124" size="107,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#13317" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
+	<widget text="FHD" render="FixedLabel" source="session.CurrentService" position="1766,1124" size="107,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#133171" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
 		<convert type="EStalkerServiceInfo">IsFHD</convert>
 		<convert type="ConditionalShowHide"/>
 	</widget>
-	<widget text="HD" render="FixedLabel" source="session.CurrentService" position="1766,1124" size="107,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#13317" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
+	<widget text="HD" render="FixedLabel" source="session.CurrentService" position="1766,1124" size="107,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#133171" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
 		<convert type="EStalkerServiceInfo">IsHD</convert>
 		<convert type="ConditionalShowHide"/>
 	</widget>
-	<widget text="SD" render="FixedLabel" source="session.CurrentService" position="1766,1124" size="107,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#13317" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
+	<widget text="SD" render="FixedLabel" source="session.CurrentService" position="1766,1124" size="107,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#133171" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
 		<convert type="EStalkerServiceInfo">IsSD</convert>
 		<convert type="ConditionalShowHide"/>
 	</widget>
-	<widget text="W" render="FixedLabel" source="session.CurrentService" position="1888,1124" size="44,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#13317" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
+	<widget text="W" render="FixedLabel" source="session.CurrentService" position="1888,1124" size="44,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#133171" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
 		<convert type="EStalkerServiceInfo">IsWidescreen</convert>
+		<convert type="ConditionalShowHide"/>
 	</widget>
-	<convert type="ConditionalShowHide"/>
-	<widget text="S" render="FixedLabel" source="session.CurrentService" position="1948,1124" size="31,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#13317" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
+	<widget text="S" render="FixedLabel" source="session.CurrentService" position="1948,1124" size="31,76" font="slykregular;52" foregroundColor="#7eaeef" backgroundColor="#133171" transparent="1" halign="right" valign="center" noWrap="1" zPosition="3">
 		<convert type="EStalkerServiceInfo">SubtitlesAvailable</convert>
 		<convert type="ConditionalShowHide"/>
 	</widget>

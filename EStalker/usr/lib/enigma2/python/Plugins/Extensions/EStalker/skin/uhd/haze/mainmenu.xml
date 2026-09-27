@@ -7,7 +7,7 @@
 		<convert type="ClockToText">Format:%H:%M | %A %-d %b</convert>
 	</widget>
 	<eLabel position="0,123" size="640,1246" backgroundColor="#1a242b34" zPosition="-1"/>
-	<widget source="list" render="Listbox" position="0,128" size="640,1152" foregroundColor="#ffffff" backgroundColor="#1a242b34" foregroundColorSelected="#fffffff" backgroundColorSelected="#1a000000" selectionPixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/haze/images/menu-select.png" itemHeight="96" scrollbarMode="showOnDemand" enableWrapAround="1" transparent="1" zPosition="2">
+	<widget source="list" render="Listbox" position="0,128" size="640,1152" foregroundColor="#ffffff" backgroundColor="#1a242b34" foregroundColorSelected="#ffffff" backgroundColorSelected="#1a000000" selectionPixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/uhd/haze/images/menu-select.png" itemHeight="96" scrollbarMode="showOnDemand" enableWrapAround="1" transparent="1" zPosition="2">
 		<convert type="TemplatedMultiContent">{"template": [
 			MultiContentEntryText(pos=(40, 0), size=(560, 96), font=0, color = 0x00ffffff, color_sel = 0x00ffffff, backcolor_sel = None, flags = RT_HALIGN_LEFT|RT_VALIGN_CENTER, text = 1),
 			],

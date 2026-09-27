@@ -32,7 +32,6 @@
 			"scrollbarMode": "showOnDemand"
 			}</convert>
 	</widget>
-	<widget name="vod_backdrop" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/haze/images/backdrop.png" position="640,90" size="1280,720" alphatest="blend" zPosition="1"/>
 	<widget source="main_title" render="Label" position="510,0" size="960,90" font="estalkerregular;36" foregroundColor="#ffffff" backgroundColor="#000000" valign="center" halign="left" noWrap="1" transparent="1" zPosition="2"/>
 	<widget name="vod_logo" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EStalker/skin/fhd/common/blank.png" position="1560,120" size="300,180" alphatest="blend" zPosition="3"/>
 	<!-- rating background -->
