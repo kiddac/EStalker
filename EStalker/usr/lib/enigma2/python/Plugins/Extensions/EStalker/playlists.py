@@ -258,18 +258,17 @@ class EStalker_Playlists(Screen):
         for prefix in prefixes:
             xpcom_url = host + prefix + "xpcom.common.js"
             try:
-                with http.get(xpcom_url, headers=default_headers, timeout=3, verify=False, allow_redirects=True) as response:
-                    response.raise_for_status()
-                    # Avoid response.text here: without a response charset it
-                    # runs chardet over the complete script, twice in this block.
-                    if response.content:
-                        xpcom_text = response.content.decode("utf-8", "ignore")
-                        final_url = response.url or xpcom_url
-                        final_path = urlparse(final_url).path
-                        final_prefix = final_path.rsplit("/", 1)[0] + "/"
-                        xpcom_result = (final_prefix, final_url, xpcom_text)
-                        self._xpcom_cache[host] = xpcom_result
-                        return xpcom_result
+                response = http.get(xpcom_url, headers=default_headers, timeout=3, verify=False, allow_redirects=True)
+                response.raise_for_status()
+
+                if response.status_code == requests.codes.ok and response.content:
+                    xpcom_text = response.content.decode("utf-8", "ignore")
+                    final_url = response.url or xpcom_url
+                    final_path = urlparse(final_url).path
+                    final_prefix = final_path.rsplit("/", 1)[0] + "/"
+                    xpcom_result = (final_prefix, final_url, xpcom_text)
+                    self._xpcom_cache[host] = xpcom_result
+                    return xpcom_result
             except Exception as e:
                 print("Error checking {}: {}".format(xpcom_url, e))
 
@@ -353,9 +352,13 @@ class EStalker_Playlists(Screen):
         url = host + path_prefix + "version.js"
 
         try:
-            with http.get(url, headers=headers, timeout=3, verify=False, allow_redirects=False) as response:
-                response.raise_for_status()
-                match = re.search(r"ver\s*=\s*['\"]([^'\"]+)['\"]", response.text)
+            response = http.get(url, headers=headers, timeout=3, verify=False, allow_redirects=False)
+            response.raise_for_status()
+            if response.status_code == requests.codes.ok:
+                match = re.search(
+                    r"ver\s*=\s*['\"]([^'\"]+)['\"]",
+                    response.text
+                )
 
                 if match:
                     return match.group(1).strip()
