@@ -49,6 +49,8 @@ class EStalker_MainMenu(Screen):
         self.list = []
         self.drawList = []
         self.playlists_all = []
+        self.onlineUpdater = None
+        self.onlineUpdateStarted = False
         self["list"] = List(self.drawList, enableWrapAround=True)
 
         self.playlists_json = cfg.playlists_json.value
@@ -82,6 +84,7 @@ class EStalker_MainMenu(Screen):
 
         self.onFirstExecBegin.append(self.check_dependencies)
         self.onLayoutFinish.append(self.__layoutFinished)
+        self.onClose.append(self.closeOnlineUpdater)
 
     def __layoutFinished(self):
         self.setTitle(self.setup_title)
@@ -134,6 +137,22 @@ class EStalker_MainMenu(Screen):
         self.playlists_json = cfg.playlists_json.value
         self.playlists_all = loadfiles.process_files()
         self.createSetup()
+
+        if not self.onlineUpdateStarted:
+            self.onlineUpdateStarted = True
+            self.checkOnlineUpdate()
+
+    def checkOnlineUpdate(self):
+        try:
+            from .updater import OnlineUpdater
+            self.onlineUpdater = OnlineUpdater(self.session, version)
+            self.onlineUpdater.check()
+        except Exception as error:
+            print("[EStalker] Unable to initialise update check: %s" % error)
+
+    def closeOnlineUpdater(self):
+        if self.onlineUpdater is not None:
+            self.onlineUpdater.close()
 
     def createSetup(self):
         self.list = []
