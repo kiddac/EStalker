@@ -166,6 +166,7 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
         self.cfg_infobarpicons = getConfigListEntry(_("Show infobar picons"), cfg.infobarpicons)
         self.cfg_infobarcovers = getConfigListEntry(_("Show infobar posters"), cfg.infobarcovers)
         self.cfg_ar_id_player = getConfigListEntry(_("Default screen aspect ratio"), cfg.ar_id_player)
+        self.cfg_autoupdateprompt = getConfigListEntry(_("Prompt if plugin update available"), cfg.autoupdateprompt)
 
         self.org_main = cfg.main.value
 
@@ -174,6 +175,7 @@ class EStalker_Settings(ConfigListScreen, Screen, ProtectedScreen):
     def createSetup(self):
         config_entries = [
             self.cfg_skin,
+            self.cfg_autoupdateprompt,
             self.cfg_location,
             self.cfg_playlist_name,
             self.cfg_skipplaylistsscreen,

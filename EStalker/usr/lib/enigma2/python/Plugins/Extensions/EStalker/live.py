@@ -36,7 +36,7 @@ except ImportError:
 # Third-party imports
 from PIL import Image
 from twisted.web.client import downloadPage
-
+9
 # Enigma2 components
 from Components.ActionMap import ActionMap
 from Components.Pixmap import Pixmap
@@ -56,25 +56,8 @@ from .eStaticText import StaticText
 from .utils import get_local_timezone, make_request, reauthorize_portal
 from .getshortepg import EStalker_EPG_Short
 
-# HTTPS twisted client hack
-try:
-    from twisted.internet import ssl
-    from twisted.internet._sslverify import ClientTLSOptions
-    sslverify = True
-except ImportError:
-    sslverify = False
-
-if sslverify:
-    class SNIFactory(ssl.ClientContextFactory):
-        def __init__(self, hostname=None):
-            self.hostname = hostname
-
-        def getContext(self):
-            ctx = self._contextFactory(self.method)
-            if self.hostname:
-                ClientTLSOptions(self.hostname, ctx)
-            return ctx
-
+# HTTPS twisted client hack (shared SNI helper)
+from .sslfactory import SNIFactory, sslverify
 
 if pythonVer == 3:
     superscript_to_normal = str.maketrans(

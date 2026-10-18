@@ -1,21 +1,30 @@
 #!/bin/sh
-## setup command=wget https://raw.githubusercontent.com/kiddac/EStalker/master/installer.sh -O - | /bin/sh
+## setup command=rm -rf /tmp/EStalker-master /tmp/EStalker-master.tar.gz; wget -q https://codeload.github.com/kiddac/EStalker/tar.gz/refs/heads/master -O /tmp/EStalker-master.tar.gz && tar -xzf /tmp/EStalker-master.tar.gz -C /tmp && /bin/sh /tmp/EStalker-master/installer.sh
 
 description="
 What is new:
-- Online update checking when EStalker is opened
+- clientcontextfactory amend for twisted client update
+- auto updater amends
 "
 
 PLUGINPATH=/usr/lib/enigma2/python/Plugins/Extensions/EStalker
 TMPDIR=/tmp/EStalker_update
 ARCHIVE_ROOT=EStalker-master/EStalker
+ARCHIVE_URL=https://codeload.github.com/kiddac/EStalker/tar.gz/refs/heads/master
 
 echo " ** Download and install EStalker ** "
 rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
 cd "$TMPDIR" || exit 1
 
-if ! wget -q "https://github.com/kiddac/EStalker/archive/refs/heads/master.tar.gz" -O master.tar.gz \
+# GNU wget and newer BusyBox builds support this option, but old VTi BusyBox
+# builds do not. Only add it when the installed wget advertises support.
+WGET_CERT_OPTION=
+if wget --help 2>&1 | grep -q 'no-check-certificate'; then
+    WGET_CERT_OPTION=--no-check-certificate
+fi
+
+if ! wget $WGET_CERT_OPTION -q "$ARCHIVE_URL" -O master.tar.gz \
    || ! tar -xzf master.tar.gz \
    || [ ! -f "$ARCHIVE_ROOT/usr/lib/enigma2/python/Plugins/Extensions/EStalker/plugin.py" ]; then
     echo "Download failed. Nothing was changed."
@@ -49,6 +58,5 @@ fi
 
 sync
 echo
-echo "EStalker installed successfully. Restarting Enigma2..."
-killall enigma2
+echo "EStalker installed successfully. Restart Enigma2 to load the update."
 exit 0

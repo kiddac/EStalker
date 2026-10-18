@@ -84,7 +84,8 @@ class EStalker_MainMenu(Screen):
 
         self.onFirstExecBegin.append(self.check_dependencies)
         self.onLayoutFinish.append(self.__layoutFinished)
-        self.onClose.append(self.closeOnlineUpdater)
+        if cfg.autoupdateprompt.value:
+            self.onClose.append(self.closeOnlineUpdater)
 
     def __layoutFinished(self):
         self.setTitle(self.setup_title)
@@ -138,7 +139,7 @@ class EStalker_MainMenu(Screen):
         self.playlists_all = loadfiles.process_files()
         self.createSetup()
 
-        if not self.onlineUpdateStarted:
+        if cfg.autoupdateprompt.value and not self.onlineUpdateStarted:
             self.onlineUpdateStarted = True
             self.checkOnlineUpdate()
 

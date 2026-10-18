@@ -140,6 +140,7 @@ cfg.channelpicons = ConfigYesNo(default=True)
 cfg.infobarpicons = ConfigYesNo(default=True)
 cfg.channelcovers = ConfigYesNo(default=True)
 cfg.infobarcovers = ConfigYesNo(default=True)
+cfg.autoupdateprompt = ConfigYesNo(default=False)
 
 
 # Rename old files if they exist
@@ -266,6 +267,7 @@ if os.path.exists("/tmp/estalker"):
 # create temporary folder for downloaded files
 if not os.path.exists(dir_tmp):
     os.makedirs(dir_tmp)
+
 
 def main(session, **kwargs):
     from . import mainmenu
