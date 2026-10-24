@@ -3,8 +3,8 @@
 
 description="
 What is new:
-- clientcontextfactory amend for twisted client update
-- auto updater amends
+Auto online updater amends for older images
+HTTPS Cert - extra date and time check added.
 "
 
 PLUGINPATH=/usr/lib/enigma2/python/Plugins/Extensions/EStalker
@@ -13,6 +13,15 @@ ARCHIVE_ROOT=EStalker-master/EStalker
 ARCHIVE_URL=https://codeload.github.com/kiddac/EStalker/tar.gz/refs/heads/master
 
 echo " ** Download and install EStalker ** "
+
+CURRENT_YEAR=$(date +%Y)
+
+if [ "$CURRENT_YEAR" -lt 2024 ] 2>/dev/null; then
+    echo "WARNING: Receiver date and time appear to be incorrect."
+    echo "Current receiver date: $(date)"
+    echo "HTTPS certificate validation may fail."
+fi
+
 rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
 cd "$TMPDIR" || exit 1
@@ -24,10 +33,33 @@ if wget --help 2>&1 | grep -q 'no-check-certificate'; then
     WGET_CERT_OPTION=--no-check-certificate
 fi
 
-if ! wget $WGET_CERT_OPTION -q "$ARCHIVE_URL" -O master.tar.gz \
+echo "Downloading EStalker..."
+
+# Attempt a normal HTTPS download first.
+if ! wget -q "$ARCHIVE_URL" -O master.tar.gz; then
+    if [ -n "$WGET_CERT_OPTION" ]; then
+        echo "Secure download failed. Retrying without certificate verification..."
+        rm -f master.tar.gz
+
+        if ! wget "$WGET_CERT_OPTION" -q "$ARCHIVE_URL" -O master.tar.gz; then
+            echo "Download failed. Nothing was changed."
+            cd /tmp
+            rm -rf "$TMPDIR"
+            exit 1
+        fi
+    else
+        echo "Download failed. Certificate bypass is not supported."
+        cd /tmp
+        rm -rf "$TMPDIR"
+        exit 1
+    fi
+fi
+
+# Verify the archive exists and contains the expected plugin files.
+if [ ! -s master.tar.gz ] \
    || ! tar -xzf master.tar.gz \
    || [ ! -f "$ARCHIVE_ROOT/usr/lib/enigma2/python/Plugins/Extensions/EStalker/plugin.py" ]; then
-    echo "Download failed. Nothing was changed."
+    echo "Download or extraction failed. Nothing was changed."
     cd /tmp
     rm -rf "$TMPDIR"
     exit 1
